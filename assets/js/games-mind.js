@@ -47,8 +47,21 @@
 
   const rint = n => Math.floor(Math.random() * n);
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = rint(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const waiting = (ctx, who) => ctx.msg(`⏳ Waiting for ${who || ctx.seat(1 - ctx.me).name}…`, 'var(--ink-faint)');
+  const waiting = (ctx, who) => ctx.msg(`Waiting for ${who || ctx.seat(1 - ctx.me).name}…`, 'var(--ink-faint)');
   const scheduled = new Set();
+
+  // memory-match symbols (custom SVG, no emoji)
+  const MEM = [
+    ['#ff4d9d', 'M12 21s-7-4.6-7-9.2A3.8 3.8 0 0112 9a3.8 3.8 0 017 2.8C19 16.4 12 21 12 21z'],
+    ['#2fe6ff', 'M12 3l2.5 5.7 6.2.5-4.7 4.1 1.4 6.1L12 16.8 6.6 19.5 8 13.4 3.3 9.3l6.2-.5z'],
+    ['#79f5b6', 'M12 4l8 8-8 8-8-8z'],
+    ['#ffd66b', 'M5 6h14v12H5z'],
+    ['#9b7bff', 'M12 4l7 4v8l-7 4-7-4V8z'],
+    ['#ff9f45', 'M12 4a8 8 0 100 16 8 8 0 000-16z'],
+    ['#5fd0ff', 'M12 5l7 13H5z'],
+    ['#ff7ad9', 'M12 5a7 7 0 110 14 7 7 0 010-14zm0 4a3 3 0 100 6 3 3 0 000-6z'],
+  ];
+  const memFace = id => { const [col, d] = MEM[id]; return `<svg viewBox="0 0 24 24" fill="${col}" class="icn" style="filter:drop-shadow(0 0 6px ${col})"><path d="${d}"/></svg>`; };
 
   /* ---------- 9. BATTLESHIP ---------- */
   Games.register({
@@ -59,22 +72,22 @@
       const me = ctx.me, enemy = ctx.state.boards[1 - me], mine = ctx.state.boards[me];
       ctx.root.append(ctx.turnBar({ scores: [remaining(ctx.state.boards[0]), remaining(ctx.state.boards[1])] }));
       const wrap = ctx.h('div', { class: 'board-frame bs-wrap' });
-      wrap.append(ctx.h('div', { class: 'bs-label' }, '🎯 ENEMY WATERS' + (ctx.isMyTurn ? ' — tap to fire' : '')));
+      wrap.append(ctx.h('div', { class: 'bs-label' }, 'ENEMY WATERS' + (ctx.isMyTurn ? ' — tap to fire' : '')));
       const eg = ctx.h('div', { class: 'bs-grid enemy' + (ctx.isMyTurn ? ' live' : '') });
       for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
         const cell = ctx.h('div', { class: 'bs-cell' });
-        if (enemy.hits[r][c] === 1) { cell.classList.add('hit'); cell.textContent = '🔥'; }
-        else if (enemy.hits[r][c] === 2) { cell.classList.add('miss'); cell.textContent = '•'; }
+        if (enemy.hits[r][c] === 1) cell.classList.add('hit');
+        else if (enemy.hits[r][c] === 2) cell.classList.add('miss');
         else if (ctx.isMyTurn) cell.onclick = () => fire(r, c);
         eg.append(cell);
       }
-      wrap.append(eg, ctx.h('div', { class: 'bs-label' }, '🛡 YOUR FLEET'));
+      wrap.append(eg, ctx.h('div', { class: 'bs-label' }, 'YOUR FLEET'));
       const mg = ctx.h('div', { class: 'bs-grid mine' });
       for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
         const cell = ctx.h('div', { class: 'bs-cell' });
         if (mine.grid[r][c]) cell.classList.add('ship');
-        if (mine.hits[r][c] === 1) { cell.classList.add('hit'); cell.textContent = '💥'; }
-        else if (mine.hits[r][c] === 2) { cell.classList.add('miss'); cell.textContent = '•'; }
+        if (mine.hits[r][c] === 1) cell.classList.add('hit');
+        else if (mine.hits[r][c] === 2) cell.classList.add('miss');
         mg.append(cell);
       }
       wrap.append(mg, ctx.h('div', { class: 'bs-fleet' }, `Enemy ships left: ${remaining(enemy)} · Yours: ${remaining(mine)}`));
@@ -110,14 +123,14 @@
   Games.register({
     id: 'memory', name: 'Memory Match', emoji: '🧠', category: 'Luck', accent: '#b266ff',
     tagline: 'Find the pairs.',
-    init: host => { const SET = ['💞','🌙','⭐','🍕','🎮','🎧','🌸','🐱']; return { deck: shuffle([...SET, ...SET]), matched: Array(16).fill(false), scores: [0, 0], turn: host, reveal: null }; },
+    init: host => ({ deck: shuffle([0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7]), matched: Array(16).fill(false), scores: [0, 0], turn: host, reveal: null }),
     render(ctx) {
       const st = ctx.state, me = ctx.me; let firstLocal = null;
       ctx.root.append(ctx.turnBar({ scores: st.scores }));
       const grid = ctx.h('div', { class: 'mem' });
       const cards = st.deck.map((e, i) => {
         const shown = st.matched[i] || (st.reveal && st.reveal.includes(i));
-        const card = ctx.h('div', { class: 'mem-card' + (shown ? '' : ' down') + (st.matched[i] ? ' matched' : '') + (ctx.isMyTurn && !st.reveal && !st.matched[i] ? ' live' : '') }, shown ? e : '');
+        const card = ctx.h('div', { class: 'mem-card' + (shown ? '' : ' down') + (st.matched[i] ? ' matched' : '') + (ctx.isMyTurn && !st.reveal && !st.matched[i] ? ' live' : '') }, shown ? ctx.h('span', { class: 'mem-face', html: memFace(e) }) : '');
         if (ctx.isMyTurn && !st.reveal && !st.matched[i]) card.onclick = () => flip(i, card, e);
         grid.append(card); return card;
       });
@@ -133,7 +146,7 @@
       }
       ctx.isMyTurn ? ctx.msg('Your turn — flip two', ctx.players[me].color) : waiting(ctx);
       function flip(i, card, e) {
-        if (firstLocal == null) { firstLocal = i; card.classList.remove('down'); card.textContent = e; ctx.sound.tap(); return; }
+        if (firstLocal == null) { firstLocal = i; card.classList.remove('down'); card.innerHTML = '<span class="mem-face">' + memFace(e) + '</span>'; ctx.sound.tap(); return; }
         if (i === firstLocal) return;
         ctx.sound.tap();
         const s = ctx.clone(st);

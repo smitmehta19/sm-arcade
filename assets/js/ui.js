@@ -44,11 +44,20 @@ const GAME_RULES = {
   'hangman': ['One of you secretly types a word; the other tries to guess it.', 'The guesser picks letters — 6 wrong guesses completes the figure.', 'Guesser wins by revealing the whole word; the setter wins if the guesser runs out of lives.'],
   'rps': ['Each of you secretly picks Rock ✊, Paper ✋, or Scissors ✌️.', 'Rock beats Scissors, Scissors beats Paper, Paper beats Rock.', 'First to win 3 rounds takes the match.'],
   'couple-quiz': ['Take turns: one of you guesses what the other will pick between two options.', 'Then the other reveals their honest answer.', 'A correct guess scores a point. Whoever knows the other best wins! 💞'],
+  'pentago': ['On your turn do TWO things: place one marble on any empty spot, then rotate any one of the four 3×3 blocks (↺ or ↻).', 'The rotation can make or break lines — that’s the trick.', 'First to get 5 marbles in a row (after the twist) wins.'],
+  'hex': ['Take turns placing one stone on any empty cell.', 'You own the <b>top &amp; bottom</b> edges; your partner owns <b>left &amp; right</b>.', 'First to build an unbroken chain of your stones linking your two sides wins. It can never end in a draw.'],
+  'nine-mens-morris': ['<b>Phase 1:</b> take turns placing your 9 pieces on the points.', 'Make a “mill” (3 of yours in a line) → remove one of your partner’s pieces.', '<b>Phase 2:</b> slide pieces along lines to form new mills. With only 3 left you can “fly” anywhere.', 'Reduce your partner to 2 pieces (or no moves) to win.'],
+  'quoridor': ['Each turn: <b>move your pawn</b> one square, OR <b>place a wall</b> to block paths (10 walls each).', 'Walls can slow your partner but can never completely trap them.', 'First pawn to reach the far side wins.'],
+  'quarto': ['16 pieces, each big/small · light/dark · round/square · solid/hollow.', 'The twist: <b>your partner chooses the piece you must place</b>, and you choose theirs.', 'Complete a line of 4 pieces that share ANY one trait to win.'],
+  'code-breaker': ['First, each of you secretly sets a 4-colour code for the other to crack.', 'Take turns guessing. ⬤ = right colour &amp; spot · ⚪ = right colour, wrong spot.', 'First to crack your partner’s code exactly wins.'],
+  'ghost': ['Take turns adding ONE letter to a growing word fragment.', 'Whoever completes a real word (4+ letters) <b>loses</b>.', 'Think it’s a dead end? Challenge — if no word can start that way, the previous player loses; if one can, you do.'],
+  'two-truths': ['On your turn, write 3 statements about yourself — two true, one a lie — and mark the lie.', 'Your partner guesses which is the fib.', 'Guess right = point to the guesser; fool them = point to you. Most points after 6 rounds wins.'],
+  'tug-of-war': ['Each round you both secretly pick a number from your remaining tokens (1–5).', 'Reveal together — the higher number pulls the rope one step their way (tie = no move).', 'Pull the rope 3 steps to your side to win. Spend big or save?'],
 };
 function showRules(game) {
   const back = h('div', { class: 'rules-overlay', onclick: e => { if (e.target === back) close(); } });
   const card = h('div', { class: 'rules-card' },
-    h('div', { class: 'rules-emoji', style: `color:${game.accent}` }, game.emoji),
+    h('div', { class: 'rules-emoji', style: `color:${game.accent}`, html: Icons.game(game.id) }),
     h('h3', {}, 'How to play — ' + game.name),
     h('ul', { class: 'rules-list' }, (GAME_RULES[game.id] || ['Have fun!']).map(r => h('li', { html: r }))),
     h('button', { class: 'btn btn-primary btn-block mt', onclick: () => close() }, 'Got it! ✓'));
@@ -207,12 +216,12 @@ function renderHome() {
   const hero = h('section', { class: 'hero mini' },
     h('h1', { html: `<span class="c">${esc(s.players[0].name)}</span><span class="vs">VS</span><span class="m">${esc(s.players[1].name)}</span>` }),
     h('div', { class: 'mini-tally' }, `${s.totals.p1} — ${s.totals.p2}`),
-    h('p', {}, pOn ? `${esc(s.players[partner].name)} is online. Pick a game to challenge them! 🎮`
-                   : `${esc(s.players[partner].name)} is offline. Start a game and they’ll get the invite when they open the app. 💌`),
+    h('p', {}, pOn ? `${esc(s.players[partner].name)} is online — pick a game to challenge them.`
+                   : `${esc(s.players[partner].name)} is offline — start a game and they’ll get the invite when they next open the app.`),
   );
 
   // search + filters
-  const search = h('div', { class: 'search' }, h('span', { class: 'si' }, '🔎'),
+  const search = h('div', { class: 'search' }, h('span', { class: 'si', html: Icons.ui('search') }),
     h('input', { type: 'text', placeholder: 'Search games…', value: homeSearch, oninput: e => { homeSearch = e.target.value; paint(); } }));
   const cats = ['All', 'Favorites', ...Games.categories()];
   const chips = h('div', { class: 'chips' }, cats.map(c => h('button', {
@@ -242,7 +251,8 @@ function matchBanner(me) {
   const s = Store.get();
   if (m.status === 'waiting' && m.host !== me) {
     return h('div', { class: 'banner invite' },
-      h('span', {}, `💌 ${esc(s.players[m.host].name)} invited you to `, h('b', {}, g.emoji + ' ' + g.name)),
+      h('span', { class: 'banner-ic', html: Icons.game(g.id) }),
+      h('span', {}, `${esc(s.players[m.host].name)} invited you to `, h('b', {}, g.name)),
       h('button', { class: 'btn btn-primary btn-sm', onclick: () => joinMatch() }, 'Join'),
       h('button', { class: 'btn btn-ghost btn-sm', onclick: () => Store.Net.clearMatch() }, 'Decline'),
     );
@@ -250,7 +260,8 @@ function matchBanner(me) {
   // your own waiting match, or an active game → resume
   const label = m.status === 'waiting' ? 'Waiting for your partner…' : 'Game in progress';
   return h('div', { class: 'banner resume' },
-    h('span', {}, `🎮 ${esc(label)}: `, h('b', {}, g.emoji + ' ' + g.name)),
+    h('span', { class: 'banner-ic', html: Icons.game(g.id) }),
+    h('span', {}, `${esc(label)}: `, h('b', {}, g.name)),
     h('button', { class: 'btn btn-primary btn-sm', onclick: () => { location.hash = '#/play/' + m.gameId; } }, 'Resume'),
     h('button', { class: 'btn btn-ghost btn-sm', onclick: () => Store.Net.clearMatch() }, 'End'),
   );
@@ -266,7 +277,7 @@ function gameCard(g, s, i) {
     onclick: () => startMatch(g.id),
   },
     h('span', { class: 'gcat' }, g.category), h('span', { class: 'fav' }, '★'),
-    h('span', { class: 'emoji' }, g.emoji), h('span', { class: 'gname' }, g.name), h('span', { class: 'gtag' }, tag),
+    h('span', { class: 'gicon', html: Icons.game(g.id) }), h('span', { class: 'gname' }, g.name), h('span', { class: 'gtag' }, tag),
   );
   let lp;
   card.addEventListener('contextmenu', e => { e.preventDefault(); Store.toggleFav(g.id); renderHome(); });
@@ -279,6 +290,7 @@ function gameCard(g, s, i) {
 /* ============================================================
    MATCH LIFECYCLE
    ============================================================ */
+const SERIES_TARGET = 2; // best of 3
 function startMatch(gameId) {
   const me = Store.getIdentity();
   if (!Store.Net.ready()) { alert('Not connected to the cloud yet — online play needs your internet + Firebase. Try again in a moment.'); return; }
@@ -288,7 +300,8 @@ function startMatch(gameId) {
   }
   // state is JSON-stringified: Firebase RTDB strips nulls/empties & mangles arrays, so we store a plain string
   const state = JSON.stringify(Games.byId(gameId).init(me));
-  Store.Net.setMatch({ gameId, host: me, status: 'waiting', state, winner: null, starter: me, rematchReq: null, by: me, t: Date.now() })
+  Store.Net.setMatch({ gameId, host: me, status: 'waiting', state, starter: me, rematchReq: null,
+    series: { target: SERIES_TARGET, score: [0, 0] }, roundWinner: null, seriesWinner: null, by: me, t: Date.now() })
     .catch(err => { console.error(err); alert('Could not start the game online.\n\nYour Firebase rules likely need updating to allow "matches" and "presence" (see database.rules.json in the repo, then republish in the Realtime Database → Rules tab).\n\n' + err.message); location.hash = '#/'; });
   location.hash = '#/play/' + gameId;
 }
@@ -297,27 +310,30 @@ function joinMatch() {
   Store.Net.updateMatch({ status: 'active', t: Date.now() });
   if (currentMatch) location.hash = '#/play/' + currentMatch.gameId;
 }
-// rematch handshake: one player requests, the other accepts; the accepter (the
-// opposite player from the requester) makes the first move of the new game.
 function optimistic(patch) { if (currentMatch) { currentMatch = Object.assign({}, currentMatch, patch); if (stageHook) stageHook(currentMatch); } }
-function requestRematch() {
+// within a series: either player advances to the next round (starter alternates)
+function advanceRound(gameId) {
   const me = Store.getIdentity();
-  optimistic({ rematchReq: me });
-  Store.Net.updateMatch({ rematchReq: me, t: Date.now() });
-}
-function cancelRematch() {
-  optimistic({ rematchReq: null });
-  Store.Net.updateMatch({ rematchReq: null, t: Date.now() });
-}
-function acceptRematch(gameId) {
-  const me = Store.getIdentity();
-  const requester = currentMatch && currentMatch.rematchReq != null ? currentMatch.rematchReq : (1 - me);
-  const newStarter = 1 - requester;                   // the accepter (opposite of requester) goes first
+  const newStarter = 1 - (currentMatch && currentMatch.starter != null ? currentMatch.starter : 0);
   const state = JSON.stringify(Games.byId(gameId).init(newStarter));
-  const patch = { state, winner: null, status: 'active', starter: newStarter, rematchReq: null };
+  const patch = { state, status: 'active', starter: newStarter, roundWinner: null };
   optimistic(patch);
   Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
 }
+// new series (after one ends): handshake — one requests, the opposite player accepts & starts
+function requestRematch() { const me = Store.getIdentity(); optimistic({ rematchReq: me }); Store.Net.updateMatch({ rematchReq: me, t: Date.now() }); }
+function cancelRematch() { optimistic({ rematchReq: null }); Store.Net.updateMatch({ rematchReq: null, t: Date.now() }); }
+function acceptRematch(gameId) {
+  const me = Store.getIdentity();
+  const requester = currentMatch && currentMatch.rematchReq != null ? currentMatch.rematchReq : (1 - me);
+  const newStarter = 1 - requester;
+  const state = JSON.stringify(Games.byId(gameId).init(newStarter));
+  const patch = { state, status: 'active', starter: newStarter, rematchReq: null,
+    series: { target: SERIES_TARGET, score: [0, 0] }, roundWinner: null, seriesWinner: null };
+  optimistic(patch);
+  Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
+}
+function nextGameId(cur) { const others = Games.all().filter(g => g.id !== cur); return others[Math.floor(Math.random() * others.length)].id; }
 function exitMatch() { Store.Net.clearMatch(); location.hash = '#/'; }
 
 /* ============================================================
@@ -331,18 +347,24 @@ function renderStage(gameId) {
   const s = Store.get();
 
   const head = h('div', { class: 'stage-head' },
-    h('h2', { style: `color:${game.accent}` }, game.emoji + ' ' + game.name),
+    h('h2', { style: `color:${game.accent}` }, h('span', { class: 'h2-icon', html: Icons.game(game.id) }), game.name),
     h('p', {}, game.tagline),
-    h('button', { class: 'rules-btn', onclick: () => showRules(game) }, 'ℹ️ How to play'));
+    h('button', { class: 'rules-btn', onclick: () => showRules(game) }, 'How to play'));
+  const seriesBar = h('div', { class: 'series-bar', id: 'seriesBar' });
   const mount = h('div', { class: 'game-wrap', id: 'gameMount' });
   const msg = h('div', { class: 'game-msg', id: 'gameMsg' });
-  const stage = h('div', { class: 'stage' }, head, mount, msg);
+  const stage = h('div', { class: 'stage' }, head, seriesBar, mount, msg);
   view.append(stage);
 
-  let overlayMode = null; // null | 'result' | 'wait' | 'accept'
+  let overlayMode = null; // null | 'round' | 'seriesEnd' | 'wait' | 'accept'
 
   function paint() {
     const m = currentMatch;
+    // live best-of-N series tally
+    if (m && m.series && (m.status === 'active' || m.status === 'finished')) {
+      seriesBar.innerHTML = `<span>Best of ${m.series.target * 2 - 1}</span><b class="p1">${m.series.score[0]}</b><i>–</i><b class="p2">${m.series.score[1]}</b>`;
+      seriesBar.classList.add('show');
+    } else seriesBar.classList.remove('show');
     if (!m || m.gameId !== gameId) { // match ended/replaced elsewhere
       mount.innerHTML = ''; mount.append(waitCard('This game ended.', 'Back to lobby', exitMatch)); return;
     }
@@ -380,37 +402,45 @@ function renderStage(gameId) {
     try { game.render(ctx); } catch (e) { console.error(e); msg.textContent = '⚠ ' + e.message; }
 
     if (m.status === 'finished') {
-      const mode = m.rematchReq == null ? 'result' : (m.rematchReq === me ? 'wait' : 'accept');
+      let mode;
+      if (m.seriesWinner == null) mode = 'round';
+      else mode = m.rematchReq == null ? 'seriesEnd' : (m.rematchReq === me ? 'wait' : 'accept');
       if (mode !== overlayMode) { overlayMode = mode; showFinishedOverlay(m, mode); }
     } else { overlayMode = null; Overlay.hide(); }
   }
 
   function showFinishedOverlay(m, mode) {
-    const w = m.winner, partner = partnerSeat(me);
-    if (mode === 'result') {
-      // brief delay so the final move lands before the celebration
+    const partner = partnerSeat(me);
+    const series = m.series || { target: SERIES_TARGET, score: [0, 0] };
+    const tally = `${series.score[0]}–${series.score[1]}`;
+    if (mode === 'round') {
+      const w = m.roundWinner;
       setTimeout(() => {
-        if (overlayMode !== 'result') return;
+        if (overlayMode !== 'round') return;
         let res;
-        if (w === 'draw' || w == null) res = { emoji: '🤝', title: 'Dead Heat!', sub: 'Nobody wins this round.', party: false };
-        else { const p = s.players[w]; res = { emoji: p.emoji, title: `${esc(p.name)} WINS!`, sub: winLine(game, w), party: true }; }
+        if (w === 'draw' || w == null) res = { emoji: '🤝', title: 'Round drawn', sub: `Series ${tally} · replay`, party: false };
+        else { const p = s.players[w]; res = { emoji: p.emoji, title: `${esc(p.name)} takes the round!`, sub: `Series ${tally} · first to ${series.target} wins`, party: true }; }
         Store.Sound[(w === 'draw' || w == null) ? 'draw' : 'win']();
-        Overlay.show(res, [
-          { label: '🏠 Lobby', onClick: exitMatch },
-          { label: '↻ Rematch', primary: true, onClick: requestRematch },
+        Overlay.show(res, [{ label: 'Lobby', onClick: exitMatch }, { label: 'Next round →', primary: true, onClick: () => advanceRound(gameId) }]);
+      }, 450);
+    } else if (mode === 'seriesEnd') {
+      const w = m.seriesWinner, p = s.players[w], nxt = nextGameId(gameId), nxtG = Games.byId(nxt);
+      setTimeout(() => {
+        if (overlayMode !== 'seriesEnd') return;
+        Store.Sound.win();
+        Overlay.show({ emoji: p.emoji, title: `${esc(p.name)} WINS THE SERIES!`, sub: `${tally} · added to your scoreboard`, party: true }, [
+          { label: 'Lobby', onClick: exitMatch },
+          { label: `Play ${nxtG.name} next →`, onClick: () => { Overlay.hide(); startMatch(nxt); } },
+          { label: '↻ New series', primary: true, onClick: requestRematch },
         ]);
       }, 450);
     } else if (mode === 'wait') {
-      Overlay.show({ emoji: '⏳', title: 'Rematch sent!', sub: `Waiting for ${esc(s.players[partner].name)} to accept…`, party: false }, [
-        { label: 'Cancel', onClick: cancelRematch },
-        { label: '🏠 Lobby', onClick: exitMatch },
-      ]);
+      Overlay.show({ emoji: '⏳', title: 'New series sent!', sub: `Waiting for ${esc(s.players[partner].name)} to accept…`, party: false }, [
+        { label: 'Cancel', onClick: cancelRematch }, { label: 'Lobby', onClick: exitMatch }]);
     } else { // accept
       Store.Sound.good();
-      Overlay.show({ emoji: '🔁', title: `${esc(s.players[m.rematchReq].name)} wants a rematch!`, sub: 'Accept to start — you make the first move.', party: false }, [
-        { label: '🏠 Lobby', onClick: exitMatch },
-        { label: '✓ Accept & play', primary: true, onClick: () => acceptRematch(gameId) },
-      ]);
+      Overlay.show({ emoji: '🔁', title: `${esc(s.players[m.rematchReq].name)} wants a new series!`, sub: 'Accept to start — you make the first move.', party: false }, [
+        { label: 'Lobby', onClick: exitMatch }, { label: '✓ Accept & play', primary: true, onClick: () => acceptRematch(gameId) }]);
     }
   }
 
@@ -418,11 +448,18 @@ function renderStage(gameId) {
     if (!currentMatch || currentMatch.status !== 'active') return;
     const finishing = winner !== undefined;
     const stateStr = JSON.stringify(nextState);
-    // optimistic local update for instant feedback
-    currentMatch = Object.assign({}, currentMatch, { state: stateStr, winner: finishing ? winner : null, status: finishing ? 'finished' : 'active' });
+    let patch;
+    if (finishing) {
+      const cur = currentMatch.series || { target: SERIES_TARGET, score: [0, 0] };
+      const series = { target: cur.target, score: cur.score.slice() };
+      if (winner === 0 || winner === 1) series.score[winner]++;
+      const seriesWinner = series.score[0] >= series.target ? 0 : (series.score[1] >= series.target ? 1 : null);
+      patch = { state: stateStr, status: 'finished', roundWinner: winner, series, seriesWinner };
+      if (seriesWinner != null) Store.recordResult(gid, seriesWinner === 0 ? 'p1' : 'p2');
+    } else patch = { state: stateStr, status: 'active' };
+    currentMatch = Object.assign({}, currentMatch, patch);
     paint();
-    Store.Net.updateMatch({ state: stateStr, winner: finishing ? winner : null, status: finishing ? 'finished' : 'active', by: me, t: Date.now() });
-    if (finishing) Store.recordResult(gid, winner === 'draw' ? 'draw' : (winner === 0 ? 'p1' : 'p2'));
+    Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
   }
 
   // react to live match changes while mounted
@@ -443,9 +480,25 @@ function waitCard(title, sub, onBtn, spinner, extraBtn) {
 }
 
 function winLine(g, idx) {
-  const lines = ['Flawless. 💅', 'GG — well played!', 'Bragging rights: claimed.', 'Victory tastes sweet. 🍬',
-    'Champion of ' + g.name + '!', 'The crowd goes wild! 🎉', 'Run it back?'];
+  const lines = ['Flawless.', 'GG — well played!', 'Bragging rights: claimed.', 'Victory tastes sweet.',
+    'Champion of ' + g.name + '!', 'The crowd goes wild!', 'Run it back?'];
   return lines[Math.floor((Date.now() / 1000) % lines.length)];
+}
+
+function computeBadges(s) {
+  const tot = s.totals.p1 + s.totals.p2;
+  const played = Object.keys(s.perGame || {}).filter(k => s.perGame[k].plays).length;
+  const lead = Math.abs(s.totals.p1 - s.totals.p2);
+  return [
+    { k: 'First Win', d: 'Win your first series', got: tot >= 1 },
+    { k: 'On Fire', d: '3-series win streak', got: s.streak.n >= 3 },
+    { k: 'Explorer', d: 'Play 8 different games', got: played >= 8 },
+    { k: 'Rivals', d: '10 series played', got: tot >= 10 },
+    { k: 'Dominator', d: 'Lead by 5', got: lead >= 5 },
+    { k: 'Dead Even', d: 'Tied after 6+', got: tot >= 6 && s.totals.p1 === s.totals.p2 },
+    { k: 'Veteran', d: '25 series played', got: tot >= 25 },
+    { k: 'Completionist', d: 'Play every game', got: played >= Games.all().length },
+  ];
 }
 
 /* ============================================================
@@ -455,7 +508,7 @@ function renderScores() {
   const s = Store.get(); const view = $('#view'); view.innerHTML = '';
   const { p1, p2, draws } = s.totals; const total = p1 + p2; const pct = total ? Math.round((p1 / total) * 100) : 50;
   view.append(
-    h('div', { class: 'score-hero' }, h('h2', {}, '⚔ THE RIVALRY ⚔'),
+    h('div', { class: 'score-hero' }, h('h2', {}, 'THE RIVALRY'),
       h('div', { class: 'bigvs' },
         h('div', { class: 'col c1' }, h('div', { class: 'av' }, s.players[0].emoji), h('div', { class: 'nm' }, s.players[0].name), h('div', { class: 'big' }, String(p1))),
         h('div', { class: 'mid' }, ':'),
@@ -467,12 +520,18 @@ function renderScores() {
       h('div', { class: 'stat' }, h('div', { class: 'v' }, String(draws)), h('div', { class: 'k' }, 'DRAWS')),
       h('div', { class: 'stat' }, h('div', { class: 'v', style: 'font-size:18px' }, s.streak.n ? `${(s.streak.who === 'p1' ? s.players[0] : s.players[1]).name} ×${s.streak.n}` : '—'), h('div', { class: 'k' }, 'STREAK'))),
   );
+  // badges
+  const badges = computeBadges(s); const got = badges.filter(b => b.got).length;
+  const badgeWrap = h('div', { class: 'lead-list' }, h('div', { class: 'sec-label' }, `BADGES · ${got}/${badges.length}`),
+    h('div', { class: 'badge-row' }, badges.map(b => h('div', { class: 'badge' + (b.got ? ' got' : ''), title: b.d },
+      h('span', { class: 'badge-ic', html: Icons.ui('trophy') }), h('span', { class: 'badge-k' }, b.k)))));
+  view.append(badgeWrap);
   const lead = h('div', { class: 'lead-list' }, h('div', { class: 'sec-label' }, 'BY GAME'));
   const played = Games.all().filter(g => s.perGame[g.id] && s.perGame[g.id].plays);
-  if (!played.length) lead.append(h('div', { class: 'empty-note' }, 'No games played yet. Go make history. 🎮'));
+  if (!played.length) lead.append(h('div', { class: 'empty-note' }, 'No games played yet. Go make history.'));
   played.sort((a, b) => s.perGame[b.id].plays - s.perGame[a.id].plays).forEach(g => {
     const pg = s.perGame[g.id];
-    lead.append(h('div', { class: 'lead-item' }, h('div', { class: 'le' }, g.emoji),
+    lead.append(h('div', { class: 'lead-item' }, h('div', { class: 'le', html: Icons.game(g.id), style: `color:${g.accent}` }),
       h('div', { class: 'lname' }, g.name, h('small', {}, `${pg.plays} played${pg.draws ? ' · ' + pg.draws + ' draws' : ''}`)),
       h('div', { class: 'lsc' }, h('span', { class: 'a' }, String(pg.p1)), h('span', { class: 'sl' }, '–'), h('span', { class: 'b' }, String(pg.p2)))));
   });
@@ -480,7 +539,7 @@ function renderScores() {
   function buildDanger(armed) {
     danger.innerHTML = '';
     if (!armed) {
-      danger.append(h('button', { class: 'btn btn-ghost', onclick: () => { buildDanger(true); Store.Sound.tap(); } }, '🗑 Reset all scores'));
+      danger.append(h('button', { class: 'btn btn-ghost', onclick: () => { buildDanger(true); Store.Sound.tap(); } }, 'Reset all scores'));
       return;
     }
     const inp = h('input', { type: 'password', class: 'reset-pass', placeholder: 'reset password…', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });

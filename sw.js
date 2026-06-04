@@ -4,7 +4,7 @@
      every device immediately — no stale cached code).
    - When offline, fall back to the cached copy so the app still works.
    - Bump CACHE to force-drop old caches. */
-const CACHE = 'sm-arcade-v9';
+const CACHE = 'sm-arcade-v10';
 const ASSETS = [
   './',
   './index.html',
@@ -12,9 +12,12 @@ const ASSETS = [
   './assets/css/styles.css',
   './assets/js/config.js',
   './assets/js/store.js',
+  './assets/js/icons.js',
   './assets/js/ui.js',
   './assets/js/games-classic.js',
   './assets/js/games-mind.js',
+  './assets/js/games-fun2.js',
+  './assets/js/games-strategy2.js',
   './assets/js/app.js',
   './assets/icons/icon.svg',
   './assets/icons/favicon.svg',

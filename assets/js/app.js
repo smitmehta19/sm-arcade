@@ -5,11 +5,15 @@
   const s = Store.get();
   document.body.classList.toggle('light', s.settings.theme === 'light');
 
+  // swap nav emoji for SVG icons
+  const navIcons = { home: 'play', scores: 'trophy', us: 'heart' };
+  $$('.nav-item').forEach(n => { const ico = n.querySelector('.ni-ico'); if (ico && navIcons[n.dataset.route]) ico.innerHTML = Icons.ui(navIcons[n.dataset.route]); });
+
   function paintChrome() {
     const st = Store.get();
     $('#msP1').textContent = st.totals.p1;
     $('#msP2').textContent = st.totals.p2;
-    $('#soundBtn').textContent = st.settings.sound ? '🔊' : '🔇';
+    $('#soundBtn').innerHTML = Icons.ui(st.settings.sound ? 'sound' : 'mute');
   }
   Store.subscribe(() => {
     paintChrome();
