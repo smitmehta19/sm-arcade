@@ -1,5 +1,9 @@
-/* Service worker — offline cache for S×M Arcade */
-const CACHE = 'sm-arcade-v1';
+/* Service worker — offline cache for S×M Arcade
+   Strategy: stale-while-revalidate for same-origin GETs.
+   - Serves from cache instantly (fast + offline), then refreshes the cache from
+     the network in the background, so edits show up on the next open automatically.
+   - Bump CACHE below whenever you want to force every device to drop old files. */
+const CACHE = 'sm-arcade-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -20,17 +24,28 @@ self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
 });
 self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
-  // never cache firebase / fonts realtime calls — go to network
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  // Only handle our own files. Firebase/Google Fonts go straight to the network.
   if (url.origin !== location.origin) return;
   e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
-      return res;
-    }).catch(() => caches.match('./index.html')))
+    caches.open(CACHE).then(cache =>
+      cache.match(req).then(cached => {
+        const network = fetch(req).then(res => {
+          if (res && res.status === 200) cache.put(req, res.clone());
+          return res;
+        }).catch(() => cached || cache.match('./index.html'));
+        // serve cached immediately if present, else wait for network
+        return cached || network;
+      })
+    )
   );
 });

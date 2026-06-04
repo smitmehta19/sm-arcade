@@ -26,15 +26,15 @@ window.PLAYERS_DEFAULT = [
    all real security comes from the Security Rules, not from hiding the key).
    ============================================================ */
 window.CLOUD = {
-  ENABLED: false,                 // <-- set to true after filling in config below
-  ROOM: 'smit-and-meera',         // any shared secret word; both devices must match
+  ENABLED: true,                              // cloud sync ON
+  ROOM: 'smit-meera-e7c3bf6c17204234',        // private shared room (both devices use this)
   config: {
-    apiKey:            'PASTE_apiKey_HERE',
-    authDomain:        'PASTE_authDomain_HERE',
-    databaseURL:       'PASTE_databaseURL_HERE',   // e.g. https://xxxx-default-rtdb.firebaseio.com
-    projectId:         'PASTE_projectId_HERE',
-    storageBucket:     'PASTE_storageBucket_HERE',
-    messagingSenderId: 'PASTE_messagingSenderId_HERE',
-    appId:             'PASTE_appId_HERE',
+    apiKey:            'AIzaSyAZJiYJ_5uWzpURqOnsOBhF6CCspwpvRys',
+    authDomain:        'sm-arcade.firebaseapp.com',
+    databaseURL:       'https://sm-arcade-default-rtdb.asia-southeast1.firebasedatabase.app',
+    projectId:         'sm-arcade',
+    storageBucket:     'sm-arcade.firebasestorage.app',
+    messagingSenderId: '437173119756',
+    appId:             '1:437173119756:web:f7015819c4c02884177729',
   },
 };
