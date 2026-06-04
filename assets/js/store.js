@@ -69,6 +69,7 @@ const Store = (() => {
     ref = db.ref('rooms/' + (window.CLOUD.ROOM || 'default'));
     cloud = true;
     setPill('cloud');
+    cloudCbs.forEach(fn => { try { fn(); } catch (e) {} });
     // pull remote, merge newest-wins, then live-listen
     ref.on('value', snap => {
       const remote = snap.val();
@@ -153,9 +154,56 @@ const Store = (() => {
     countdown: () => beep(880, 0.08, 'square', 0.2),
   };
 
+  /* ---- device identity (which seat THIS device plays; local-only, not synced) ---- */
+  const ID_KEY = 'sm_identity_v1';
+  function getIdentity() { const v = localStorage.getItem(ID_KEY); return v === '0' || v === '1' ? +v : null; }
+  function setIdentity(i) { localStorage.setItem(ID_KEY, String(i)); emit(); }
+
+  /* ---- cloud-connected hooks (net layer subscribes here) ---- */
+  const cloudCbs = new Set();
+  function onCloud(fn) { cloudCbs.add(fn); if (cloud) { try { fn(); } catch (e) {} } return () => cloudCbs.delete(fn); }
+
+  /* ---- realtime networking: presence + active match ---- */
+  const ROOM = () => (window.CLOUD && window.CLOUD.ROOM) || 'default';
+  const Net = {
+    ready: () => cloud,
+    // presence: announce this seat online; flips offline automatically on disconnect
+    goOnline(seat, name) {
+      if (!cloud || seat == null) return;
+      try {
+        const pref = db.ref('presence/' + ROOM() + '/' + seat);
+        const con = db.ref('.info/connected');
+        con.on('value', s => {
+          if (s.val() === true) {
+            pref.onDisconnect().update({ online: false, ts: firebase.database.ServerValue.TIMESTAMP });
+            pref.set({ online: true, name: name || '', ts: firebase.database.ServerValue.TIMESTAMP });
+          }
+        });
+      } catch (e) { console.warn('presence error', e); }
+    },
+    watchPresence(cb) {
+      if (!cloud) return () => {};
+      const pref = db.ref('presence/' + ROOM());
+      const h = pref.on('value', s => cb(s.val() || {}));
+      return () => pref.off('value', h);
+    },
+    watchMatch(cb) {
+      if (!cloud) return () => {};
+      const mref = db.ref('matches/' + ROOM() + '/active');
+      const h = mref.on('value', s => cb(s.val() || null),
+        err => console.warn('match read denied — republish Security Rules to allow "matches".', err));
+      return () => mref.off('value', h);
+    },
+    setMatch(obj) { if (cloud) return db.ref('matches/' + ROOM() + '/active').set(obj); return Promise.resolve(); },
+    updateMatch(patch) { if (cloud) return db.ref('matches/' + ROOM() + '/active').update(patch); return Promise.resolve(); },
+    clearMatch() { if (cloud) return db.ref('matches/' + ROOM() + '/active').remove(); return Promise.resolve(); },
+    serverTime: () => (typeof firebase !== 'undefined' && firebase.database) ? firebase.database.ServerValue.TIMESTAMP : Date.now(),
+  };
+
   return {
     initCloud, subscribe, get, player,
     recordResult, toggleFav, setPlayer, setSetting, resetScores,
     Sound, isCloud: () => cloud,
+    getIdentity, setIdentity, onCloud, Net,
   };
 })();

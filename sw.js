@@ -3,7 +3,7 @@
    - Serves from cache instantly (fast + offline), then refreshes the cache from
      the network in the background, so edits show up on the next open automatically.
    - Bump CACHE below whenever you want to force every device to drop old files. */
-const CACHE = 'sm-arcade-v2';
+const CACHE = 'sm-arcade-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -14,7 +14,6 @@ const ASSETS = [
   './assets/js/ui.js',
   './assets/js/games-classic.js',
   './assets/js/games-mind.js',
-  './assets/js/games-arcade.js',
   './assets/js/app.js',
   './assets/icons/icon.svg',
   './assets/icons/favicon.svg',

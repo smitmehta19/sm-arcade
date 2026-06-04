@@ -6,6 +6,18 @@
         ".write": "auth != null",
         ".validate": "newData.hasChildren(['totals'])"
       }
+    },
+    "matches": {
+      "$room": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "presence": {
+      "$room": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
     }
   }
 }
