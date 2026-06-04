@@ -1,9 +1,10 @@
 /* Service worker — offline cache for S×M Arcade
-   Strategy: stale-while-revalidate for same-origin GETs.
-   - Serves from cache instantly (fast + offline), then refreshes the cache from
-     the network in the background, so edits show up on the next open automatically.
-   - Bump CACHE below whenever you want to force every device to drop old files. */
-const CACHE = 'sm-arcade-v5';
+   Strategy: NETWORK-FIRST for same-origin GETs.
+   - When online, always fetch the latest file (so bug fixes & new games reach
+     every device immediately — no stale cached code).
+   - When offline, fall back to the cached copy so the app still works.
+   - Bump CACHE to force-drop old caches. */
+const CACHE = 'sm-arcade-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -33,18 +34,13 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  // Only handle our own files. Firebase/Google Fonts go straight to the network.
-  if (url.origin !== location.origin) return;
+  if (url.origin !== location.origin) return; // Firebase/fonts → straight to network
   e.respondWith(
-    caches.open(CACHE).then(cache =>
-      cache.match(req).then(cached => {
-        const network = fetch(req).then(res => {
-          if (res && res.status === 200) cache.put(req, res.clone());
-          return res;
-        }).catch(() => cached || cache.match('./index.html'));
-        // serve cached immediately if present, else wait for network
-        return cached || network;
+    fetch(req)
+      .then(res => {
+        if (res && res.status === 200) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {}); }
+        return res;
       })
-    )
+      .catch(() => caches.match(req).then(hit => hit || caches.match('./index.html')))
   );
 });
