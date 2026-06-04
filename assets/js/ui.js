@@ -335,6 +335,18 @@ function acceptRematch(gameId) {
 }
 function nextGameId(cur) { const others = Games.all().filter(g => g.id !== cur); return others[Math.floor(Math.random() * others.length)].id; }
 function exitMatch() { Store.Net.clearMatch(); location.hash = '#/'; }
+// ending an in-progress game needs BOTH players' consent
+function requestEndGame() {
+  const me = Store.getIdentity(), partner = partnerSeat(me);
+  if (!currentMatch) { location.hash = '#/'; return; }
+  const inProgress = currentMatch.status === 'active' || (currentMatch.status === 'finished' && currentMatch.seriesWinner == null);
+  if (!inProgress || !isOnline(partner)) { exitMatch(); return; } // nothing in progress, or partner not around → just leave
+  Store.Sound.tap();
+  optimistic({ endReq: me });
+  Store.Net.updateMatch({ endReq: me, t: Date.now() });
+}
+function cancelEndGame() { Store.Sound.tap(); optimistic({ endReq: null }); Store.Net.updateMatch({ endReq: null, t: Date.now() }); }
+function agreeEndGame() { Store.Sound.good(); exitMatch(); }
 
 /* ============================================================
    NETWORKED GAME STAGE
@@ -353,7 +365,8 @@ function renderStage(gameId) {
   const seriesBar = h('div', { class: 'series-bar', id: 'seriesBar' });
   const mount = h('div', { class: 'game-wrap', id: 'gameMount' });
   const msg = h('div', { class: 'game-msg', id: 'gameMsg' });
-  const stage = h('div', { class: 'stage' }, head, seriesBar, mount, msg);
+  const endBtn = h('button', { class: 'end-btn', onclick: requestEndGame }, 'End game');
+  const stage = h('div', { class: 'stage' }, head, seriesBar, mount, msg, endBtn);
   view.append(stage);
 
   let overlayMode = null; // null | 'round' | 'seriesEnd' | 'wait' | 'accept'
@@ -365,6 +378,8 @@ function renderStage(gameId) {
       seriesBar.innerHTML = `<span>Best of ${m.series.target * 2 - 1}</span><b class="p1">${m.series.score[0]}</b><i>–</i><b class="p2">${m.series.score[1]}</b>`;
       seriesBar.classList.add('show');
     } else seriesBar.classList.remove('show');
+    // "End game" available only during active play (ending needs both players' consent)
+    endBtn.style.display = (m && m.gameId === gameId && m.status === 'active' && m.endReq == null) ? 'block' : 'none';
     if (!m || m.gameId !== gameId) { // match ended/replaced elsewhere
       mount.innerHTML = ''; mount.append(waitCard('This game ended.', 'Back to lobby', exitMatch)); return;
     }
@@ -401,12 +416,27 @@ function renderStage(gameId) {
     };
     try { game.render(ctx); } catch (e) { console.error(e); msg.textContent = '⚠ ' + e.message; }
 
-    if (m.status === 'finished') {
+    if (m.endReq != null) { // end-game consent takes priority over everything
+      const mode = m.endReq === me ? 'endWait' : 'endAsk';
+      if (mode !== overlayMode) { overlayMode = mode; showEndOverlay(m, mode); }
+    } else if (m.status === 'finished') {
       let mode;
       if (m.seriesWinner == null) mode = 'round';
       else mode = m.rematchReq == null ? 'seriesEnd' : (m.rematchReq === me ? 'wait' : 'accept');
       if (mode !== overlayMode) { overlayMode = mode; showFinishedOverlay(m, mode); }
     } else { overlayMode = null; Overlay.hide(); }
+  }
+
+  function showEndOverlay(m, mode) {
+    const partner = partnerSeat(me);
+    if (mode === 'endWait') {
+      Overlay.show({ emoji: '🤝', title: 'End the game?', sub: `Waiting for ${esc(s.players[partner].name)} to agree…`, party: false },
+        [{ label: 'Keep playing', primary: true, onClick: cancelEndGame }]);
+    } else { // endAsk
+      Store.Sound.bad();
+      Overlay.show({ emoji: '🚪', title: `${esc(s.players[m.endReq].name)} wants to end the game`, sub: 'Agree to end and return to the lobby?', party: false },
+        [{ label: 'Keep playing', onClick: cancelEndGame }, { label: 'End game', primary: true, onClick: agreeEndGame }]);
+    }
   }
 
   function showFinishedOverlay(m, mode) {
@@ -421,7 +451,7 @@ function renderStage(gameId) {
         if (w === 'draw' || w == null) res = { emoji: '🤝', title: 'Round drawn', sub: `Series ${tally} · replay`, party: false };
         else { const p = s.players[w]; res = { emoji: p.emoji, title: `${esc(p.name)} takes the round!`, sub: `Series ${tally} · first to ${series.target} wins`, party: true }; }
         Store.Sound[(w === 'draw' || w == null) ? 'draw' : 'win']();
-        Overlay.show(res, [{ label: 'Lobby', onClick: exitMatch }, { label: 'Next round →', primary: true, onClick: () => advanceRound(gameId) }]);
+        Overlay.show(res, [{ label: 'End series', onClick: requestEndGame }, { label: 'Next round →', primary: true, onClick: () => advanceRound(gameId) }]);
       }, 450);
     } else if (mode === 'seriesEnd') {
       const w = m.seriesWinner, p = s.players[w], nxt = nextGameId(gameId), nxtG = Games.byId(nxt);
