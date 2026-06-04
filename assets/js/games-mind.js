@@ -275,28 +275,7 @@
     },
   });
 
-  /* ---------- 14. DICE DUEL (PIG) ---------- */
-  Games.register({
-    id: 'dice-pig', name: 'Dice Duel', emoji: '🎲', category: 'Luck', accent: '#00f0ff',
-    tagline: 'Push your luck to 100.',
-    init: host => ({ totals: [0, 0], pot: 0, die: null, turn: host }),
-    render(ctx) {
-      const st = ctx.state, me = ctx.me, FACE = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'], TARGET = 100;
-      ctx.root.append(ctx.turnBar({ scores: st.totals }));
-      const wrap = ctx.h('div', { class: 'board-frame pig' },
-        ctx.h('div', { class: 'pig-die' }, st.die ? FACE[st.die] : '🎲'),
-        ctx.h('div', { class: 'pig-turn' }, `Turn total: ${st.pot}`));
-      if (ctx.isMyTurn) wrap.append(ctx.h('div', { class: 'game-controls' },
-        ctx.h('button', { class: 'btn btn-primary', onclick: roll }, '🎲 Roll'),
-        ctx.h('button', { class: 'btn btn-ghost', onclick: bank }, '🏦 Bank')));
-      ctx.root.append(wrap);
-      ctx.isMyTurn ? ctx.msg(`Your turn — roll or bank (first to ${TARGET})`, ctx.players[me].color) : waiting(ctx);
-      function roll() { const s = ctx.clone(st); const v = 1 + rint(6); s.die = v; ctx.sound.move(); if (v === 1) { s.pot = 0; s.turn = 1 - me; ctx.sound.bad(); return ctx.commit(s); } s.pot += v; ctx.sound.tap(); ctx.commit(s); }
-      function bank() { const s = ctx.clone(st); s.totals[me] += s.pot; s.pot = 0; s.die = null; ctx.sound.good(); if (s.totals[me] >= TARGET) return ctx.commit(s, me); s.turn = 1 - me; ctx.commit(s); }
-    },
-  });
-
-  /* ---------- 15. COUPLE QUIZ ---------- */
+  /* ---------- COUPLE QUIZ ---------- */
   Games.register({
     id: 'couple-quiz', name: 'Who Knows Who?', emoji: '💞', category: 'Couple', accent: '#ff2fa6',
     tagline: 'Guess your partner’s pick.',

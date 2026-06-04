@@ -38,14 +38,11 @@ const GAME_RULES = {
   'checkers': ['Move your pieces diagonally forward, one square.', 'Jump over your partner’s piece into an empty square to capture it — captures are forced, and you can chain multiple jumps in one turn.', 'Reach the far row to become a King (moves both directions).', 'Capture all their pieces — or leave them with no move — to win.'],
   'reversi': ['Place a disc so it traps a straight line of your partner’s discs between two of yours — those flip to your color.', 'You must make a flipping move; if you can’t, your turn is passed.', 'When the board fills, the most discs of your color wins.'],
   'gomoku': ['Take turns placing a stone on any empty point.', 'First to line up 5 stones in a row — any direction — wins.', 'Watch their lines and block before they reach five!'],
-  'mancala': ['Tap one of your pits to scoop its seeds and sow them one by one, counter-clockwise.', 'If your last seed lands in your store (the big pit), you go again.', 'Land your last seed in an empty pit on your side to capture the seeds directly across.', 'Most seeds in your store wins.'],
-  'nim': ['On your turn, tap to remove any number of stars — but all from ONE row only.', 'Then press “End turn”.', 'Whoever takes the very last star wins. Think a few moves ahead!'],
   'battleship': ['Your fleet is placed automatically and hidden from your partner.', 'On your turn, tap a square in ENEMY WATERS to fire. 🔥 = hit, • = miss.', 'Sink your partner’s entire fleet before they sink yours.'],
   'memory': ['On your turn, flip two cards.', 'Match a pair → you keep it and flip again. No match → they flip back and it’s your partner’s turn.', 'Most pairs when all are found wins. Remember where things are!'],
   'word-duel': ['There’s a secret 5-letter word; you take turns guessing it.', 'Tiles: 🟩 right letter & spot · 🟨 right letter, wrong spot · ⬛ not in the word.', 'First to guess the word wins. The little dot shows who made each guess.'],
   'hangman': ['One of you secretly types a word; the other tries to guess it.', 'The guesser picks letters — 6 wrong guesses completes the figure.', 'Guesser wins by revealing the whole word; the setter wins if the guesser runs out of lives.'],
   'rps': ['Each of you secretly picks Rock ✊, Paper ✋, or Scissors ✌️.', 'Rock beats Scissors, Scissors beats Paper, Paper beats Rock.', 'First to win 3 rounds takes the match.'],
-  'dice-pig': ['On your turn, Roll to add the dice value to your turn total.', 'But roll a 1 and you lose the whole turn total! Bank to lock in your points safely.', 'First to reach 100 wins. Press your luck… or play it safe.'],
   'couple-quiz': ['Take turns: one of you guesses what the other will pick between two options.', 'Then the other reveals their honest answer.', 'A correct guess scores a point. Whoever knows the other best wins! 💞'],
 };
 function showRules(game) {
@@ -89,16 +86,15 @@ const Overlay = (() => {
       box.append(c);
     }
   }
-  function show({ emoji, title, sub, party = true }, onAgain, onHome) {
+  // buttons: [{ label, primary?, onClick }]
+  function show({ emoji, title, sub, party = true }, buttons) {
     $('#resultEmoji').textContent = emoji;
     $('#resultTitle').innerHTML = title;
     $('#resultSub').innerHTML = sub || '';
     if (party) confetti(); else $('#confetti').innerHTML = '';
-    $('#resAgain').textContent = '↻ Rematch';
-    $('#resHome').textContent = '🏠 Lobby';
+    const acts = $('#resultActions'); acts.innerHTML = '';
+    (buttons || []).forEach(b => acts.append(h('button', { class: 'btn ' + (b.primary ? 'btn-primary' : 'btn-ghost'), onclick: () => b.onClick && b.onClick() }, b.label)));
     $('#resultOverlay').hidden = false;
-    $('#resAgain').onclick = () => { hide(); onAgain && onAgain(); };
-    $('#resHome').onclick = () => { hide(); onHome && onHome(); };
   }
   function hide() { $('#resultOverlay').hidden = true; $('#confetti').innerHTML = ''; }
   return { show, hide };
@@ -292,7 +288,7 @@ function startMatch(gameId) {
   }
   // state is JSON-stringified: Firebase RTDB strips nulls/empties & mangles arrays, so we store a plain string
   const state = JSON.stringify(Games.byId(gameId).init(me));
-  Store.Net.setMatch({ gameId, host: me, status: 'waiting', state, winner: null, by: me, t: Date.now() })
+  Store.Net.setMatch({ gameId, host: me, status: 'waiting', state, winner: null, starter: me, rematchReq: null, by: me, t: Date.now() })
     .catch(err => { console.error(err); alert('Could not start the game online.\n\nYour Firebase rules likely need updating to allow "matches" and "presence" (see database.rules.json in the repo, then republish in the Realtime Database → Rules tab).\n\n' + err.message); location.hash = '#/'; });
   location.hash = '#/play/' + gameId;
 }
@@ -301,10 +297,26 @@ function joinMatch() {
   Store.Net.updateMatch({ status: 'active', t: Date.now() });
   if (currentMatch) location.hash = '#/play/' + currentMatch.gameId;
 }
-function rematch(gameId) {
+// rematch handshake: one player requests, the other accepts; the accepter (the
+// opposite player from the requester) makes the first move of the new game.
+function optimistic(patch) { if (currentMatch) { currentMatch = Object.assign({}, currentMatch, patch); if (stageHook) stageHook(currentMatch); } }
+function requestRematch() {
   const me = Store.getIdentity();
-  const state = JSON.stringify(Games.byId(gameId).init(me));
-  Store.Net.updateMatch({ state, winner: null, status: 'active', host: me, by: me, t: Date.now() });
+  optimistic({ rematchReq: me });
+  Store.Net.updateMatch({ rematchReq: me, t: Date.now() });
+}
+function cancelRematch() {
+  optimistic({ rematchReq: null });
+  Store.Net.updateMatch({ rematchReq: null, t: Date.now() });
+}
+function acceptRematch(gameId) {
+  const me = Store.getIdentity();
+  const requester = currentMatch && currentMatch.rematchReq != null ? currentMatch.rematchReq : (1 - me);
+  const newStarter = 1 - requester;                   // the accepter (opposite of requester) goes first
+  const state = JSON.stringify(Games.byId(gameId).init(newStarter));
+  const patch = { state, winner: null, status: 'active', starter: newStarter, rematchReq: null };
+  optimistic(patch);
+  Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
 }
 function exitMatch() { Store.Net.clearMatch(); location.hash = '#/'; }
 
@@ -327,7 +339,7 @@ function renderStage(gameId) {
   const stage = h('div', { class: 'stage' }, head, mount, msg);
   view.append(stage);
 
-  let shownFinished = false;
+  let overlayMode = null; // null | 'result' | 'wait' | 'accept'
 
   function paint() {
     const m = currentMatch;
@@ -367,18 +379,39 @@ function renderStage(gameId) {
     };
     try { game.render(ctx); } catch (e) { console.error(e); msg.textContent = '⚠ ' + e.message; }
 
-    if (m.status === 'finished' && !shownFinished) {
-      shownFinished = true;
-      const w = m.winner;
+    if (m.status === 'finished') {
+      const mode = m.rematchReq == null ? 'result' : (m.rematchReq === me ? 'wait' : 'accept');
+      if (mode !== overlayMode) { overlayMode = mode; showFinishedOverlay(m, mode); }
+    } else { overlayMode = null; Overlay.hide(); }
+  }
+
+  function showFinishedOverlay(m, mode) {
+    const w = m.winner, partner = partnerSeat(me);
+    if (mode === 'result') {
+      // brief delay so the final move lands before the celebration
       setTimeout(() => {
+        if (overlayMode !== 'result') return;
         let res;
         if (w === 'draw' || w == null) res = { emoji: '🤝', title: 'Dead Heat!', sub: 'Nobody wins this round.', party: false };
         else { const p = s.players[w]; res = { emoji: p.emoji, title: `${esc(p.name)} WINS!`, sub: winLine(game, w), party: true }; }
         Store.Sound[(w === 'draw' || w == null) ? 'draw' : 'win']();
-        Overlay.show(res, () => { shownFinished = false; rematch(gameId); }, exitMatch);
+        Overlay.show(res, [
+          { label: '🏠 Lobby', onClick: exitMatch },
+          { label: '↻ Rematch', primary: true, onClick: requestRematch },
+        ]);
       }, 450);
+    } else if (mode === 'wait') {
+      Overlay.show({ emoji: '⏳', title: 'Rematch sent!', sub: `Waiting for ${esc(s.players[partner].name)} to accept…`, party: false }, [
+        { label: 'Cancel', onClick: cancelRematch },
+        { label: '🏠 Lobby', onClick: exitMatch },
+      ]);
+    } else { // accept
+      Store.Sound.good();
+      Overlay.show({ emoji: '🔁', title: `${esc(s.players[m.rematchReq].name)} wants a rematch!`, sub: 'Accept to start — you make the first move.', party: false }, [
+        { label: '🏠 Lobby', onClick: exitMatch },
+        { label: '✓ Accept & play', primary: true, onClick: () => acceptRematch(gameId) },
+      ]);
     }
-    if (m.status === 'finished') { shownFinished = shownFinished; }
   }
 
   function commitMove(gid, nextState, winner) {
@@ -395,7 +428,6 @@ function renderStage(gameId) {
   // react to live match changes while mounted
   stageHook = (m) => {
     if (!m) { exitMatch(); return; }
-    if (m.status === 'active' && shownFinished) shownFinished = false; // rematch started
     paint();
   };
   paint();
