@@ -444,8 +444,30 @@ function renderScores() {
       h('div', { class: 'lname' }, g.name, h('small', {}, `${pg.plays} played${pg.draws ? ' · ' + pg.draws + ' draws' : ''}`)),
       h('div', { class: 'lsc' }, h('span', { class: 'a' }, String(pg.p1)), h('span', { class: 'sl' }, '–'), h('span', { class: 'b' }, String(pg.p2)))));
   });
-  view.append(lead, h('div', { class: 'danger-zone' },
-    h('button', { class: 'btn btn-ghost', onclick: () => { if (confirm('Reset ALL scores for good?')) { Store.resetScores(); renderScores(); } } }, '🗑 Reset all scores')));
+  const danger = h('div', { class: 'danger-zone' });
+  function buildDanger(armed) {
+    danger.innerHTML = '';
+    if (!armed) {
+      danger.append(h('button', { class: 'btn btn-ghost', onclick: () => { buildDanger(true); Store.Sound.tap(); } }, '🗑 Reset all scores'));
+      return;
+    }
+    const inp = h('input', { type: 'password', class: 'reset-pass', placeholder: 'reset password…', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+    const err = h('div', { class: 'reset-err' });
+    const confirmBtn = h('button', { class: 'btn btn-primary', onclick: () => {
+      if (inp.value === 'smitwins') { Store.resetScores(); Store.Sound.win(); renderScores(); }
+      else { Store.Sound.bad(); err.textContent = '✕ Wrong password — scores are safe.'; inp.value = ''; inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake'); inp.focus(); }
+    } }, 'Confirm reset');
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') confirmBtn.click(); });
+    danger.append(
+      h('p', { class: 'hint' }, '🔒 Enter the reset password to wipe all scores:'),
+      inp, err,
+      h('div', { class: 'btn-row mt' },
+        h('button', { class: 'btn btn-ghost', onclick: () => buildDanger(false) }, 'Cancel'),
+        confirmBtn));
+    setTimeout(() => inp.focus(), 60);
+  }
+  buildDanger(false);
+  view.append(lead, danger);
 }
 
 /* ============================================================
