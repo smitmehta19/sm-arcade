@@ -290,7 +290,8 @@ function startMatch(gameId) {
   if (currentMatch && currentMatch.status !== 'finished' && currentMatch.gameId !== gameId) {
     if (!confirm('Start a new game? This ends the current one.')) return;
   }
-  const state = Games.byId(gameId).init(me);
+  // state is JSON-stringified: Firebase RTDB strips nulls/empties & mangles arrays, so we store a plain string
+  const state = JSON.stringify(Games.byId(gameId).init(me));
   Store.Net.setMatch({ gameId, host: me, status: 'waiting', state, winner: null, by: me, t: Date.now() })
     .catch(err => { console.error(err); alert('Could not start the game online.\n\nYour Firebase rules likely need updating to allow "matches" and "presence" (see database.rules.json in the repo, then republish in the Realtime Database → Rules tab).\n\n' + err.message); location.hash = '#/'; });
   location.hash = '#/play/' + gameId;
@@ -302,7 +303,7 @@ function joinMatch() {
 }
 function rematch(gameId) {
   const me = Store.getIdentity();
-  const state = Games.byId(gameId).init(me);
+  const state = JSON.stringify(Games.byId(gameId).init(me));
   Store.Net.updateMatch({ state, winner: null, status: 'active', host: me, by: me, t: Date.now() });
 }
 function exitMatch() { Store.Net.clearMatch(); location.hash = '#/'; }
@@ -349,9 +350,13 @@ function renderStage(gameId) {
       }
       return;
     }
-    // active or finished → render the game from state
+    // active or finished → render the game from state (stored as a JSON string)
     mount.innerHTML = '';
-    const state = m.state;
+    let state = null;
+    try { if (typeof m.state === 'string') state = JSON.parse(m.state); } catch (e) { state = null; }
+    if (!state || state.turn === undefined && !['rps', 'couple-quiz'].includes(gameId)) {
+      mount.append(waitCard('Couldn’t load this game — please start a fresh one.', 'Back to lobby', exitMatch)); return;
+    }
     const ctx = {
       root: mount, h, $, esc, clone, players: s.players.map(p => ({ name: p.name, emoji: p.emoji, color: p.color })),
       state, me, turn: state.turn, isMyTurn: (state.turn === me) && m.status === 'active',
@@ -379,10 +384,11 @@ function renderStage(gameId) {
   function commitMove(gid, nextState, winner) {
     if (!currentMatch || currentMatch.status !== 'active') return;
     const finishing = winner !== undefined;
+    const stateStr = JSON.stringify(nextState);
     // optimistic local update for instant feedback
-    currentMatch = Object.assign({}, currentMatch, { state: nextState, winner: finishing ? winner : null, status: finishing ? 'finished' : 'active' });
+    currentMatch = Object.assign({}, currentMatch, { state: stateStr, winner: finishing ? winner : null, status: finishing ? 'finished' : 'active' });
     paint();
-    Store.Net.updateMatch({ state: nextState, winner: finishing ? winner : null, status: finishing ? 'finished' : 'active', by: me, t: Date.now() });
+    Store.Net.updateMatch({ state: stateStr, winner: finishing ? winner : null, status: finishing ? 'finished' : 'active', by: me, t: Date.now() });
     if (finishing) Store.recordResult(gid, winner === 'draw' ? 'draw' : (winner === 0 ? 'p1' : 'p2'));
   }
 
