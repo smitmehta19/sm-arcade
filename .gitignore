@@ -1,0 +1,13 @@
+# local tooling / editor
+.claude/
+.vscode/
+.idea/
+
+# OS junk
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# logs
+*.log

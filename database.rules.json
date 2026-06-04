@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "rooms": {
+      "$room": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['totals'])"
+      }
+    }
+  }
+}

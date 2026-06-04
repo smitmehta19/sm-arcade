@@ -1,0 +1,15 @@
+{
+  "name": "S × M Arcade — Smit vs Meera",
+  "short_name": "S×M Arcade",
+  "description": "A private 2-player arcade for Smit & Meera. 20 games, head-to-head scores.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07040f",
+  "theme_color": "#0a0612",
+  "icons": [
+    { "src": "assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "assets/icons/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
