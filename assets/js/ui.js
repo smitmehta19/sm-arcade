@@ -539,7 +539,7 @@ function renderScores() {
   function buildDanger(armed) {
     danger.innerHTML = '';
     if (!armed) {
-      danger.append(h('button', { class: 'btn btn-ghost', onclick: () => { buildDanger(true); Store.Sound.tap(); } }, 'Reset all scores'));
+      danger.append(h('button', { class: 'btn btn-ghost', onclick: () => { if (Store.getIdentity() !== 0) return trollMeera(); buildDanger(true); Store.Sound.tap(); } }, 'Reset all scores'));
       return;
     }
     const inp = h('input', { type: 'password', class: 'reset-pass', placeholder: 'reset password…', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
@@ -562,6 +562,57 @@ function renderScores() {
 }
 
 /* ============================================================
+   SETTINGS — modal helper, Smit's God-Mode gate, Meera trolling
+   ============================================================ */
+// A small on-brand modal. opts: {title, sub, nameInput?, password?, confirmLabel, cancel?, onConfirm({name,password}, errEl)->truthy=close}
+function smModal(opts) {
+  const back = h('div', { class: 'rules-overlay' });
+  const card = h('div', { class: 'rules-card', style: 'text-align:center' });
+  if (opts.title) card.append(h('h3', { style: 'margin-bottom:10px' }, opts.title));
+  if (opts.sub) card.append(h('p', { style: 'color:var(--ink-dim);font-size:15px;margin:0 0 16px;line-height:1.55' }, opts.sub));
+  let nameInp, passInp;
+  if (opts.nameInput !== undefined) { nameInp = h('input', { type: 'text', class: 'reset-pass', style: 'letter-spacing:1px;text-align:center;font-family:var(--font-body)', value: opts.nameInput, maxlength: '14', placeholder: 'new name' }); card.append(nameInp); }
+  if (opts.password) { passInp = h('input', { type: 'password', class: 'reset-pass mt', placeholder: 'password', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' }); card.append(passInp); }
+  const err = h('div', { class: 'reset-err' }); card.append(err);
+  const acts = h('div', { class: 'btn-row mt' });
+  if (opts.cancel !== false) acts.append(h('button', { class: 'btn btn-ghost', onclick: close }, 'Cancel'));
+  const ok = h('button', { class: 'btn btn-primary', onclick: go }, opts.confirmLabel || 'OK'); acts.append(ok);
+  card.append(acts); back.append(card); document.body.append(back);
+  const focusEl = nameInp || passInp; if (focusEl) setTimeout(() => focusEl.focus(), 60);
+  [nameInp, passInp].forEach(i => i && i.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }));
+  back.onclick = e => { if (e.target === back) close(); };
+  function go() { const r = opts.onConfirm ? opts.onConfirm({ name: nameInp && nameInp.value, password: passInp && passInp.value }, err) : true; if (r) close(); }
+  function close() { back.remove(); }
+  return { close, err };
+}
+// Smit (seat 0) has "God Mode"; Meera (seat 1) gets playfully blocked.
+const SM_TROLLS = [
+  'Madam pls, focus on game.',
+  "Ahh Madam, you can't do that.",
+  'Lol, yeah — as if doing that will help.',
+  'Name change allowed only if you say “I love you” to Smit. 💞',
+  'Smit has the God Mode privilege here.',
+  'Lol, try again.',
+];
+function trollMeera() {
+  Store.Sound.bad();
+  smModal({ title: 'God Mode required 🔒', sub: SM_TROLLS[Math.floor(Math.random() * SM_TROLLS.length)], confirmLabel: 'Fine 😤', cancel: false, onConfirm: () => true });
+}
+function editName(idx) {
+  if (Store.getIdentity() !== 0) return trollMeera();          // only Smit's device may change names
+  const cur = Store.player(idx).name;
+  smModal({
+    title: `Change ${esc(cur)}’s name`, sub: 'Enter the new name and Smit’s password.',
+    nameInput: cur, password: true, confirmLabel: 'Change',
+    onConfirm: (v, err) => {
+      if ((v.password || '') !== 'change') { Store.Sound.bad(); err.textContent = '✕ Wrong password.'; return false; }
+      const nm = (v.name || '').trim(); if (!nm) { err.textContent = 'Enter a name.'; return false; }
+      Store.setPlayer(idx, { name: nm }); Store.Sound.good(); renderUs(); return true;
+    },
+  });
+}
+
+/* ============================================================
    US (profiles + identity + settings)
    ============================================================ */
 const EMOJIS = ['🦊','🦋','🐯','🐼','🦄','🐙','🦁','🐢','🐝','🦖','👾','🤖','😎','🥰','🔥','⭐'];
@@ -580,7 +631,9 @@ function renderUs() {
     const p = s.players[idx];
     const card = h('div', { class: 'card' }, h('h3', {}, `PLAYER ${idx + 1}`));
     card.append(h('div', { class: 'field' }, h('label', {}, 'Name'),
-      h('input', { type: 'text', value: p.name, maxlength: '14', onchange: e => Store.setPlayer(idx, { name: e.target.value.trim() || ('Player ' + (idx + 1)) }) })));
+      h('div', { class: 'name-row' },
+        h('input', { type: 'text', value: p.name, readonly: '', class: 'name-display' }),
+        h('button', { class: 'btn btn-ghost btn-sm', onclick: () => editName(idx) }, 'Edit'))));
     card.append(h('div', { class: 'field' }, h('label', {}, 'Avatar'),
       h('div', { class: 'emoji-pick' }, EMOJIS.map(em => h('button', { class: p.emoji === em ? 'sel' : '', onclick: () => { Store.setPlayer(idx, { emoji: em }); renderUs(); Store.Sound.tap(); } }, em)))));
     return card;
