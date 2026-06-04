@@ -30,6 +30,35 @@ const Games = (() => {
   };
 })();
 
+/* ---------- short how-to-play rules per game ---------- */
+const GAME_RULES = {
+  'tic-tac-toe': ['Take turns placing your mark (✕ or ◯) on the grid.', 'First to get 3 in a row — across, down, or diagonally — wins.', 'Block your partner while building your own line!'],
+  'connect-four': ['Tap a column to drop your disc; it falls to the lowest open slot.', 'Connect 4 of your discs in a line — horizontal, vertical, or diagonal — to win.', 'Stack and block to set up sneaky traps.'],
+  'dots-boxes': ['On your turn, draw one line between two dots.', 'Complete the 4th side of a box to claim it (your emoji appears) — and you get another turn!', 'Most boxes once the grid is full wins.'],
+  'checkers': ['Move your pieces diagonally forward, one square.', 'Jump over your partner’s piece into an empty square to capture it — captures are forced, and you can chain multiple jumps in one turn.', 'Reach the far row to become a King (moves both directions).', 'Capture all their pieces — or leave them with no move — to win.'],
+  'reversi': ['Place a disc so it traps a straight line of your partner’s discs between two of yours — those flip to your color.', 'You must make a flipping move; if you can’t, your turn is passed.', 'When the board fills, the most discs of your color wins.'],
+  'gomoku': ['Take turns placing a stone on any empty point.', 'First to line up 5 stones in a row — any direction — wins.', 'Watch their lines and block before they reach five!'],
+  'mancala': ['Tap one of your pits to scoop its seeds and sow them one by one, counter-clockwise.', 'If your last seed lands in your store (the big pit), you go again.', 'Land your last seed in an empty pit on your side to capture the seeds directly across.', 'Most seeds in your store wins.'],
+  'nim': ['On your turn, tap to remove any number of stars — but all from ONE row only.', 'Then press “End turn”.', 'Whoever takes the very last star wins. Think a few moves ahead!'],
+  'battleship': ['Your fleet is placed automatically and hidden from your partner.', 'On your turn, tap a square in ENEMY WATERS to fire. 🔥 = hit, • = miss.', 'Sink your partner’s entire fleet before they sink yours.'],
+  'memory': ['On your turn, flip two cards.', 'Match a pair → you keep it and flip again. No match → they flip back and it’s your partner’s turn.', 'Most pairs when all are found wins. Remember where things are!'],
+  'word-duel': ['There’s a secret 5-letter word; you take turns guessing it.', 'Tiles: 🟩 right letter & spot · 🟨 right letter, wrong spot · ⬛ not in the word.', 'First to guess the word wins. The little dot shows who made each guess.'],
+  'hangman': ['One of you secretly types a word; the other tries to guess it.', 'The guesser picks letters — 6 wrong guesses completes the figure.', 'Guesser wins by revealing the whole word; the setter wins if the guesser runs out of lives.'],
+  'rps': ['Each of you secretly picks Rock ✊, Paper ✋, or Scissors ✌️.', 'Rock beats Scissors, Scissors beats Paper, Paper beats Rock.', 'First to win 3 rounds takes the match.'],
+  'dice-pig': ['On your turn, Roll to add the dice value to your turn total.', 'But roll a 1 and you lose the whole turn total! Bank to lock in your points safely.', 'First to reach 100 wins. Press your luck… or play it safe.'],
+  'couple-quiz': ['Take turns: one of you guesses what the other will pick between two options.', 'Then the other reveals their honest answer.', 'A correct guess scores a point. Whoever knows the other best wins! 💞'],
+};
+function showRules(game) {
+  const back = h('div', { class: 'rules-overlay', onclick: e => { if (e.target === back) close(); } });
+  const card = h('div', { class: 'rules-card' },
+    h('div', { class: 'rules-emoji', style: `color:${game.accent}` }, game.emoji),
+    h('h3', {}, 'How to play — ' + game.name),
+    h('ul', { class: 'rules-list' }, (GAME_RULES[game.id] || ['Have fun!']).map(r => h('li', { html: r }))),
+    h('button', { class: 'btn btn-primary btn-block mt', onclick: () => close() }, 'Got it! ✓'));
+  back.append(card); document.body.append(back); Store.Sound.tap();
+  function close() { back.remove(); }
+}
+
 /* ---------- shared turn/score bar (rebuilt from state each paint) ---------- */
 function turnBar(ctx, opts = {}) {
   const s = Store.get(); const turn = ctx.state.turn;
@@ -290,7 +319,8 @@ function renderStage(gameId) {
 
   const head = h('div', { class: 'stage-head' },
     h('h2', { style: `color:${game.accent}` }, game.emoji + ' ' + game.name),
-    h('p', {}, game.tagline));
+    h('p', {}, game.tagline),
+    h('button', { class: 'rules-btn', onclick: () => showRules(game) }, 'ℹ️ How to play'));
   const mount = h('div', { class: 'game-wrap', id: 'gameMount' });
   const msg = h('div', { class: 'game-msg', id: 'gameMsg' });
   const stage = h('div', { class: 'stage' }, head, mount, msg);

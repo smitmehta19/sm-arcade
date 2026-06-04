@@ -3,7 +3,7 @@
    - Serves from cache instantly (fast + offline), then refreshes the cache from
      the network in the background, so edits show up on the next open automatically.
    - Bump CACHE below whenever you want to force every device to drop old files. */
-const CACHE = 'sm-arcade-v3';
+const CACHE = 'sm-arcade-v4';
 const ASSETS = [
   './',
   './index.html',
