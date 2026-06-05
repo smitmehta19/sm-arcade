@@ -60,6 +60,7 @@ const GAME_RULES = {
   'letterpress': ['Tap tiles to spell a word (3+ letters); submitting claims every tile in it for <b>your</b> colour — stealing your partner’s un-locked tiles.', 'A tile is <b>locked 🔒</b> (can’t be stolen) when all its up/down/left/right neighbours are already its own colour. Build walls to protect your lead!', 'When every tile is claimed, the <b>most tiles wins</b>. You can’t replay a word, or just bolt letters onto an earlier one.'],
   'codenames-duet': ['<b>Co-op!</b> Find all <b>9 secret agents</b> together before you run out of turns — and never tap an <b>assassin ☠️</b>.', 'On your turn you secretly see the key — give your partner a <b>one-word clue + a number</b> pointing at agent words.', 'They tap words: a green agent = keep going, a bystander ends the turn, the assassin = instant loss. You win or lose <b>together</b> — no scoreboard points, just pure teamwork. 💞'],
   'draw-guess': ['One of you gets a <b>secret word</b> and sketches it on the canvas — your partner watches it appear in real time.', 'Tap <b>“Done”</b> to hand it over, then your partner types guesses. A correct guess scores a point.', 'You swap who draws each round — most points after 6 rounds wins! 🎨'],
+  'ultimate-ttt': ['It’s <b>9 tic-tac-toe boards</b> in a 3×3 grid. Win a small board by getting 3-in-a-row inside it.', 'The twist: the <b>cell</b> you play decides <b>which board your opponent must play next</b> — top-left cell sends them to the top-left board.', 'Sent to a board that’s already won or full? Then you may play <b>anywhere</b>. Win <b>three small boards in a row</b> to win it all. 🧠'],
 };
 function showRules(game) {
   const back = h('div', { class: 'rules-overlay', onclick: e => { if (e.target === back) close(); } });
@@ -137,7 +138,7 @@ const TAUNTS = [
 // Which games support a per-turn timer, and whether a "skip turn" timeout is SAFE
 // (true) or only "forfeit" makes sense (false — multi-phase turns / word & dice games).
 const TIMER_GAMES = {
-  'tic-tac-toe': { skip: true }, 'connect-four': { skip: true }, 'gomoku': { skip: true },
+  'tic-tac-toe': { skip: true }, 'ultimate-ttt': { skip: true }, 'connect-four': { skip: true }, 'gomoku': { skip: true },
   'dots-boxes': { skip: true }, 'reversi': { skip: true }, 'hex': { skip: true },
   'quoridor': { skip: true }, 'onitama': { skip: true }, 'memory': { skip: true },
   'battleship': { skip: true }, 'jaipur': { skip: true },
