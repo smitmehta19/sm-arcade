@@ -23,7 +23,22 @@
   paintChrome();
 
   $('#soundBtn').addEventListener('click', () => { Store.setSetting('sound', !Store.get().settings.sound); Store.Sound.tap(); });
-  $('#backBtn').addEventListener('click', () => { location.hash = '#/'; });
+
+  // Leaving a live game must go through BOTH-player consent — never a silent bail.
+  // The back arrow AND the brand link both sit over the game (the bottom nav is
+  // hidden in-game), so both route through requestEndGame, which asks the partner
+  // to agree (or just leaves cleanly if nothing is live / partner is offline).
+  function leaveGuard(e) {
+    const inGame = /^#\/play\//.test(location.hash || '');
+    if (inGame && typeof requestEndGame === 'function') {
+      if (e) e.preventDefault();
+      requestEndGame();
+      return true;
+    }
+    return false;
+  }
+  $('#backBtn').addEventListener('click', () => { if (!leaveGuard()) location.hash = '#/'; });
+  $('#brand').addEventListener('click', e => { leaveGuard(e); });
 
   const unlock = () => { Store.Sound.tap(); window.removeEventListener('pointerdown', unlock); };
   window.addEventListener('pointerdown', unlock, { once: true });

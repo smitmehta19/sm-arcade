@@ -283,6 +283,7 @@ const Router = (() => {
     stageHook = null;
     if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
     if (reactUnsub) { reactUnsub(); reactUnsub = null; }
+    if (typeof closeTimerPanel === 'function') closeTimerPanel(); // never orphan the clock picker
     // identity gate
     if (Store.getIdentity() == null) { renderIdentity(); syncChrome('#/'); return; }
     const hash = location.hash || '#/';
@@ -457,9 +458,28 @@ function startMatch(gameId) {
     if (!confirm('Start a new game? This ends the current one.')) return;
   }
   Store.Sound.place();
-  const cap = timerCap(gameId);
-  if (cap && me === 0) { showTimerPanel(gameId, cap, timer => createMatch(gameId, me, timer)); return; } // only Smit sets the clock
+  // Create the match IMMEDIATELY (status 'waiting') and only THEN open the timer
+  // picker on top. Previously the match wasn't created until the host finished the
+  // picker — that limbo window let the other player create a clashing match (and
+  // crashed tournaments). Now whoever starts owns a real match the moment they tap,
+  // and the timer is patched onto it. The picker shows for WHOEVER starts (both
+  // seats), so either player can decide the clock.
   createMatch(gameId, me, { on: false });
+  const cap = timerCap(gameId);
+  if (cap) showTimerPanel(gameId, cap, timer => applyTimer(timer));
+}
+function applyTimer(timer) {
+  if (!currentMatch || currentMatch.status === 'finished') return;
+  const t = timer || { on: false };
+  currentMatch = Object.assign({}, currentMatch, { timer: t });
+  // if the game already went live (partner joined while you were picking), arm the
+  // clock for the current turn too
+  const patch = { timer: t, t: Date.now() };
+  if (currentMatch.status === 'active' && t.on && !currentMatch.deadline) {
+    const dl = Store.Net.serverNow() + t.secs * 1000; currentMatch.deadline = patch.deadline = dl;
+  }
+  if (stageHook) stageHook(currentMatch);
+  Store.Net.updateMatch(patch);
 }
 function createMatch(gameId, me, timer) {
   // state is JSON-stringified: Firebase RTDB strips nulls/empties & mangles arrays, so we store a plain string
@@ -471,10 +491,17 @@ function createMatch(gameId, me, timer) {
     .catch(err => { console.error(err); alert('Could not start the game online.\n\nYour Firebase rules likely need updating to allow "matches" and "presence" (see database.rules.json in the repo, then republish in the Realtime Database → Rules tab).\n\n' + err.message); location.hash = '#/'; });
   location.hash = '#/play/' + gameId;
 }
-// Smit's pre-game clock panel: on/off, duration, and (where safe) skip vs forfeit
+// the host's pre-game clock panel: on/off, duration, and (where safe) skip vs forfeit.
+// Tracked as a singleton so navigating away / a match change tears it down cleanly
+// instead of leaving an orphan overlay floating over the app (a past crash source).
+let timerPanelEl = null;
+function closeTimerPanel() { if (timerPanelEl) { timerPanelEl.remove(); timerPanelEl = null; } }
 function showTimerPanel(gameId, cap, onDone) {
-  let on = false, secs = 30, mode = cap.skip ? 'skip' : 'forfeit';
+  closeTimerPanel();
+  let on = false, secs = 30, mode = cap.skip ? 'skip' : 'forfeit', done = false;
+  const finish = (timer) => { if (done) return; done = true; closeTimerPanel(); onDone(timer); };
   const back = h('div', { class: 'rules-overlay' });
+  timerPanelEl = back;
   const card = h('div', { class: 'rules-card', style: 'text-align:center' });
   const body = h('div', {}); card.append(body);
   function draw() {
@@ -497,10 +524,10 @@ function showTimerPanel(gameId, cap, onDone) {
           h('button', { class: 'btn ' + (mode === 'forfeit' ? 'btn-primary' : 'btn-ghost'), onclick: () => { mode = 'forfeit'; draw(); } }, '💀 Forfeit')));
       else body.append(h('p', { style: 'color:var(--ink-faint);font-size:11px;margin:10px 4px 0' }, 'Each tournament game uses its own sensible timeout.'));
     }
-    body.append(h('button', { class: 'btn btn-primary btn-block mt', onclick: () => { back.remove(); onDone({ on, secs, mode }); } }, on ? `Start · ${secs}s per turn` : 'Start (no timer)'));
+    body.append(h('button', { class: 'btn btn-primary btn-block mt', onclick: () => finish({ on, secs, mode }) }, on ? `Start · ${secs}s per turn` : 'Start (no timer)'));
   }
   draw(); back.append(card); document.body.append(back); Store.Sound.tap();
-  back.onclick = e => { if (e.target === back) { back.remove(); onDone({ on: false }); } };
+  back.onclick = e => { if (e.target === back) finish({ on: false }); };
 }
 function joinMatch() {
   Store.Sound.good();

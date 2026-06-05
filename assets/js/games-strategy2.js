@@ -34,13 +34,18 @@
   .mm-pt .pc.p1{ background:radial-gradient(circle at 35% 30%, #ffc6e0, var(--p2)); box-shadow:0 0 8px var(--p2); }
   .mm-pt.tgt .pc.removable{ box-shadow:0 0 0 3px var(--magenta); cursor:pointer; }
 
-  .qd{ display:grid; gap:2px; margin:0 auto; max-width:360px; background:rgba(120,90,220,.08); padding:6px; border-radius:12px; }
-  .qd-c{ aspect-ratio:1; border-radius:5px; background:var(--bg-2); display:grid; place-items:center; position:relative; }
+  /* Quoridor: one CSS grid with real wall gutters between cells (no pixel math /
+     getBoundingClientRect — walls always line up and the slots are easy to tap). */
+  .qd{ display:grid; gap:0; margin:0 auto; max-width:360px; width:100%; aspect-ratio:1; box-sizing:border-box; background:rgba(120,90,220,.08); padding:8px; border-radius:14px; }
+  .qd-c{ border-radius:5px; background:var(--bg-2); display:grid; place-items:center; position:relative; }
   .qd-c.live{ cursor:pointer; box-shadow:inset 0 0 0 2px var(--lime); }
-  .qd-pawn{ width:66%; height:66%; border-radius:50%; }
+  .qd-c.live::after{ content:''; width:32%; height:32%; border-radius:50%; background:var(--lime); opacity:.45; }
+  .qd-pawn{ width:74%; height:74%; border-radius:50%; z-index:1; }
   .qd-pawn.p0{ background:radial-gradient(circle at 35% 30%, #bff6ff, var(--p1)); box-shadow:0 0 9px var(--p1); }
   .qd-pawn.p1{ background:radial-gradient(circle at 35% 30%, #ffc6e0, var(--p2)); box-shadow:0 0 9px var(--p2); }
-  .qd-slot{ background:transparent; border:none; border-radius:3px; } .qd-slot.live{ cursor:pointer; } .qd-slot.live:hover{ background:rgba(255,214,107,.5); }
+  .qd-slot{ background:transparent; border-radius:4px; align-self:stretch; justify-self:stretch; transition:background .12s; }
+  .qd-slot.live{ cursor:pointer; background:rgba(255,214,107,.18); }
+  .qd-slot.live:hover{ background:rgba(255,214,107,.6); }
   .qd-slot.on{ background:var(--gold); box-shadow:0 0 8px var(--gold); }
   .qd-modes{ display:flex; gap:8px; justify-content:center; margin-bottom:10px; }
   .qd-mode{ padding:8px 16px; border-radius:11px; background:var(--panel-2); border:1px solid var(--glass-brd); color:var(--ink-dim); font-weight:600; font-size:13px; }
@@ -273,52 +278,66 @@
     tagline: 'Race across; wall them off.',
     init: host => ({ pawns: [{ r: 8, c: 4 }, { r: 0, c: 4 }], hwalls: {}, vwalls: {}, wallsLeft: [10, 10], turn: host, mode: 'move' }),
     render(ctx) {
-      const st = ctx.state, me = ctx.me; let mode = 'move'; let wallLayer = null;
+      const st = ctx.state, me = ctx.me; let mode = 'move';
       ctx.root.append(ctx.turnBar({ scores: [st.wallsLeft[0], st.wallsLeft[1]] }));
+      let modesEl = null;
       if (ctx.isMyTurn) {
-        const modes = ctx.h('div', { class: 'qd-modes' },
+        modesEl = ctx.h('div', { class: 'qd-modes' },
           ctx.h('button', { class: 'qd-mode on', onclick: () => setMode('move') }, 'Move pawn'),
           ctx.h('button', { class: 'qd-mode' + (st.wallsLeft[me] ? '' : ' hidden'), onclick: () => setMode('wall') }, `Place wall (${st.wallsLeft[me]})`));
-        ctx.root.append(modes);
-        ctx.root._modes = modes;
+        ctx.root.append(modesEl);
       }
-      const board = ctx.h('div', { class: 'qd' });
-      board.style.gridTemplateColumns = `repeat(${QN}, 1fr)`;
+      const frame = ctx.h('div', { class: 'board-frame' });
+      ctx.root.append(frame);
       const moves = ctx.isMyTurn ? qPawnMoves(st, me) : [];
-      const cellEls = [];
-      for (let r = 0; r < QN; r++) for (let c = 0; c < QN; c++) {
-        const cell = ctx.h('div', { class: 'qd-c' });
-        if (st.pawns[0].r === r && st.pawns[0].c === c) cell.append(ctx.h('div', { class: 'qd-pawn p0' }));
-        if (st.pawns[1].r === r && st.pawns[1].c === c) cell.append(ctx.h('div', { class: 'qd-pawn p1' }));
-        cellEls.push(cell); board.append(cell);
-      }
-      ctx.root.append(ctx.h('div', { class: 'board-frame', style: 'position:relative' }, board, buildWallLayer()));
-      ctx.isMyTurn ? ctx.msg('Move your pawn, or switch to walls', ctx.players[me].color) : waiting(ctx);
-      paintMoves();
+      // 9 cells separated by 8 thin wall gutters → a 17×17 track grid. Cells live on
+      // odd tracks; walls drop straight into the even gutter tracks. No pixel math.
+      const tracks = Array(QN).fill('1fr').join(' 0.4fr ');
 
-      function setMode(m) { mode = m; if (ctx.root._modes) [...ctx.root._modes.children].forEach(b => b.classList.toggle('on', b.textContent.toLowerCase().includes(m === 'move' ? 'move' : 'wall'))); paintMoves(); paintWalls(); }
-      function paintMoves() {
-        cellEls.forEach((el, idx) => { el.classList.remove('live'); el.onclick = null; });
-        if (!ctx.isMyTurn || mode !== 'move') return;
-        moves.forEach(([r, c]) => { const el = cellEls[r * QN + c]; el.classList.add('live'); el.onclick = () => movePawn(r, c); });
+      function hSlot(r, c, on, fn) {
+        const e = ctx.h('div', { class: 'qd-slot h' + (on ? ' on' : (fn ? ' live' : '')) });
+        e.style.gridRow = String(2 * r + 2); e.style.gridColumn = (2 * c + 1) + ' / ' + (2 * c + 4);
+        if (fn) e.onclick = fn; return e;
       }
+      function vSlot(r, c, on, fn) {
+        const e = ctx.h('div', { class: 'qd-slot v' + (on ? ' on' : (fn ? ' live' : '')) });
+        e.style.gridColumn = String(2 * c + 2); e.style.gridRow = (2 * r + 1) + ' / ' + (2 * r + 4);
+        if (fn) e.onclick = fn; return e;
+      }
+      function renderBoard() {
+        frame.innerHTML = '';
+        const board = ctx.h('div', { class: 'qd' });
+        board.style.gridTemplateColumns = tracks; board.style.gridTemplateRows = tracks;
+        for (let r = 0; r < QN; r++) for (let c = 0; c < QN; c++) {
+          const live = ctx.isMyTurn && mode === 'move' && moves.some(([mr, mc]) => mr === r && mc === c);
+          const cell = ctx.h('div', { class: 'qd-c' + (live ? ' live' : '') });
+          cell.style.gridRow = String(2 * r + 1); cell.style.gridColumn = String(2 * c + 1);
+          if (st.pawns[0].r === r && st.pawns[0].c === c) cell.append(ctx.h('div', { class: 'qd-pawn p0' }));
+          if (st.pawns[1].r === r && st.pawns[1].c === c) cell.append(ctx.h('div', { class: 'qd-pawn p1' }));
+          if (live) cell.onclick = () => movePawn(r, c);
+          board.append(cell);
+        }
+        for (const k in st.hwalls) { const [r, c] = k.split(',').map(Number); board.append(hSlot(r, c, true)); }
+        for (const k in st.vwalls) { const [r, c] = k.split(',').map(Number); board.append(vSlot(r, c, true)); }
+        if (ctx.isMyTurn && mode === 'wall' && st.wallsLeft[me] > 0) {
+          for (let r = 0; r < QN - 1; r++) for (let c = 0; c < QN - 1; c++) {
+            if (canH(r, c)) board.append(hSlot(r, c, false, () => placeWall('h', r, c)));
+            if (canV(r, c)) board.append(vSlot(r, c, false, () => placeWall('v', r, c)));
+          }
+        }
+        frame.append(board);
+      }
+      function setMode(m) {
+        mode = m;
+        if (modesEl) [...modesEl.children].forEach(b => b.classList.toggle('on', b.textContent.toLowerCase().includes(m === 'move' ? 'move' : 'wall')));
+        renderBoard();
+        ctx.isMyTurn && ctx.msg(mode === 'wall' ? 'Tap a glowing gap to drop a wall' : 'Move your pawn, or switch to walls', ctx.players[me].color);
+      }
+      renderBoard();
+      ctx.isMyTurn ? ctx.msg('Move your pawn, or switch to walls', ctx.players[me].color) : waiting(ctx);
+
       function movePawn(r, c) { const s = ctx.clone(st); s.pawns[me] = { r, c }; ctx.sound.move(); const goal = me === 0 ? 0 : 8; if (r === goal) return ctx.commit(s, me); s.turn = 1 - me; ctx.commit(s); }
 
-      function buildWallLayer() { wallLayer = ctx.h('div', { style: 'position:absolute; inset:6px; pointer-events:none;' }); setTimeout(paintWalls, 0); return wallLayer; }
-      function paintWalls() {
-        if (!wallLayer) return; wallLayer.innerHTML = '';
-        const rect = board.getBoundingClientRect(); if (!rect.width) { setTimeout(paintWalls, 30); return; }
-        const gap = 2, cw = (board.clientWidth - gap * (QN - 1)) / QN, step = cw + gap;
-        const mk = (left, top, w, h, on, live, fn) => { const e = document.createElement('div'); e.className = 'qd-slot' + (on ? ' on' : '') + (live ? ' live' : ''); e.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${w}px;height:${h}px;${live || on ? 'pointer-events:auto;' : ''}`; if (live && fn) e.onclick = fn; wallLayer.append(e); };
-        // existing walls
-        for (const k in st.hwalls) { const [r, c] = k.split(',').map(Number); mk(c * step, (r + 1) * step - gap, cw * 2 + gap, gap + 3, true, false); }
-        for (const k in st.vwalls) { const [r, c] = k.split(',').map(Number); mk((c + 1) * step - gap, r * step, gap + 3, cw * 2 + gap, true, false); }
-        if (!ctx.isMyTurn || mode !== 'wall' || st.wallsLeft[me] <= 0) return;
-        for (let r = 0; r < QN - 1; r++) for (let c = 0; c < QN - 1; c++) {
-          if (canH(r, c)) mk(c * step, (r + 1) * step - gap, cw * 2 + gap, gap + 3, false, true, () => placeWall('h', r, c));
-          if (canV(r, c)) mk((c + 1) * step - gap, r * step, gap + 3, cw * 2 + gap, false, true, () => placeWall('v', r, c));
-        }
-      }
       function canH(r, c) { if (st.hwalls[r + ',' + c] || st.hwalls[r + ',' + (c - 1)] || st.hwalls[r + ',' + (c + 1)]) return false; if (st.vwalls[r + ',' + c]) return false; const s = sim('h', r, c); return qReach(s, 0) && qReach(s, 1); }
       function canV(r, c) { if (st.vwalls[r + ',' + c] || st.vwalls[(r - 1) + ',' + c] || st.vwalls[(r + 1) + ',' + c]) return false; if (st.hwalls[r + ',' + c]) return false; const s = sim('v', r, c); return qReach(s, 0) && qReach(s, 1); }
       function sim(dir, r, c) { const s = JSON.parse(JSON.stringify(st)); (dir === 'h' ? s.hwalls : s.vwalls)[r + ',' + c] = 1; return s; }

@@ -98,7 +98,11 @@ const Store = (() => {
     setTimeout(() => { el.hidden = true; }, 2600);
   }
 
-  function save() { state.updated = (state.updated || 0) + 1; persistLocal(); pushCloud(); emit(); }
+  // Version every change with a SERVER-SYNCED wall-clock timestamp (not a local
+  // counter). Two devices kept their own counters, so they could disagree on which
+  // write was "newer" and clobber each other — the score-sync bug. A shared clock
+  // means the genuinely-latest change always wins and both phones converge.
+  function save() { state.updated = Date.now() + serverOffset; persistLocal(); pushCloud(); emit(); }
 
   /* ---- mutations ---- */
   function recordResult(gameId, winner /* 'p1' | 'p2' | 'draw' */) {
