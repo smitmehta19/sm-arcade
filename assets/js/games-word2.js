@@ -13,6 +13,12 @@
   .lp-cell.sel{ box-shadow:0 0 0 3px var(--gold); }
   .lp-cell .ord{ position:absolute; top:-6px; right:-4px; width:16px; height:16px; border-radius:8px; background:var(--gold); color:#06070f; font-size:10px; display:grid; place-items:center; }
   .lp-word{ text-align:center; font-family:var(--font-num); font-weight:900; font-size:26px; letter-spacing:4px; min-height:34px; text-transform:uppercase; color:var(--violet); }
+  .lp-log{ margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
+  .lp-log-h{ font-size:11px; color:var(--ink-dim); text-transform:uppercase; letter-spacing:.6px; margin-bottom:7px; text-align:center; }
+  .lp-plays{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
+  .lp-play{ font-family:var(--font-num); font-weight:800; font-size:13px; letter-spacing:1.5px; text-transform:uppercase; padding:4px 10px; border-radius:9px; border:1px solid var(--line); }
+  .lp-play.p0{ background:rgba(0,240,255,.16); border-color:var(--p1); color:#cffaff; }
+  .lp-play.p1{ background:rgba(255,47,166,.16); border-color:var(--p2); color:#ffd9ee; }
 
   .cn-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:5px; }
   .cn-cell{ aspect-ratio:1.5; border-radius:8px; display:grid; place-items:center; text-align:center; font-size:10px; font-weight:700; padding:2px; line-height:1.1;
@@ -62,7 +68,7 @@
     id: 'letterpress', name: 'Letterpress', emoji: '🔠', category: 'Word', accent: '#b6ff3a',
     tagline: 'Spell words, claim the board.',
     test: { defended: lpDefended, apply: lpApply, winner: lpWinner, wordOk: lpWordOk, score: lpScore },
-    init: host => ({ letters: lpGen(), owner: Array(25).fill(null), turn: host, played: [], host }),
+    init: host => ({ letters: lpGen(), owner: Array(25).fill(null), turn: host, played: [], plays: [], host }),
     render(ctx) {
       const st = ctx.state, me = ctx.me, sc = lpScore(st.owner);
       ctx.root.append(ctx.turnBar({ scores: sc }));
@@ -85,6 +91,15 @@
         if (ctx.isMyTurn) pane.append(ctx.h('div', { class: 'btn-row mt' },
           ctx.h('button', { class: 'btn btn-ghost', onclick: () => { sel = []; draw(); } }, 'Clear'),
           ctx.h('button', { class: 'btn btn-primary', onclick: submit }, 'Submit word')));
+        // words played so far, newest first, coloured by who played them
+        const plays = st.plays || [];
+        if (plays.length) {
+          const log = ctx.h('div', { class: 'lp-log' }, ctx.h('div', { class: 'lp-log-h' }, 'Words played'));
+          const list = ctx.h('div', { class: 'lp-plays' });
+          plays.slice().reverse().forEach(p => list.append(ctx.h('div', { class: 'lp-play p' + p.s, title: ctx.players[p.s].name }, p.w)));
+          log.append(list);
+          pane.append(log);
+        }
       }
       draw();
       ctx.isMyTurn ? ctx.msg('Tap tiles to spell a word (3+). Surround tiles to lock them 🔒', ctx.players[me].color) : waiting(ctx, ctx.seat(st.turn).name);
@@ -92,7 +107,8 @@
         const word = sel.map(i => st.letters[i]).join('').toLowerCase();
         const why = lpWordOk(word, st.played);
         if (why !== 'ok') { ctx.sound.bad(); ctx.msg('✕ ' + why, 'var(--gold)'); return; }
-        const s = ctx.clone(st); s.owner = lpApply(st, me, sel); s.played = st.played.concat([word]); ctx.sound.good();
+        const s = ctx.clone(st); s.owner = lpApply(st, me, sel); s.played = st.played.concat([word]);
+        s.plays = (st.plays || []).concat([{ w: word.toUpperCase(), s: me }]); ctx.sound.good();
         const w = lpWinner(s.owner); if (w !== undefined) return ctx.commit(s, w);
         s.turn = 1 - me; ctx.commit(s);
       }
