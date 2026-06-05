@@ -126,11 +126,79 @@ function initNet() {
       if (stageHook) stageHook(m);
       else if (isLobby()) renderHome();
     });
+    setupNudgeWatch();
   });
 }
 const isLobby = () => (location.hash === '' || location.hash === '#/' );
 const partnerSeat = me => (me === 0 ? 1 : 0);
 const isOnline = seat => !!(presence && presence[seat] && presence[seat].online);
+
+/* ============================================================
+   NUDGES + NOTIFICATIONS — free, in-app "come online & play" pings
+   ============================================================ */
+document.head.append(Object.assign(document.createElement('style'), { textContent: `
+  .tour-cta{ display:flex; align-items:center; gap:12px; width:100%; text-align:left; margin:0 0 14px; padding:14px 16px; border-radius:16px; border:1px solid rgba(255,210,58,.35); background:linear-gradient(120deg, rgba(255,210,58,.16), rgba(178,102,255,.16)); color:var(--ink); box-shadow:0 0 22px rgba(255,210,58,.10); }
+  .tour-cta:active{ transform:scale(.99); }
+  .tour-cta .tc-ic{ display:grid; place-items:center; width:42px; height:42px; color:var(--gold); flex:0 0 auto; }
+  .tour-cta .tc-ic .icn{ width:30px; height:30px; }
+  .tour-cta .tc-txt{ display:flex; flex-direction:column; flex:1; min-width:0; }
+  .tour-cta .tc-txt b{ font-family:var(--font-display); font-size:16px; letter-spacing:.5px; }
+  .tour-cta .tc-txt small{ color:var(--ink-dim); font-size:12px; }
+  .tour-cta .tc-go{ font-family:var(--font-display); font-size:13px; color:#06070f; background:var(--gold); padding:9px 16px; border-radius:10px; flex:0 0 auto; }
+  .nudge-cta{ width:100%; margin:0 0 12px; padding:11px 14px; border-radius:13px; border:1px dashed var(--glass-brd); background:var(--bg-2); color:var(--ink-dim); font-weight:600; font-size:13px; }
+  .nudge-cta:active{ transform:scale(.99); border-color:var(--violet); color:var(--ink); }
+  .banner.nudge-in{ background:linear-gradient(90deg, rgba(255,47,166,.18), transparent); border-color:rgba(255,47,166,.4); }
+  .toast{ position:fixed; left:50%; bottom:88px; transform:translateX(-50%) translateY(18px); z-index:60; max-width:90%; padding:12px 18px; border-radius:14px; background:var(--panel-2); border:1px solid var(--glass-brd); color:var(--ink); font-size:14px; line-height:1.4; box-shadow:0 8px 30px rgba(0,0,0,.5); opacity:0; transition:opacity .3s, transform .3s; pointer-events:none; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+` }));
+
+const Notify = {
+  supported: () => (typeof Notification !== 'undefined'),
+  granted: () => Notify.supported() && Notification.permission === 'granted',
+  ask() {
+    return new Promise(res => {
+      if (!Notify.supported() || Notification.permission === 'denied') return res(false);
+      if (Notification.permission === 'granted') return res(true);
+      try { const r = Notification.requestPermission(p => res(p === 'granted')); if (r && r.then) r.then(p => res(p === 'granted')).catch(() => res(false)); }
+      catch (e) { res(false); }
+    });
+  },
+  fire(title, body) { try { if (Notify.granted()) new Notification(title, { body, icon: 'assets/icons/icon.svg' }); } catch (e) {} },
+};
+
+let toastTimer = null;
+function showToast(html) {
+  const el = $('#toast'); if (!el) return;
+  el.innerHTML = html; el.hidden = false; void el.offsetWidth; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('show'); setTimeout(() => { el.hidden = true; }, 320); }, 4500);
+}
+
+let pendingNudge = null, nudgeUnsub = null;
+const lastNudgeSeen = () => +(localStorage.getItem('sm_nudge_seen') || 0);
+function setupNudgeWatch() {
+  if (nudgeUnsub) { nudgeUnsub(); nudgeUnsub = null; }
+  const me = Store.getIdentity();
+  if (me == null || !Store.Net.ready()) return;
+  nudgeUnsub = Store.Net.watchNudge(me, nudge => {
+    if (!nudge || !nudge.t || nudge.from === me) return;
+    if (nudge.t <= lastNudgeSeen()) return;            // already reacted to this one
+    localStorage.setItem('sm_nudge_seen', String(nudge.t));
+    pendingNudge = nudge;
+    Store.Sound.good();
+    const who = esc(nudge.name || Store.get().players[partnerSeat(me)].name);
+    Notify.fire(`${nudge.name || 'Your partner'} wants to play! 💞`, 'Come online and pick a game.');
+    showToast(`💞 <b>${who}</b> wants to play — come pick a game!`);
+    if (isLobby()) renderHome();
+  });
+}
+async function sendNudge(me, partner) {
+  if (!Store.Net.ready()) { showToast('⚠ Not connected — can’t nudge right now.'); return; }
+  Store.Sound.tap();
+  Notify.ask();                                         // also lets THIS device receive future nudges
+  Store.Net.sendNudge(partner, me, Store.get().players[me].name);
+  showToast(`👋 Nudge sent to <b>${esc(Store.get().players[partner].name)}</b> — they’ll see it when their app is open.`);
+}
 
 /* ============================================================
    ROUTER
@@ -178,7 +246,7 @@ function renderIdentity() {
     h('div', { class: 'id-pick' },
       s.players.map((p, i) => h('button', {
         class: 'id-btn p' + i,
-        onclick: () => { Store.setIdentity(i); if (Store.Net.ready()) Store.Net.goOnline(i, p.name); location.hash = '#/'; Router.go(); },
+        onclick: () => { Store.setIdentity(i); if (Store.Net.ready()) Store.Net.goOnline(i, p.name); setupNudgeWatch(); location.hash = '#/'; Router.go(); },
       }, h('span', { class: 'av' }, p.emoji), h('span', { class: 'nm' }, p.name))),
     ),
   );
@@ -211,6 +279,21 @@ function renderHome() {
   }
   const inviteBanner = matchBanner(me);
   if (inviteBanner) banners.append(inviteBanner);
+  if (pendingNudge) banners.append(h('div', { class: 'banner nudge-in' },
+    h('span', {}, `💞 ${esc(pendingNudge.name || s.players[partner].name)} wants to play!`),
+    h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { pendingNudge = null; renderHome(); } }, 'Got it')));
+
+  // "come online & play" nudge
+  const nudgeBtn = Store.Net.ready()
+    ? h('button', { class: 'nudge-cta', onclick: () => sendNudge(me, partner) },
+        pOn ? `👋 Nudge ${esc(s.players[partner].name)} to play` : `👋 Ask ${esc(s.players[partner].name)} to come online`)
+    : h('span', { hidden: '' });
+
+  // prominent Tournament CTA (kept OUT of the games grid)
+  const tourCta = h('button', { class: 'tour-cta', onclick: () => startMatch('tournament') },
+    h('span', { class: 'tc-ic', html: Icons.game('tournament') }),
+    h('span', { class: 'tc-txt' }, h('b', {}, '🏆 Tournament'), h('small', {}, '5 random games · most wins is champion')),
+    h('span', { class: 'tc-go' }, 'Start'));
 
   // hero (compact)
   const hero = h('section', { class: 'hero mini' },
@@ -223,19 +306,19 @@ function renderHome() {
   // search + filters
   const search = h('div', { class: 'search' }, h('span', { class: 'si', html: Icons.ui('search') }),
     h('input', { type: 'text', placeholder: 'Search games…', value: homeSearch, oninput: e => { homeSearch = e.target.value; paint(); } }));
-  const cats = ['All', 'Favorites', ...Games.categories()];
+  const cats = ['All', 'Favorites', ...Games.categories().filter(c => c !== 'Tournament')];
   const chips = h('div', { class: 'chips' }, cats.map(c => h('button', {
     class: 'chip' + (homeFilter === c ? ' active' : ''),
     onclick: () => { homeFilter = c; renderHome(); Store.Sound.tap(); },
   }, c === 'Favorites' ? '★ Faves' : c)));
 
   const gridWrap = h('div', { class: 'grid', id: 'gameGrid' });
-  view.append(strip, banners, hero, h('div', { class: 'toolbar' }, search, chips), gridWrap);
+  view.append(strip, nudgeBtn, banners, hero, tourCta, h('div', { class: 'toolbar' }, search, chips), gridWrap);
   paint();
 
   function paint() {
     const q = homeSearch.trim().toLowerCase();
-    let games = Games.all();
+    let games = Games.all().filter(g => !g.isTournament);
     if (homeFilter === 'Favorites') games = games.filter(g => s.favorites.includes(g.id));
     else if (homeFilter !== 'All') games = games.filter(g => g.category === homeFilter);
     if (q) games = games.filter(g => (g.name + ' ' + g.tagline + ' ' + g.category).toLowerCase().includes(q));
@@ -714,7 +797,7 @@ function renderUs() {
   const idCard = h('div', { class: 'card' }, h('h3', {}, 'THIS DEVICE IS'),
     h('div', { class: 'id-switch' }, s.players.map((p, i) => h('button', {
       class: 'id-mini p' + i + (me === i ? ' sel' : ''),
-      onclick: () => { Store.setIdentity(i); if (Store.Net.ready()) Store.Net.goOnline(i, p.name); renderUs(); Store.Sound.tap(); },
+      onclick: () => { Store.setIdentity(i); if (Store.Net.ready()) Store.Net.goOnline(i, p.name); setupNudgeWatch(); renderUs(); Store.Sound.tap(); },
     }, p.emoji + ' ' + p.name))),
     h('p', { class: 'hint' }, 'Set who is playing on this phone. Your partner sets the other on their phone.'));
 
@@ -733,6 +816,11 @@ function renderUs() {
   const set = h('div', { class: 'card' }, h('h3', {}, 'SETTINGS'));
   set.append(toggleRow('🔊 Sound effects', s.settings.sound, v => { Store.setSetting('sound', v); renderUs(); }));
   set.append(toggleRow('☀️ Light mode', s.settings.theme === 'light', v => { Store.setSetting('theme', v ? 'light' : 'dark'); document.body.classList.toggle('light', v); renderUs(); }));
+  const notifState = !Notify.supported() ? ' — unsupported' : Notify.granted() ? ' — on' : (typeof Notification !== 'undefined' && Notification.permission === 'denied' ? ' — blocked in browser' : '');
+  set.append(h('div', { class: 'toggle-row', onclick: () => { if (Notify.granted() || !Notify.supported()) return; Notify.ask().then(ok => { Store.Sound[ok ? 'good' : 'bad'](); renderUs(); }); } },
+    h('span', {}, '🔔 Play notifications' + notifState),
+    h('div', { class: 'switch' + (Notify.granted() ? ' on' : '') }, h('i'))));
+  set.append(h('p', { class: 'hint' }, `Get a pop-up when ${esc(s.players[partnerSeat(me)].name)} nudges you to come play (fires while the app is open).`));
   set.append(h('p', { class: 'hint' }, Store.isCloud() ? '☁ Cloud connected — you can play live with your partner across phones.' : '📱 Offline / not connected — online play needs Firebase + internet.'));
 
   view.append(h('div', { class: 'sec-label' }, '📱 IDENTITY'), idCard,

@@ -203,6 +203,10 @@ const Store = (() => {
     updateMatch(patch) { if (cloud) return db.ref('matches/' + ROOM() + '/active').update(patch); return Promise.resolve(); },
     clearMatch() { if (cloud) return db.ref('matches/' + ROOM() + '/active').remove(); return Promise.resolve(); },
     serverTime: () => (typeof firebase !== 'undefined' && firebase.database) ? firebase.database.ServerValue.TIMESTAMP : Date.now(),
+    // "come online & play" nudge — stored under matches/<room>/nudges/<seat> (already rule-permitted)
+    sendNudge(targetSeat, fromSeat, fromName) { if (!cloud) return Promise.resolve(); return db.ref('matches/' + ROOM() + '/nudges/' + targetSeat).set({ from: fromSeat, name: fromName || '', t: Net.serverTime() }); },
+    watchNudge(seat, cb) { if (!cloud) return () => {}; const r = db.ref('matches/' + ROOM() + '/nudges/' + seat); const fn = r.on('value', sn => cb(sn.val())); return () => r.off('value', fn); },
+    clearNudge(seat) { if (cloud) return db.ref('matches/' + ROOM() + '/nudges/' + seat).remove(); return Promise.resolve(); },
   };
 
   return {
