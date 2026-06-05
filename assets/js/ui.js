@@ -52,7 +52,7 @@ const GAME_RULES = {
   'code-breaker': ['First, each of you secretly sets a 4-colour code for the other to crack.', 'Take turns guessing. ⬤ = right colour &amp; spot · ⚪ = right colour, wrong spot.', 'First to crack your partner’s code exactly wins.'],
   'ghost': ['Take turns adding ONE letter to a growing word fragment.', 'Whoever completes a real word (4+ letters) <b>loses</b>.', 'Think it’s a dead end? Challenge — if no word can start that way, the previous player loses; if one can, you do.'],
   'two-truths': ['On your turn, write 3 statements about yourself — two true, one a lie — and mark the lie.', 'Your partner guesses which is the fib.', 'Guess right = point to the guesser; fool them = point to you. Most points after 6 rounds wins.'],
-  'tournament': ['5 random Word &amp; Strategy games are drawn — you play each one twice (10 games total).', 'Every game you win counts on your scoreboard, exactly like a normal game.', 'Whoever wins the most games is crowned <b>Tournament Champion</b>! 🏆 Leave anytime with both players’ consent.'],
+  'tournament': ['The host picks how many games — 3, 5, 7, 10, or a custom number (2–20). That many random Word &amp; Strategy games are drawn.', 'Every game you win counts on your scoreboard, exactly like a normal game.', 'Whoever wins the most games is crowned <b>Tournament Champion</b>! 🏆 Leave anytime with both players’ consent.'],
   'yahtzee': ['On your turn, roll 5 dice up to 3 times — tap dice between rolls to <b>hold</b> them.', 'Then bank your dice into one scorecard box: e.g. Full house = 25, Lg. straight = 40, <b>YAHTZEE</b> (5 of a kind) = 50. Each box is used once, so spend them wisely.', 'Fill the upper boxes (Ones–Sixes) to a total of 63+ for a <b>+35 bonus</b>. Highest grand total once both cards are full wins.'],
   'liars-dice': ['You each roll 5 <b>secret</b> dice. A bid claims how many dice show a face across <b>both</b> players — e.g. “three ⚄” = at least three 5s in total.', 'On your turn either <b>raise</b> the bid (more dice, or the same count with a higher face) or call <b>“Liar!”</b>.', 'On a call, all dice are revealed: if the bid was true the <b>caller</b> loses a die; if it was a bluff the <b>bidder</b> loses one. Lose all 5 dice and you’re out.', '<b>Example:</b> 10 dice are in play and the bid is “four ⚂”. You can see two ⚂ in your own hand, so four total is very believable — raise to “four ⚃” or “five ⚀”. Push the count too high and you’ll get called!'],
   'onitama': ['Each player has a <b>Master</b> (gold ring) + 4 students. Your legal moves come only from your <b>2 face-up cards</b>.', 'On your turn, tap a card, then move ONE piece by that card’s pattern (gold square = the piece, purple = where it may go) — capturing any enemy you land on.', 'Then the card you used <b>swaps with the “next” card</b> and goes to your opponent — so you’re always handing them their future moves.', '<b>Win two ways:</b> capture the enemy Master (Way of the Stone), OR move your Master onto the opponent’s starting temple square (Way of the Stream).'],
@@ -481,22 +481,26 @@ function renderStage(gameId) {
       mount.append(waitCard('Couldn’t load this game — please start a fresh one.', 'Back to lobby', exitMatch)); return;
     }
 
-    // A tournament renders its CURRENT sub-game; every other game renders itself.
+    // A tournament renders its SETUP picker or its CURRENT sub-game; others render themselves.
     const isTour = !!game.isTournament;
-    const renderDef = isTour ? (Games.byId(state.subId) || game) : game;
-    const renderState = isTour ? (state.sub || {}) : state;
-    if (isTour) mount.append(tournamentHeader(state));
-
-    const ctx = {
-      root: mount, h, $, esc, clone, players: s.players.map(p => ({ name: p.name, emoji: p.emoji, color: p.color })),
-      state: renderState, me, turn: renderState.turn,
-      isMyTurn: (renderState.turn === me) && m.status === 'active' && (!isTour || state.phase === 'play'),
-      status: m.status, sound: Store.Sound, turnBar: o => turnBar(ctx, o),
-      msg: (t, c) => { msg.innerHTML = t; msg.style.color = c || 'var(--ink-dim)'; },
-      commit: isTour ? (ns, w) => tourCommit(ns, w) : (ns, w) => commitMove(gameId, ns, w),
-      seat: i => s.players[i],
-    };
-    try { renderDef.render(ctx); } catch (e) { console.error(e); msg.textContent = '⚠ ' + e.message; }
+    const setup = isTour && state.phase === 'setup';
+    if (setup) {
+      mount.append(tournamentSetup(state));
+    } else {
+      const renderDef = isTour ? (Games.byId(state.subId) || game) : game;
+      const renderState = isTour ? (state.sub || {}) : state;
+      if (isTour) mount.append(tournamentHeader(state));
+      const ctx = {
+        root: mount, h, $, esc, clone, players: s.players.map(p => ({ name: p.name, emoji: p.emoji, color: p.color })),
+        state: renderState, me, turn: renderState.turn,
+        isMyTurn: (renderState.turn === me) && m.status === 'active' && (!isTour || state.phase === 'play'),
+        status: m.status, sound: Store.Sound, turnBar: o => turnBar(ctx, o),
+        msg: (t, c) => { msg.innerHTML = t; msg.style.color = c || 'var(--ink-dim)'; },
+        commit: isTour ? (ns, w) => tourCommit(ns, w) : (ns, w) => commitMove(gameId, ns, w),
+        seat: i => s.players[i],
+      };
+      try { renderDef.render(ctx); } catch (e) { console.error(e); msg.textContent = '⚠ ' + e.message; }
+    }
 
     // ----- overlays -----
     if (m.endReq != null) { // leave-consent takes priority over everything
@@ -512,9 +516,8 @@ function renderStage(gameId) {
   }
 
   function tournamentHeader(t) {
-    const total = t.games.length * t.rounds;
-    const gi = Math.min(Math.floor(t.slot / t.rounds) + 1, t.games.length);
-    const rnd = (t.slot % t.rounds) + 1;
+    const total = (t.schedule || []).length;
+    const gi = Math.min(t.slot + 1, total);
     const name = (Games.byId(t.subId) || {}).name || '';
     const dots = h('div', { class: 'tour-dots' });
     for (let i = 0; i < total; i++) dots.append(h('span', { class: 'tdot' + (i < t.slot ? ' done' : (i === t.slot ? ' cur' : '')) }));
@@ -522,8 +525,45 @@ function renderStage(gameId) {
       h('div', { class: 'tour-top' },
         h('span', { class: 'tour-badge' }, '🏆 TOURNAMENT'),
         h('span', { class: 'tour-score' }, h('b', { class: 'p1' }, String(t.wins[0])), ' – ', h('b', { class: 'p2' }, String(t.wins[1])))),
-      h('div', { class: 'tour-now' }, `Game ${gi}/${t.games.length} · Round ${rnd}/${t.rounds} — `, h('b', {}, name)),
+      h('div', { class: 'tour-now' }, `Game ${gi}/${total} — `, h('b', {}, name)),
       dots);
+  }
+  // host picks how many games; partner waits
+  function tournamentSetup(t) {
+    const card = h('div', { class: 'board-frame', style: 'text-align:center' });
+    card.append(h('div', { class: 'tour-badge', style: 'font-size:14px' }, '🏆 TOURNAMENT'));
+    if (me === t.host) {
+      card.append(h('p', { style: 'color:var(--ink-dim);font-size:14px;margin:8px 0 6px' }, 'How many games? Random Word & Strategy games — most wins is champion.'));
+      card.append(h('div', { class: 'tour-counts' }, [3, 5, 7, 10].map(n => h('button', { onclick: () => startTournament(n) }, n + ' games'))));
+      let cn = 6;
+      const stepRow = h('div', {});
+      const drawStep = () => {
+        stepRow.innerHTML = '';
+        stepRow.append(h('div', { class: 'ld-step' },
+          h('button', { onclick: () => { cn = Math.max(2, cn - 1); drawStep(); } }, '−'),
+          h('div', { class: 'v' }, String(cn)),
+          h('button', { onclick: () => { cn = Math.min(20, cn + 1); drawStep(); } }, '+')));
+        stepRow.append(h('button', { class: 'btn btn-primary btn-block mt', onclick: () => startTournament(cn) }, `Start ${cn}-game tournament`));
+      };
+      drawStep();
+      card.append(h('p', { style: 'color:var(--ink-faint);font-size:12px;margin:10px 0 2px' }, '…or set a custom count (2–20):'), stepRow);
+      msg.innerHTML = 'Choose your tournament length 🏆';
+    } else {
+      card.append(h('div', { class: 'spinner', style: 'margin:14px auto' }), h('h3', {}, `${esc(s.players[t.host].name)} is setting up the tournament…`));
+      msg.innerHTML = '';
+    }
+    return card;
+  }
+  function startTournament(n) {
+    if (!currentMatch) return;
+    let t; try { t = JSON.parse(currentMatch.state); } catch (e) { return; }
+    if (t.phase !== 'setup') return;
+    const schedule = game.buildSchedule(n);
+    if (!schedule.length) { Store.Sound.bad(); return; }
+    t.schedule = schedule; t.slot = 0; t.subId = schedule[0];
+    t.sub = Games.byId(schedule[0]).init(t.host); t.phase = 'play';
+    overlayMode = null; Overlay.hide(); Store.Sound.good();
+    pushTour(t, 'active');
   }
 
   function showEndOverlay(m, mode) {
@@ -574,7 +614,7 @@ function renderStage(gameId) {
     (t.log = t.log || []).push({ game: subId, winner });
     t.lastResult = { game: subId, winner };
     t.sub = nextSub; // keep the final board visible behind the overlay
-    if (t.slot + 1 >= t.games.length * t.rounds) {
+    if (t.slot + 1 >= t.schedule.length) {
       t.phase = 'done';
       t.champion = (t.wins[0] === t.wins[1]) ? 'draw' : (t.wins[0] > t.wins[1] ? 0 : 1);
       if (t.champion === 0 || t.champion === 1) Store.recordTournament(t.champion);
@@ -586,8 +626,8 @@ function renderStage(gameId) {
     let t; try { t = JSON.parse(currentMatch.state); } catch (e) { return; }
     if (t.phase !== 'intermission') return;
     t.slot++;
-    t.subId = t.games[Math.floor(t.slot / t.rounds)];
-    t.sub = Games.byId(t.subId).init((t.slot % 2 === 0) ? t.host : (1 - t.host)); // alternate who starts each round
+    t.subId = t.schedule[t.slot];
+    t.sub = Games.byId(t.subId).init((t.slot % 2 === 0) ? t.host : (1 - t.host)); // alternate who starts each game
     t.phase = 'play';
     overlayMode = null; Overlay.hide();
     pushTour(t, 'active');
@@ -595,7 +635,7 @@ function renderStage(gameId) {
   function showTourIntermission(t) {
     const lr = t.lastResult || {};
     const lastName = (Games.byId(lr.game) || {}).name || 'that game';
-    const nextName = (Games.byId(t.games[Math.floor((t.slot + 1) / t.rounds)]) || {}).name || '';
+    const nextName = (Games.byId(t.schedule[t.slot + 1]) || {}).name || '';
     const drew = lr.winner === 'draw' || lr.winner == null;
     setTimeout(() => {
       if (overlayMode !== 'tourMid') return;
