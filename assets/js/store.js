@@ -115,6 +115,11 @@ const Store = (() => {
     state.history = state.history.slice(0, 40);
     save();
   }
+  function adjustScore(field, delta) { // field: 'p1' | 'p2' | 'draws' — manual correction (Smit only, gated in UI)
+    if (!['p1', 'p2', 'draws'].includes(field)) return;
+    state.totals[field] = Math.max(0, (state.totals[field] || 0) + delta);
+    save();
+  }
   function recordTournament(winnerSeat) {
     if (!Array.isArray(state.tourWins)) state.tourWins = [0, 0];
     if (winnerSeat === 0 || winnerSeat === 1) { state.tourWins[winnerSeat]++; save(); }
@@ -217,7 +222,7 @@ const Store = (() => {
 
   return {
     initCloud, subscribe, get, player,
-    recordResult, recordTournament, toggleFav, setPlayer, setSetting, resetScores,
+    recordResult, recordTournament, adjustScore, toggleFav, setPlayer, setSetting, resetScores,
     Sound, isCloud: () => cloud,
     getIdentity, setIdentity, onCloud, Net,
   };

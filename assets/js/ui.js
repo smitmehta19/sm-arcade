@@ -219,6 +219,12 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   .turn-flash{ position:fixed; top:62px; left:50%; transform:translateX(-50%); z-index:65; background:var(--panel-2); border:1px solid var(--glass-brd); border-radius:999px; padding:8px 16px; font-size:13px; font-weight:700; color:var(--ink); box-shadow:0 6px 20px rgba(0,0,0,.5); pointer-events:none; animation:turnFlash 1.4s ease forwards; }
   @keyframes turnFlash{ 0%{ opacity:0; transform:translateX(-50%) translateY(-10px); } 12%{ opacity:1; transform:translateX(-50%) translateY(0); } 80%{ opacity:1; } 100%{ opacity:0; } }
   body.shake{ animation:screenShake .42s; } @keyframes screenShake{ 0%,100%{ transform:translate(0,0); } 20%{ transform:translate(-4px,2px); } 40%{ transform:translate(4px,-2px); } 60%{ transform:translate(-3px,-2px); } 80%{ transform:translate(3px,2px); } }
+  .adj-row{ display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); }
+  .adj-name{ font-weight:700; font-size:15px; }
+  .adj-ctrls{ display:flex; align-items:center; gap:12px; }
+  .adj-btn{ width:40px; height:40px; border-radius:11px; background:var(--panel-2); border:1px solid var(--glass-brd); color:var(--ink); font-size:22px; font-weight:900; }
+  .adj-btn:active{ transform:scale(.9); border-color:var(--violet); }
+  .adj-val{ min-width:34px; text-align:center; font-family:var(--font-num); font-weight:900; font-size:22px; }
 ` }));
 
 const Notify = {
@@ -931,6 +937,7 @@ function rivalryTaunt(s) {
 /* ============================================================
    SCORES
    ============================================================ */
+let scoreEditUnlocked = false; // Smit-only manual score editing, unlocked per session with the score password
 function renderScores() {
   const s = Store.get(); const view = $('#view'); view.innerHTML = '';
   const { p1, p2, draws } = s.totals; const total = p1 + p2; const pct = total ? Math.round((p1 / total) * 100) : 50;
@@ -993,7 +1000,44 @@ function renderScores() {
     setTimeout(() => inp.focus(), 60);
   }
   buildDanger(false);
-  view.append(lead, danger);
+
+  // Smit-only manual score adjust — fix accidental scores while testing (password-gated)
+  const adjust = h('div', { class: 'card' });
+  function buildAdjust() {
+    adjust.innerHTML = ''; adjust.append(h('h3', {}, '✏️ ADJUST SCORES'));
+    if (Store.getIdentity() !== 0) {
+      adjust.append(h('p', { class: 'hint' }, '🔒 Only Smit can adjust the scoreboard.'),
+        h('button', { class: 'btn btn-ghost', onclick: () => trollMeera() }, 'Adjust scores'));
+      return;
+    }
+    if (!scoreEditUnlocked) {
+      const inp = h('input', { type: 'password', class: 'reset-pass', placeholder: 'score password…', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+      const err = h('div', { class: 'reset-err' });
+      const go = () => {
+        if (inp.value === 'smitwins') { scoreEditUnlocked = true; Store.Sound.good(); renderScores(); }
+        else { Store.Sound.bad(); err.textContent = '✕ Wrong password.'; inp.value = ''; inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake'); inp.focus(); }
+      };
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+      adjust.append(h('p', { class: 'hint' }, 'Unlock to add / subtract points (fixes accidental test scores):'), inp, err,
+        h('button', { class: 'btn btn-primary mt', onclick: go }, 'Unlock'));
+      setTimeout(() => inp.focus(), 50);
+      return;
+    }
+    const row = (label, field, val, color) => h('div', { class: 'adj-row' },
+      h('span', { class: 'adj-name', style: color ? `color:${color}` : '' }, label),
+      h('div', { class: 'adj-ctrls' },
+        h('button', { class: 'adj-btn', onclick: () => { Store.adjustScore(field, -1); Store.Sound.tap(); renderScores(); } }, '−'),
+        h('span', { class: 'adj-val' }, String(val)),
+        h('button', { class: 'adj-btn', onclick: () => { Store.adjustScore(field, 1); Store.Sound.tap(); renderScores(); } }, '+')));
+    adjust.append(
+      row(s.players[0].emoji + ' ' + s.players[0].name, 'p1', s.totals.p1, 'var(--p1)'),
+      row(s.players[1].emoji + ' ' + s.players[1].name, 'p2', s.totals.p2, 'var(--p2)'),
+      row('🤝 Draws', 'draws', s.totals.draws, ''),
+      h('button', { class: 'btn btn-ghost btn-sm mt', onclick: () => { scoreEditUnlocked = false; renderScores(); } }, 'Lock 🔒'),
+      h('p', { class: 'hint' }, 'Changes sync to both phones instantly.'));
+  }
+  buildAdjust();
+  view.append(adjust, lead, danger);
 }
 
 /* ============================================================
