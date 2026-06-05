@@ -154,6 +154,10 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   .banner.nudge-in{ background:linear-gradient(90deg, rgba(255,47,166,.18), transparent); border-color:rgba(255,47,166,.4); }
   .toast{ position:fixed; left:50%; bottom:88px; transform:translateX(-50%) translateY(18px); z-index:60; max-width:90%; padding:12px 18px; border-radius:14px; background:var(--panel-2); border:1px solid var(--glass-brd); color:var(--ink); font-size:14px; line-height:1.4; box-shadow:0 8px 30px rgba(0,0,0,.5); opacity:0; transition:opacity .3s, transform .3s; pointer-events:none; }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .taunt-line{ text-align:center; font-style:italic; font-size:13px; color:var(--gold); margin:6px 12px 14px; line-height:1.45; }
+  .badge .badge-em{ font-size:17px; line-height:1; margin-right:5px; }
+  .badge.fun{ border-color:rgba(255,159,69,.5); background:linear-gradient(120deg, rgba(255,159,69,.14), rgba(255,47,166,.10)); }
+  .badge.fun .badge-k{ color:var(--ink); }
 ` }));
 
 const Notify = {
@@ -661,22 +665,53 @@ function winLine(g, idx) {
   return lines[Math.floor((Date.now() / 1000) % lines.length)];
 }
 
+// per-player badges — everyone earns their own, including a funny "loser" crew
 function computeBadges(s) {
-  const tot = s.totals.p1 + s.totals.p2;
+  const w0 = s.totals.p1, w1 = s.totals.p2, draws = s.totals.draws || 0;
+  const total = w0 + w1, lead = w0 - w1;
   const played = Object.keys(s.perGame || {}).filter(k => s.perGame[k].plays).length;
-  const lead = Math.abs(s.totals.p1 - s.totals.p2);
-  const tourTotal = (s.tourWins && (s.tourWins[0] + s.tourWins[1])) || 0;
   const playableCount = Games.all().filter(g => !g.isTournament).length;
+  const sw = s.streak.who, sn = s.streak.n || 0;
+  const win0 = sw === 'p1' ? sn : 0, win1 = sw === 'p2' ? sn : 0;   // win streaks
+  const cold0 = sw === 'p2' ? sn : 0, cold1 = sw === 'p1' ? sn : 0; // loss streaks
+  const tw = s.tourWins || [0, 0];
+  const B = (emoji, k, d, p0, p1, fun) => ({ emoji, k, d, p0: !!p0, p1: !!p1, fun: !!fun });
   return [
-    { k: 'First Win', d: 'Win your first game', got: tot >= 1 },
-    { k: 'On Fire', d: '3-game win streak', got: s.streak.n >= 3 },
-    { k: 'Explorer', d: 'Play 8 different games', got: played >= 8 },
-    { k: 'Rivals', d: '10 games played', got: tot >= 10 },
-    { k: 'Dominator', d: 'Lead by 5', got: lead >= 5 },
-    { k: 'Dead Even', d: 'Tied after 6+', got: tot >= 6 && s.totals.p1 === s.totals.p2 },
-    { k: 'Champion', d: 'Win a tournament', got: tourTotal >= 1 },
-    { k: 'Completionist', d: 'Play every game', got: played >= playableCount },
+    // earned by skill
+    B('🥇', 'First Win', 'Win your first game', w0 >= 1, w1 >= 1),
+    B('🔥', 'On Fire', '3 wins in a row', win0 >= 3, win1 >= 3),
+    B('⚡', 'Unstoppable', '5 wins in a row', win0 >= 5, win1 >= 5),
+    B('👑', 'Dominator', 'Lead by 5+', lead >= 5, -lead >= 5),
+    B('🏆', 'Champion', 'Win a tournament', tw[0] >= 1, tw[1] >= 1),
+    B('🗺️', 'Explorer', 'Play 8 different games', played >= 8, played >= 8),
+    B('💯', 'Completionist', 'Play every game', played >= playableCount, played >= playableCount),
+    // the fun / consolation crew 😜
+    B('🐢', 'Underdog', 'Be 5+ behind — respect the grind', -lead >= 5, lead >= 5, true),
+    B('🥄', 'Wooden Spoon', 'Currently in last place', lead < 0, lead > 0, true),
+    B('❄️', 'Cold Streak', 'Lose 3 in a row 🥶', cold0 >= 3, cold1 >= 3, true),
+    B('💔', 'Heartbreak Kid', 'Lose 5+ games', w1 >= 5, w0 >= 5, true),
+    B('🔄', 'Comeback Loading', 'Down 3+ but still scrapping', -lead >= 3 && w0 >= 1, lead >= 3 && w1 >= 1, true),
+    B('🎟️', 'Participation', 'Play 10+ games', total >= 10, total >= 10, true),
+    B('🍵', 'Drama', 'Rack up 3+ draws', draws >= 3, draws >= 3, true),
   ];
+}
+// a rotating, affectionate rivalry taunt for the Scores screen
+function rivalryTaunt(s) {
+  const w0 = s.totals.p1, w1 = s.totals.p2, lead = w0 - w1, gap = Math.abs(lead);
+  if (w0 + w1 === 0) return 'No games yet — someone’s about to start a rivalry. 👀';
+  if (lead === 0) return 'Dead even. The tension is unbearable. 😤';
+  const L = esc(s.players[lead > 0 ? 0 : 1].name), U = esc(s.players[lead > 0 ? 1 : 0].name);
+  let pool;
+  if (gap >= 5) pool = [
+    `${L} is on an absolute RAMPAGE 🔥 — ${U}, the comeback arc starts… now?`,
+    `${U} is collecting Underdog badges like Pokémon 🐢✨`,
+    `${gap}-point lead for ${L}. ${U} calls it a “strategic rebuild.” 😏`,
+    `${U} is just lulling ${L} into a false sense of security. Right? …Right?`,
+    `Somebody check on ${U} 🥄 — and bring snacks.`,
+  ];
+  else if (gap >= 2) pool = [`${L} edges ahead — ${U} is plotting 🧠`, `${L}’s in front, but ${U} can smell blood 🦈`, `It’s ${L}’s world and ${U}’s just gaming in it… for now.`];
+  else pool = [`Neck and neck — ${L} barely ahead. One game flips it ⚔️`, `${U} is RIGHT there. ${L} better not blink. 👀`];
+  return pool[Math.floor((Date.now() / 4000) % pool.length)];
 }
 
 /* ============================================================
@@ -698,12 +733,20 @@ function renderScores() {
       h('div', { class: 'stat' }, h('div', { class: 'v' }, String(draws)), h('div', { class: 'k' }, 'DRAWS')),
       h('div', { class: 'stat' }, h('div', { class: 'v', style: 'font-size:18px' }, s.streak.n ? `${(s.streak.who === 'p1' ? s.players[0] : s.players[1]).name} ×${s.streak.n}` : '—'), h('div', { class: 'k' }, 'STREAK'))),
   );
-  // badges
-  const badges = computeBadges(s); const got = badges.filter(b => b.got).length;
-  const badgeWrap = h('div', { class: 'lead-list' }, h('div', { class: 'sec-label' }, `BADGES · ${got}/${badges.length}`),
-    h('div', { class: 'badge-row' }, badges.map(b => h('div', { class: 'badge' + (b.got ? ' got' : ''), title: b.d },
-      h('span', { class: 'badge-ic', html: Icons.ui('trophy') }), h('span', { class: 'badge-k' }, b.k)))));
-  view.append(badgeWrap);
+  // affectionate trash-talk
+  view.append(h('div', { class: 'taunt-line' }, rivalryTaunt(s)));
+  // per-player badges (each of you earns your own — including the funny ones)
+  const badges = computeBadges(s);
+  function badgeGroup(seat) {
+    const key = seat === 0 ? 'p0' : 'p1';
+    const mine = badges.filter(b => b[key]);
+    return h('div', { class: 'lead-list' },
+      h('div', { class: 'sec-label' }, `${s.players[seat].emoji} ${esc(s.players[seat].name).toUpperCase()} · ${mine.length} BADGE${mine.length === 1 ? '' : 'S'}`),
+      mine.length
+        ? h('div', { class: 'badge-row' }, mine.map(b => h('div', { class: 'badge got' + (b.fun ? ' fun' : ''), title: b.d }, h('span', { class: 'badge-em' }, b.emoji), h('span', { class: 'badge-k' }, b.k))))
+        : h('div', { class: 'empty-note' }, 'No badges yet — get playing! 🎮'));
+  }
+  view.append(badgeGroup(0), badgeGroup(1));
   const lead = h('div', { class: 'lead-list' }, h('div', { class: 'sec-label' }, 'BY GAME'));
   const played = Games.all().filter(g => s.perGame[g.id] && s.perGame[g.id].plays);
   if (!played.length) lead.append(h('div', { class: 'empty-note' }, 'No games played yet. Go make history.'));
