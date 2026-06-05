@@ -123,6 +123,16 @@ let presence = {};        // { 0:{online,name,ts}, 1:{...} }
 let currentMatch = null;  // active match object or null
 let stageHook = null;     // set by the stage controller while a game is mounted
 let timerInterval = null; // countdown ticker while a timed game is mounted
+let reactUnsub = null;    // banter (emote/taunt) listener while a game is mounted
+
+// in-game banter — tap to flash on your partner's screen
+const EMOTES = ['💩', '😏', '🔥', '😂', '😱', '👏', '🤔', '😤', '😎', '💀', '🤡', '👀', '🙄', '😘', '💪', '🥱'];
+const TAUNTS = [
+  "You're going DOWN 😤", "lol you're gonna lose", "u suck (lovingly) 😘", "I'm literally better than this",
+  "Is your screen even ON? 👀", "Aww, you'll win one day 🥹", "Too easy 😎", "GG already? 😏",
+  "I'm just warming up 🔥", "Did you forget the rules?", "Sweating yet? 💦", "This is painful to watch 😬",
+  "skill issue tbh", "Cope harder 😌", "Loser buys dinner 🍕", "Booop. Get rekt 💀",
+];
 
 // Which games support a per-turn timer, and whether a "skip turn" timeout is SAFE
 // (true) or only "forfeit" makes sense (false — multi-phase turns / word & dice games).
@@ -185,6 +195,20 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   .timer-bar.crit .tb-fill{ background:linear-gradient(90deg,#ff4d6d,var(--magenta)); }
   .timer-bar .tb-txt{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.55); letter-spacing:.3px; }
   .tp-toggle{ display:flex; gap:8px; justify-content:center; } .tp-toggle .btn{ flex:1; max-width:150px; }
+  .react-btn{ position:fixed; right:14px; bottom:18px; z-index:55; width:52px; height:52px; border-radius:50%; background:var(--panel-2); border:1px solid var(--glass-brd); font-size:24px; box-shadow:0 4px 16px rgba(0,0,0,.45); }
+  .react-btn:active{ transform:scale(.92); }
+  .react-panel{ position:fixed; right:14px; bottom:80px; z-index:55; width:min(330px,88vw); max-height:0; overflow:hidden; opacity:0; transition:max-height .25s var(--ease), opacity .2s; background:var(--panel-2); border:1px solid var(--glass-brd); border-radius:16px; box-shadow:0 10px 34px rgba(0,0,0,.55); }
+  .react-panel.open{ max-height:60vh; opacity:1; padding:12px; overflow-y:auto; }
+  .rp-emotes{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:10px; }
+  .rp-e{ width:42px; height:42px; border-radius:11px; background:var(--bg-2); border:1px solid var(--line); font-size:24px; }
+  .rp-taunts{ display:flex; flex-direction:column; gap:6px; }
+  .rp-t{ text-align:left; padding:10px 12px; border-radius:11px; background:var(--bg-2); border:1px solid var(--line); color:var(--ink); font-size:13px; }
+  .rp-e:active, .rp-t:active{ transform:scale(.95); border-color:var(--violet); }
+  .react-pop{ position:fixed; left:50%; bottom:32%; z-index:80; pointer-events:none; will-change:transform,opacity; animation:reactFloat 2.6s cubic-bezier(.2,.8,.3,1) forwards; }
+  .react-pop .rp-em{ font-size:74px; filter:drop-shadow(0 6px 14px rgba(0,0,0,.55)); }
+  .react-pop .rp-txt{ background:var(--panel-2); border:1px solid var(--glass-brd); border-radius:16px; padding:11px 18px; font-size:17px; font-weight:800; color:var(--ink); box-shadow:0 10px 34px rgba(0,0,0,.55); max-width:82vw; text-align:center; }
+  .react-pop .rp-txt small{ display:block; color:var(--gold); font-size:11px; font-weight:700; margin-bottom:2px; }
+  @keyframes reactFloat{ 0%{ opacity:0; transform:translateX(-50%) translateY(24px) scale(.6); } 14%{ opacity:1; transform:translateX(-50%) translateY(0) scale(1.12); } 28%{ transform:translateX(-50%) translateY(0) scale(1); } 78%{ opacity:1; } 100%{ opacity:0; transform:translateX(-50%) translateY(-70px) scale(.92); } }
 ` }));
 
 const Notify = {
@@ -242,6 +266,7 @@ const Router = (() => {
   function go() {
     stageHook = null;
     if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    if (reactUnsub) { reactUnsub(); reactUnsub = null; }
     // identity gate
     if (Store.getIdentity() == null) { renderIdentity(); syncChrome('#/'); return; }
     const hash = location.hash || '#/';
@@ -513,7 +538,11 @@ function renderStage(gameId) {
   const mount = h('div', { class: 'game-wrap', id: 'gameMount' });
   const msg = h('div', { class: 'game-msg', id: 'gameMsg' });
   const endBtn = h('button', { class: 'end-btn', onclick: requestEndGame }, 'End game');
-  const stage = h('div', { class: 'stage' }, head, seriesBar, timerBar, mount, msg, endBtn);
+  const reactPanel = h('div', { class: 'react-panel' },
+    h('div', { class: 'rp-emotes' }, EMOTES.map(e => h('button', { class: 'rp-e', onclick: () => sendReact(e) }, e))),
+    h('div', { class: 'rp-taunts' }, TAUNTS.map(t => h('button', { class: 'rp-t', onclick: () => sendReact(t) }, t))));
+  const reactBtn = h('button', { class: 'react-btn', onclick: () => { reactPanel.classList.toggle('open'); Store.Sound.tap(); } }, '💬');
+  const stage = h('div', { class: 'stage' }, head, seriesBar, timerBar, mount, msg, endBtn, reactBtn, reactPanel);
   view.append(stage);
 
   let overlayMode = null; // null | 'endWait' | 'endAsk' | 'over' | 'tourMid' | 'tourEnd'
@@ -792,6 +821,25 @@ function renderStage(gameId) {
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(paintTimer, 250);
   paintTimer();
+
+  // ----- banter: flash emotes / taunts to your partner (separate path → no game re-render) -----
+  let lastReactT = (Store.Net.serverNow ? Store.Net.serverNow() : Date.now());
+  function sendReact(val) {
+    reactPanel.classList.remove('open');
+    const t = (Store.Net.serverNow ? Store.Net.serverNow() : Date.now());
+    lastReactT = t; showReact({ by: me, val });        // optimistic local echo
+    Store.Net.sendReact({ by: me, val, t });
+  }
+  function showReact(r) {
+    const val = r.val || '', isEmoji = [...val].length <= 2;
+    const pop = h('div', { class: 'react-pop' + (isEmoji ? ' emoji' : '') },
+      isEmoji ? h('span', { class: 'rp-em' }, val)
+              : h('div', { class: 'rp-txt' }, h('small', {}, esc(s.players[r.by] ? s.players[r.by].name : '')), h('div', {}, esc(val))));
+    document.body.append(pop); Store.Sound[r.by === me ? 'tap' : 'good']();
+    setTimeout(() => { pop.remove(); }, 2600);
+  }
+  if (reactUnsub) { reactUnsub(); reactUnsub = null; }
+  reactUnsub = Store.Net.watchReact(r => { if (!r || !r.t || r.t <= lastReactT) return; lastReactT = r.t; showReact(r); });
 }
 
 function waitCard(title, sub, onBtn, spinner, extraBtn) {

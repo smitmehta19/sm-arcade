@@ -210,6 +210,9 @@ const Store = (() => {
     sendNudge(targetSeat, fromSeat, fromName) { if (!cloud) return Promise.resolve(); return db.ref('matches/' + ROOM() + '/nudges/' + targetSeat).set({ from: fromSeat, name: fromName || '', t: Net.serverTime() }); },
     watchNudge(seat, cb) { if (!cloud) return () => {}; const r = db.ref('matches/' + ROOM() + '/nudges/' + seat); const fn = r.on('value', sn => cb(sn.val())); return () => r.off('value', fn); },
     clearNudge(seat) { if (cloud) return db.ref('matches/' + ROOM() + '/nudges/' + seat).remove(); return Promise.resolve(); },
+    // in-game banter (emotes / taunts) — separate path so it never re-renders the live game
+    sendReact(react) { if (cloud) return db.ref('matches/' + ROOM() + '/react').set(react); return Promise.resolve(); },
+    watchReact(cb) { if (!cloud) return () => {}; const r = db.ref('matches/' + ROOM() + '/react'); const fn = r.on('value', sn => cb(sn.val())); return () => r.off('value', fn); },
   };
 
   return {
