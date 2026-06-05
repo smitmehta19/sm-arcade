@@ -52,7 +52,7 @@ const GAME_RULES = {
   'code-breaker': ['First, each of you secretly sets a 4-colour code for the other to crack.', 'Take turns guessing. ⬤ = right colour &amp; spot · ⚪ = right colour, wrong spot.', 'First to crack your partner’s code exactly wins.'],
   'ghost': ['Take turns adding ONE letter to a growing word fragment.', 'Whoever completes a real word (4+ letters) <b>loses</b>.', 'Think it’s a dead end? Challenge — if no word can start that way, the previous player loses; if one can, you do.'],
   'two-truths': ['On your turn, write 3 statements about yourself — two true, one a lie — and mark the lie.', 'Your partner guesses which is the fib.', 'Guess right = point to the guesser; fool them = point to you. Most points after 6 rounds wins.'],
-  'tug-of-war': ['Each round you both secretly pick a number from your remaining tokens (1–5).', 'Reveal together — the higher number pulls the rope one step their way (tie = no move).', 'Pull the rope 3 steps to your side to win. Spend big or save?'],
+  'tournament': ['5 random Word &amp; Strategy games are drawn — you play each one twice (10 games total).', 'Every game you win counts on your scoreboard, exactly like a normal game.', 'Whoever wins the most games is crowned <b>Tournament Champion</b>! 🏆 Leave anytime with both players’ consent.'],
 };
 function showRules(game) {
   const back = h('div', { class: 'rules-overlay', onclick: e => { if (e.target === back) close(); } });
@@ -290,7 +290,6 @@ function gameCard(g, s, i) {
 /* ============================================================
    MATCH LIFECYCLE
    ============================================================ */
-const SERIES_TARGET = 2; // best of 3
 function startMatch(gameId) {
   const me = Store.getIdentity();
   if (!Store.Net.ready()) { alert('Not connected to the cloud yet — online play needs your internet + Firebase. Try again in a moment.'); return; }
@@ -300,8 +299,7 @@ function startMatch(gameId) {
   }
   // state is JSON-stringified: Firebase RTDB strips nulls/empties & mangles arrays, so we store a plain string
   const state = JSON.stringify(Games.byId(gameId).init(me));
-  const match = { gameId, host: me, status: 'waiting', state, starter: me, rematchReq: null,
-    series: { target: SERIES_TARGET, score: [0, 0] }, roundWinner: null, seriesWinner: null, by: me, t: Date.now() };
+  const match = { gameId, host: me, status: 'waiting', state, starter: me, roundWinner: null, by: me, t: Date.now() };
   // set locally BEFORE navigating so the stage paints the new game immediately
   // (otherwise paint() briefly sees the old/null match and flashes "This game ended.")
   currentMatch = match;
@@ -315,7 +313,7 @@ function joinMatch() {
   if (currentMatch) location.hash = '#/play/' + currentMatch.gameId;
 }
 function optimistic(patch) { if (currentMatch) { currentMatch = Object.assign({}, currentMatch, patch); if (stageHook) stageHook(currentMatch); } }
-// within a series: either player advances to the next round (starter alternates)
+// "Play again" — either player re-deals the same game (starter alternates)
 function advanceRound(gameId) {
   const me = Store.getIdentity();
   const newStarter = 1 - (currentMatch && currentMatch.starter != null ? currentMatch.starter : 0);
@@ -324,27 +322,13 @@ function advanceRound(gameId) {
   optimistic(patch);
   Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
 }
-// new series (after one ends): handshake — one requests, the opposite player accepts & starts
-function requestRematch() { const me = Store.getIdentity(); optimistic({ rematchReq: me }); Store.Net.updateMatch({ rematchReq: me, t: Date.now() }); }
-function cancelRematch() { optimistic({ rematchReq: null }); Store.Net.updateMatch({ rematchReq: null, t: Date.now() }); }
-function acceptRematch(gameId) {
-  const me = Store.getIdentity();
-  const requester = currentMatch && currentMatch.rematchReq != null ? currentMatch.rematchReq : (1 - me);
-  const newStarter = 1 - requester;
-  const state = JSON.stringify(Games.byId(gameId).init(newStarter));
-  const patch = { state, status: 'active', starter: newStarter, rematchReq: null,
-    series: { target: SERIES_TARGET, score: [0, 0] }, roundWinner: null, seriesWinner: null };
-  optimistic(patch);
-  Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
-}
-function nextGameId(cur) { const others = Games.all().filter(g => g.id !== cur); return others[Math.floor(Math.random() * others.length)].id; }
+function nextGameId(cur) { const others = Games.all().filter(g => g.id !== cur && !g.isTournament); return others[Math.floor(Math.random() * others.length)].id; }
 function exitMatch() { Store.Net.clearMatch(); location.hash = '#/'; }
-// ending an in-progress game needs BOTH players' consent
+// leaving an in-progress game needs BOTH players' consent (works for every game incl. tournaments)
 function requestEndGame() {
   const me = Store.getIdentity(), partner = partnerSeat(me);
   if (!currentMatch) { location.hash = '#/'; return; }
-  const inProgress = currentMatch.status === 'active' || (currentMatch.status === 'finished' && currentMatch.seriesWinner == null);
-  if (!inProgress || !isOnline(partner)) { exitMatch(); return; } // nothing in progress, or partner not around → just leave
+  if (currentMatch.status !== 'active' || !isOnline(partner)) { exitMatch(); return; } // nothing live, or partner away → just leave
   Store.Sound.tap();
   optimistic({ endReq: me });
   Store.Net.updateMatch({ endReq: me, t: Date.now() });
@@ -373,111 +357,180 @@ function renderStage(gameId) {
   const stage = h('div', { class: 'stage' }, head, seriesBar, mount, msg, endBtn);
   view.append(stage);
 
-  let overlayMode = null; // null | 'round' | 'seriesEnd' | 'wait' | 'accept'
+  let overlayMode = null; // null | 'endWait' | 'endAsk' | 'over' | 'tourMid' | 'tourEnd'
 
   function paint() {
     const m = currentMatch;
-    // live best-of-N series tally
-    if (m && m.series && (m.status === 'active' || m.status === 'finished')) {
-      seriesBar.innerHTML = `<span>Best of ${m.series.target * 2 - 1}</span><b class="p1">${m.series.score[0]}</b><i>–</i><b class="p2">${m.series.score[1]}</b>`;
-      seriesBar.classList.add('show');
-    } else seriesBar.classList.remove('show');
-    // "End game" available only during active play (ending needs both players' consent)
+    seriesBar.classList.remove('show'); // series system removed — every game win counts on its own
     endBtn.style.display = (m && m.gameId === gameId && m.status === 'active' && m.endReq == null) ? 'block' : 'none';
     if (!m || m.gameId !== gameId) { // match ended/replaced elsewhere
       mount.innerHTML = ''; mount.append(waitCard('This game ended.', 'Back to lobby', exitMatch)); return;
     }
     if (m.status === 'waiting') {
       const partner = partnerSeat(me);
+      mount.innerHTML = '';
       if (m.host === me) {
-        mount.innerHTML = '';
         mount.append(waitCard(`Waiting for ${s.players[partner].name} to join…`,
           isOnline(partner) ? `${s.players[partner].name} is online — they’ll see the invite now.` : `${s.players[partner].name} is offline — they’ll get it when they open the app.`,
           null, true));
         msg.textContent = '';
       } else {
-        // we're the invitee but somehow on the stage before joining
-        mount.innerHTML = '';
         mount.append(waitCard(`${s.players[m.host].name} invited you!`, '', null, false,
           h('button', { class: 'btn btn-primary', onclick: joinMatch }, 'Join game')));
       }
       return;
     }
-    // active or finished → render the game from state (stored as a JSON string)
+    // active or finished → render from state (stored as a JSON string)
     mount.innerHTML = '';
     let state = null;
     try { state = typeof m.state === 'string' ? JSON.parse(m.state) : m.state; } catch (e) { state = null; }
     // Only reject genuinely unusable state. (Phase-based games like two-truths,
-    // tug-of-war, rps, couple-quiz legitimately have no `turn` field — never gate on it.)
+    // rps, couple-quiz legitimately have no `turn` field — never gate on it.)
     if (!state || typeof state !== 'object') {
       mount.append(waitCard('Couldn’t load this game — please start a fresh one.', 'Back to lobby', exitMatch)); return;
     }
+
+    // A tournament renders its CURRENT sub-game; every other game renders itself.
+    const isTour = !!game.isTournament;
+    const renderDef = isTour ? (Games.byId(state.subId) || game) : game;
+    const renderState = isTour ? (state.sub || {}) : state;
+    if (isTour) mount.append(tournamentHeader(state));
+
     const ctx = {
       root: mount, h, $, esc, clone, players: s.players.map(p => ({ name: p.name, emoji: p.emoji, color: p.color })),
-      state, me, turn: state.turn, isMyTurn: (state.turn === me) && m.status === 'active',
+      state: renderState, me, turn: renderState.turn,
+      isMyTurn: (renderState.turn === me) && m.status === 'active' && (!isTour || state.phase === 'play'),
       status: m.status, sound: Store.Sound, turnBar: o => turnBar(ctx, o),
       msg: (t, c) => { msg.innerHTML = t; msg.style.color = c || 'var(--ink-dim)'; },
-      commit: (nextState, winner) => commitMove(gameId, nextState, winner),
+      commit: isTour ? (ns, w) => tourCommit(ns, w) : (ns, w) => commitMove(gameId, ns, w),
       seat: i => s.players[i],
     };
-    try { game.render(ctx); } catch (e) { console.error(e); msg.textContent = '⚠ ' + e.message; }
+    try { renderDef.render(ctx); } catch (e) { console.error(e); msg.textContent = '⚠ ' + e.message; }
 
-    if (m.endReq != null) { // end-game consent takes priority over everything
+    // ----- overlays -----
+    if (m.endReq != null) { // leave-consent takes priority over everything
       const mode = m.endReq === me ? 'endWait' : 'endAsk';
       if (mode !== overlayMode) { overlayMode = mode; showEndOverlay(m, mode); }
-    } else if (m.status === 'finished') {
-      let mode;
-      if (m.seriesWinner == null) mode = 'round';
-      else mode = m.rematchReq == null ? 'seriesEnd' : (m.rematchReq === me ? 'wait' : 'accept');
-      if (mode !== overlayMode) { overlayMode = mode; showFinishedOverlay(m, mode); }
+    } else if (isTour && state.phase === 'intermission') {
+      if (overlayMode !== 'tourMid') { overlayMode = 'tourMid'; showTourIntermission(state); }
+    } else if (isTour && (state.phase === 'done' || m.status === 'finished')) {
+      if (overlayMode !== 'tourEnd') { overlayMode = 'tourEnd'; showTourEnd(state); }
+    } else if (!isTour && m.status === 'finished') {
+      if (overlayMode !== 'over') { overlayMode = 'over'; showGameOver(m); }
     } else { overlayMode = null; Overlay.hide(); }
+  }
+
+  function tournamentHeader(t) {
+    const total = t.games.length * t.rounds;
+    const gi = Math.min(Math.floor(t.slot / t.rounds) + 1, t.games.length);
+    const rnd = (t.slot % t.rounds) + 1;
+    const name = (Games.byId(t.subId) || {}).name || '';
+    const dots = h('div', { class: 'tour-dots' });
+    for (let i = 0; i < total; i++) dots.append(h('span', { class: 'tdot' + (i < t.slot ? ' done' : (i === t.slot ? ' cur' : '')) }));
+    return h('div', { class: 'tour-head' },
+      h('div', { class: 'tour-top' },
+        h('span', { class: 'tour-badge' }, '🏆 TOURNAMENT'),
+        h('span', { class: 'tour-score' }, h('b', { class: 'p1' }, String(t.wins[0])), ' – ', h('b', { class: 'p2' }, String(t.wins[1])))),
+      h('div', { class: 'tour-now' }, `Game ${gi}/${t.games.length} · Round ${rnd}/${t.rounds} — `, h('b', {}, name)),
+      dots);
   }
 
   function showEndOverlay(m, mode) {
     const partner = partnerSeat(me);
     if (mode === 'endWait') {
-      Overlay.show({ emoji: '🤝', title: 'End the game?', sub: `Waiting for ${esc(s.players[partner].name)} to agree…`, party: false },
+      Overlay.show({ emoji: '🤝', title: 'Leave the game?', sub: `Waiting for ${esc(s.players[partner].name)} to agree…`, party: false },
         [{ label: 'Keep playing', primary: true, onClick: cancelEndGame }]);
     } else { // endAsk
       Store.Sound.bad();
-      Overlay.show({ emoji: '🚪', title: `${esc(s.players[m.endReq].name)} wants to end the game`, sub: 'Agree to end and return to the lobby?', party: false },
+      Overlay.show({ emoji: '🚪', title: `${esc(s.players[m.endReq].name)} wants to leave the game`, sub: 'Agree to end it and return to the lobby?', party: false },
         [{ label: 'Keep playing', onClick: cancelEndGame }, { label: 'End game', primary: true, onClick: agreeEndGame }]);
     }
   }
 
-  function showFinishedOverlay(m, mode) {
-    const partner = partnerSeat(me);
-    const series = m.series || { target: SERIES_TARGET, score: [0, 0] };
-    const tally = `${series.score[0]}–${series.score[1]}`;
-    if (mode === 'round') {
-      const w = m.roundWinner;
-      setTimeout(() => {
-        if (overlayMode !== 'round') return;
-        let res;
-        if (w === 'draw' || w == null) res = { emoji: '🤝', title: 'Round drawn', sub: `Series ${tally} · replay`, party: false };
-        else { const p = s.players[w]; res = { emoji: p.emoji, title: `${esc(p.name)} takes the round!`, sub: `Series ${tally} · first to ${series.target} wins`, party: true }; }
-        Store.Sound[(w === 'draw' || w == null) ? 'draw' : 'win']();
-        Overlay.show(res, [{ label: 'End series', onClick: requestEndGame }, { label: 'Next round →', primary: true, onClick: () => advanceRound(gameId) }]);
-      }, 450);
-    } else if (mode === 'seriesEnd') {
-      const w = m.seriesWinner, p = s.players[w], nxt = nextGameId(gameId), nxtG = Games.byId(nxt);
-      setTimeout(() => {
-        if (overlayMode !== 'seriesEnd') return;
-        Store.Sound.win();
-        Overlay.show({ emoji: p.emoji, title: `${esc(p.name)} WINS THE SERIES!`, sub: `${tally} · added to your scoreboard`, party: true }, [
-          { label: 'Lobby', onClick: exitMatch },
-          { label: `Play ${nxtG.name} next →`, onClick: () => { Overlay.hide(); startMatch(nxt); } },
-          { label: '↻ New series', primary: true, onClick: requestRematch },
-        ]);
-      }, 450);
-    } else if (mode === 'wait') {
-      Overlay.show({ emoji: '⏳', title: 'New series sent!', sub: `Waiting for ${esc(s.players[partner].name)} to accept…`, party: false }, [
-        { label: 'Cancel', onClick: cancelRematch }, { label: 'Lobby', onClick: exitMatch }]);
-    } else { // accept
-      Store.Sound.good();
-      Overlay.show({ emoji: '🔁', title: `${esc(s.players[m.rematchReq].name)} wants a new series!`, sub: 'Accept to start — you make the first move.', party: false }, [
-        { label: 'Lobby', onClick: exitMatch }, { label: '✓ Accept & play', primary: true, onClick: () => acceptRematch(gameId) }]);
-    }
+  function showGameOver(m) {
+    const w = m.roundWinner, nxt = nextGameId(gameId), nxtG = Games.byId(nxt);
+    setTimeout(() => {
+      if (overlayMode !== 'over') return;
+      let res;
+      if (w === 'draw' || w == null) res = { emoji: '🤝', title: 'Draw!', sub: 'No winner this time', party: false };
+      else { const p = s.players[w]; res = { emoji: p.emoji, title: `${esc(p.name)} wins!`, sub: 'Added to your scoreboard 🏆', party: true }; }
+      Store.Sound[(w === 'draw' || w == null) ? 'draw' : 'win']();
+      Overlay.show(res, [
+        { label: 'Lobby', onClick: exitMatch },
+        { label: `Play ${nxtG.name} →`, onClick: () => { Overlay.hide(); startMatch(nxt); } },
+        { label: '↻ Play again', primary: true, onClick: () => advanceRound(gameId) },
+      ]);
+    }, 450);
+  }
+
+  // ----- tournament engine (orchestrates sub-games inside one match) -----
+  function pushTour(t, status, roundWinner) {
+    const patch = { state: JSON.stringify(t), status };
+    if (roundWinner !== undefined) patch.roundWinner = roundWinner;
+    currentMatch = Object.assign({}, currentMatch, patch);
+    paint();
+    Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
+  }
+  function tourCommit(nextSub, winner) {
+    if (!currentMatch || currentMatch.status !== 'active') return;
+    let t; try { t = JSON.parse(currentMatch.state); } catch (e) { return; }
+    if (t.phase !== 'play') return;
+    if (winner === undefined) { t.sub = nextSub; pushTour(t, 'active'); return; } // ongoing sub-game move
+    // sub-game finished → record it on the scoreboard like any normal game
+    const subId = t.subId;
+    if (winner === 0 || winner === 1) { t.wins[winner]++; Store.recordResult(subId, winner === 0 ? 'p1' : 'p2'); }
+    else { Store.recordResult(subId, 'draw'); }
+    (t.log = t.log || []).push({ game: subId, winner });
+    t.lastResult = { game: subId, winner };
+    t.sub = nextSub; // keep the final board visible behind the overlay
+    if (t.slot + 1 >= t.games.length * t.rounds) {
+      t.phase = 'done';
+      t.champion = (t.wins[0] === t.wins[1]) ? 'draw' : (t.wins[0] > t.wins[1] ? 0 : 1);
+      if (t.champion === 0 || t.champion === 1) Store.recordTournament(t.champion);
+      pushTour(t, 'finished', t.champion);
+    } else { t.phase = 'intermission'; pushTour(t, 'active'); }
+  }
+  function advanceTournament() {
+    if (!currentMatch) return;
+    let t; try { t = JSON.parse(currentMatch.state); } catch (e) { return; }
+    if (t.phase !== 'intermission') return;
+    t.slot++;
+    t.subId = t.games[Math.floor(t.slot / t.rounds)];
+    t.sub = Games.byId(t.subId).init((t.slot % 2 === 0) ? t.host : (1 - t.host)); // alternate who starts each round
+    t.phase = 'play';
+    overlayMode = null; Overlay.hide();
+    pushTour(t, 'active');
+  }
+  function showTourIntermission(t) {
+    const lr = t.lastResult || {};
+    const lastName = (Games.byId(lr.game) || {}).name || 'that game';
+    const nextName = (Games.byId(t.games[Math.floor((t.slot + 1) / t.rounds)]) || {}).name || '';
+    const drew = lr.winner === 'draw' || lr.winner == null;
+    setTimeout(() => {
+      if (overlayMode !== 'tourMid') return;
+      Store.Sound[drew ? 'draw' : 'win']();
+      const res = drew
+        ? { emoji: '🤝', title: `${esc(lastName)}: drawn`, sub: `Tournament ${t.wins[0]}–${t.wins[1]} · next up: <b>${esc(nextName)}</b>`, party: false }
+        : { emoji: s.players[lr.winner].emoji, title: `${esc(s.players[lr.winner].name)} wins ${esc(lastName)}!`, sub: `Tournament ${t.wins[0]}–${t.wins[1]} · next up: <b>${esc(nextName)}</b>`, party: true };
+      Overlay.show(res, [
+        { label: 'End tournament', onClick: requestEndGame },
+        { label: 'Next game →', primary: true, onClick: advanceTournament },
+      ]);
+    }, 450);
+  }
+  function showTourEnd(t) {
+    setTimeout(() => {
+      if (overlayMode !== 'tourEnd') return;
+      Store.Sound.win();
+      const champ = t.champion;
+      const res = (champ === 'draw' || champ == null)
+        ? { emoji: '🤝', title: 'Tournament tied!', sub: `Final ${t.wins[0]}–${t.wins[1]} · every game counted on the board`, party: true }
+        : { emoji: '🏆', title: `${esc(s.players[champ].name)} WINS THE TOURNAMENT!`, sub: `Final ${t.wins[0]}–${t.wins[1]} · every game counted on the board`, party: true };
+      Overlay.show(res, [
+        { label: 'Lobby', onClick: exitMatch },
+        { label: '🏆 New tournament', primary: true, onClick: () => { Overlay.hide(); startMatch('tournament'); } },
+      ]);
+    }, 450);
   }
 
   function commitMove(gid, nextState, winner) {
@@ -486,12 +539,12 @@ function renderStage(gameId) {
     const stateStr = JSON.stringify(nextState);
     let patch;
     if (finishing) {
-      const cur = currentMatch.series || { target: SERIES_TARGET, score: [0, 0] };
-      const series = { target: cur.target, score: cur.score.slice() };
-      if (winner === 0 || winner === 1) series.score[winner]++;
-      const seriesWinner = series.score[0] >= series.target ? 0 : (series.score[1] >= series.target ? 1 : null);
-      patch = { state: stateStr, status: 'finished', roundWinner: winner, series, seriesWinner };
-      if (seriesWinner != null) Store.recordResult(gid, seriesWinner === 0 ? 'p1' : 'p2');
+      // every finished game records immediately — a single win is a win
+      patch = { state: stateStr, status: 'finished', roundWinner: winner };
+      if (gid !== 'tournament') {
+        if (winner === 0 || winner === 1) Store.recordResult(gid, winner === 0 ? 'p1' : 'p2');
+        else if (winner === 'draw') Store.recordResult(gid, 'draw');
+      }
     } else patch = { state: stateStr, status: 'active' };
     currentMatch = Object.assign({}, currentMatch, patch);
     paint();
@@ -525,15 +578,17 @@ function computeBadges(s) {
   const tot = s.totals.p1 + s.totals.p2;
   const played = Object.keys(s.perGame || {}).filter(k => s.perGame[k].plays).length;
   const lead = Math.abs(s.totals.p1 - s.totals.p2);
+  const tourTotal = (s.tourWins && (s.tourWins[0] + s.tourWins[1])) || 0;
+  const playableCount = Games.all().filter(g => !g.isTournament).length;
   return [
-    { k: 'First Win', d: 'Win your first series', got: tot >= 1 },
-    { k: 'On Fire', d: '3-series win streak', got: s.streak.n >= 3 },
+    { k: 'First Win', d: 'Win your first game', got: tot >= 1 },
+    { k: 'On Fire', d: '3-game win streak', got: s.streak.n >= 3 },
     { k: 'Explorer', d: 'Play 8 different games', got: played >= 8 },
-    { k: 'Rivals', d: '10 series played', got: tot >= 10 },
+    { k: 'Rivals', d: '10 games played', got: tot >= 10 },
     { k: 'Dominator', d: 'Lead by 5', got: lead >= 5 },
     { k: 'Dead Even', d: 'Tied after 6+', got: tot >= 6 && s.totals.p1 === s.totals.p2 },
-    { k: 'Veteran', d: '25 series played', got: tot >= 25 },
-    { k: 'Completionist', d: 'Play every game', got: played >= Games.all().length },
+    { k: 'Champion', d: 'Win a tournament', got: tourTotal >= 1 },
+    { k: 'Completionist', d: 'Play every game', got: played >= playableCount },
   ];
 }
 

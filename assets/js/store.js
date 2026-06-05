@@ -8,6 +8,7 @@ const Store = (() => {
     players: JSON.parse(JSON.stringify(window.PLAYERS_DEFAULT)),
     totals: { p1: 0, p2: 0, draws: 0 },
     perGame: {},                 // gameId -> {p1,p2,draws,plays}
+    tourWins: [0, 0],            // tournament championships per seat (bragging only, not a score)
     streak: { who: null, n: 0 }, // current win streak
     history: [],                 // recent results [{g, w, t}]
     favorites: [],               // gameIds
@@ -112,6 +113,10 @@ const Store = (() => {
     state.history = state.history.slice(0, 40);
     save();
   }
+  function recordTournament(winnerSeat) {
+    if (!Array.isArray(state.tourWins)) state.tourWins = [0, 0];
+    if (winnerSeat === 0 || winnerSeat === 1) { state.tourWins[winnerSeat]++; save(); }
+  }
   function toggleFav(gameId) {
     const i = state.favorites.indexOf(gameId);
     if (i >= 0) state.favorites.splice(i, 1); else state.favorites.push(gameId);
@@ -121,7 +126,7 @@ const Store = (() => {
   function setSetting(key, val) { state.settings[key] = val; save(); }
   function resetScores() {
     state.totals = { p1: 0, p2: 0, draws: 0 };
-    state.perGame = {}; state.streak = { who: null, n: 0 }; state.history = [];
+    state.perGame = {}; state.streak = { who: null, n: 0 }; state.history = []; state.tourWins = [0, 0];
     save();
   }
 
@@ -202,7 +207,7 @@ const Store = (() => {
 
   return {
     initCloud, subscribe, get, player,
-    recordResult, toggleFav, setPlayer, setSetting, resetScores,
+    recordResult, recordTournament, toggleFav, setPlayer, setSetting, resetScores,
     Sound, isCloud: () => cloud,
     getIdentity, setIdentity, onCloud, Net,
   };

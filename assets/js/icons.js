@@ -28,7 +28,7 @@ const Icons = (() => {
     'code-breaker': wrap('<circle cx="6.5" cy="9" r="2"/><circle cx="11.5" cy="9" r="2" ' + fc + '/><circle cx="16.5" cy="9" r="2"/><path d="M5 15h14M5 18h9"/>'),
     'ghost': wrap('<path d="M6 20v-8.5a6 6 0 0112 0V20l-2-1.8L14 20l-2-1.8L10 20l-2-1.8z"/><circle cx="9.7" cy="11" r="1" ' + fc + '/><circle cx="14.3" cy="11" r="1" ' + fc + '/>'),
     'two-truths': wrap('<path d="M3.5 7.5A2.5 2.5 0 016 5h7a2.5 2.5 0 012.5 2.5v3A2.5 2.5 0 0113 13H8l-3.5 2.8V13a1 1 0 01-1-1z"/><path d="M18 10.5h.01M20.5 14v3.5L18 15.6h-2"/>'),
-    'tug-of-war': wrap('<path d="M3 12h18"/><path d="M12 8.5v7"/><circle cx="6" cy="12" r="1.6" ' + fc + '/><circle cx="18" cy="12" r="1.6" ' + fc + '/>'),
+    'tournament': wrap('<path d="M7 4h10v4.5a5 5 0 01-10 0z"/><path d="M7 5.5H4.5V7a3 3 0 003 3M17 5.5h2.5V7a3 3 0 01-3 3"/><path d="M10 13.5v2.5h4v-2.5M8.5 20h7M12 16v2"/>'),
   };
 
   const UI = {

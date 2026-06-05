@@ -1,5 +1,5 @@
 /* ============================================================
-   NEW GAMES — Ghost, Two Truths & a Lie, Tug of War (online)
+   NEW GAMES — Ghost, Two Truths & a Lie (online)
    ============================================================ */
 (function () {
   const css = `
@@ -21,17 +21,6 @@
   .tt-chip{ font-size:12px; padding:7px 11px; border-radius:999px; background:var(--bg-2); border:1px solid var(--glass-brd); color:var(--ink-dim); text-align:left; line-height:1.25; }
   .tt-chip:active{ transform:scale(.96); border-color:var(--violet); }
 
-  .tow{ padding:6px 0; }
-  .tow-track{ position:relative; height:46px; margin:18px 0; border-radius:999px; background:var(--bg-2); border:1px solid var(--glass-brd); overflow:hidden; }
-  .tow-track::before{ content:''; position:absolute; left:50%; top:0; bottom:0; width:2px; background:var(--line); transform:translateX(-1px); }
-  .tow-zone{ position:absolute; top:0; bottom:0; width:18%; } .tow-zone.l{ left:0; background:linear-gradient(90deg,var(--p1-soft),transparent); } .tow-zone.r{ right:0; background:linear-gradient(270deg,var(--p2-soft),transparent); }
-  .tow-knot{ position:absolute; top:50%; width:30px; height:30px; border-radius:50%; transform:translate(-50%,-50%);
-    background:radial-gradient(circle at 35% 30%, #fff, var(--violet)); box-shadow:0 0 16px var(--violet); transition:left .5s var(--ease-back); }
-  .tow-tokens{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:6px; }
-  .tow-tok{ width:52px; height:52px; border-radius:14px; font-family:var(--font-num); font-weight:900; font-size:22px; background:var(--panel-2); border:1px solid var(--glass-brd); color:var(--ink); transition:transform .12s var(--ease); }
-  .tow-tok:active{ transform:scale(.9); } .tow-tok.p0{ border-color:var(--p1); color:var(--p1); } .tow-tok.p1{ border-color:var(--p2); color:var(--p2); }
-  .tow-tok.spent{ opacity:.25; }
-  .tow-reveal{ display:flex; align-items:center; justify-content:center; gap:24px; margin:14px 0; font-family:var(--font-num); font-weight:900; font-size:30px; }
   `;
   document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
 
@@ -148,55 +137,6 @@
       } else waiting(ctx, ctx.players[st.host].name + ' to continue');
       function next() { const s = ctx.clone(st); if (s.round + 1 >= s.rounds) return ctx.commit(s, s.scores[0] === s.scores[1] ? 'draw' : (s.scores[0] > s.scores[1] ? 0 : 1)); s.round++; s.writer = 1 - s.writer; s.statements = ['', '', '']; s.lie = 0; s.guess = null; s.phase = 'write'; ctx.commit(s); }
       function frame(ctx, t) { return ctx.h('div', { class: 'board-frame wait-card' }, ctx.h('div', { class: 'spinner' }), ctx.h('h3', {}, t)); }
-    },
-  });
-
-  /* ---------- TUG OF WAR ---------- */
-  Games.register({
-    id: 'tug-of-war', name: 'Tug of War', emoji: '🪢', category: 'Luck', accent: '#ffd66b',
-    tagline: 'Secret bids pull the rope.',
-    init: host => ({ rope: 0, tokens: [[1, 2, 3, 4, 5], [1, 2, 3, 4, 5]], picks: [null, null], phase: 'bid', round: 1, host }),
-    render(ctx) {
-      const st = ctx.state, me = ctx.me;
-      const pos = 50 + st.rope * 10; // rope -5..5 → 0..100%
-      const track = ctx.h('div', { class: 'tow-track' }, ctx.h('div', { class: 'tow-zone l' }), ctx.h('div', { class: 'tow-zone r' }), ctx.h('div', { class: 'tow-knot', style: `left:${Math.max(6, Math.min(94, pos))}%` }));
-      const wrap = ctx.h('div', { class: 'board-frame tow' },
-        ctx.h('div', { style: 'display:flex;justify-content:space-between;font-weight:700;font-size:13px' },
-          ctx.h('span', { style: `color:${ctx.players[0].color}` }, ctx.players[0].name + ' ◀'),
-          ctx.h('span', { style: `color:${ctx.players[1].color}` }, '▶ ' + ctx.players[1].name)),
-        track);
-      ctx.root.append(wrap);
-
-      if (st.phase === 'bid') {
-        if (st.picks[me] == null) {
-          const row = ctx.h('div', { class: 'tow-tokens' });
-          st.tokens[me].forEach(n => row.append(ctx.h('button', { class: 'tow-tok p' + me, onclick: () => pick(n) }, n)));
-          ctx.root.append(ctx.h('div', { class: 'mt center', style: 'color:var(--ink-dim);font-size:13px;margin-bottom:6px' }, 'Secretly pick a number to pull:'), row);
-          ctx.msg('Choose your strength — they can’t see it', ctx.players[me].color);
-        } else { ctx.root.append(frame(ctx, `Locked in. Waiting for ${ctx.players[1 - me].name}…`)); waiting(ctx, ctx.players[1 - me].name); }
-        return;
-      }
-      // reveal
-      const a = st.picks[0], b = st.picks[1];
-      ctx.root.append(ctx.h('div', { class: 'tow-reveal' },
-        ctx.h('span', { style: `color:${ctx.players[0].color}` }, a),
-        ctx.h('span', { style: 'color:var(--ink-faint);font-size:16px' }, 'vs'),
-        ctx.h('span', { style: `color:${ctx.players[1].color}` }, b)));
-      ctx.root.append(ctx.h('p', { class: 'center', style: 'color:var(--ink-dim);margin:0' }, a === b ? 'Equal — rope holds!' : `${ctx.players[a > b ? 0 : 1].name} pulls!`));
-      if (me === st.host) ctx.root.append(ctx.h('button', { class: 'btn btn-primary btn-block mt', onclick: next }, 'Next pull'));
-      else waiting(ctx, ctx.players[st.host].name + ' to continue');
-
-      function pick(n) { const s = ctx.clone(st); s.picks[me] = n; ctx.sound.tap(); if (s.picks[1 - me] != null) { s.phase = 'reveal'; ctx.sound.good(); } ctx.commit(s); }
-      function next() {
-        const s = ctx.clone(st); const a = s.picks[0], b = s.picks[1];
-        s.tokens[0] = s.tokens[0].filter(x => x !== a); s.tokens[1] = s.tokens[1].filter(x => x !== b);
-        if (a > b) s.rope -= 1; else if (b > a) s.rope += 1;
-        if (s.rope <= -3) return ctx.commit(s, 0);
-        if (s.rope >= 3) return ctx.commit(s, 1);
-        if (s.tokens[0].length === 0) return ctx.commit(s, s.rope === 0 ? 'draw' : (s.rope < 0 ? 0 : 1));
-        s.picks = [null, null]; s.phase = 'bid'; s.round++; ctx.commit(s);
-      }
-      function frame(ctx, t) { return ctx.h('div', { class: 'board-frame wait-card', style: 'margin-top:12px' }, ctx.h('div', { class: 'spinner' }), ctx.h('h3', {}, t)); }
     },
   });
 
