@@ -11,6 +11,13 @@
   .bs-grid.enemy.live .bs-cell{ cursor:pointer; } .bs-grid.enemy.live .bs-cell:hover{ box-shadow:inset 0 0 0 2px var(--violet); }
   .bs-cell.ship{ background:rgba(180,180,200,.5); } .bs-cell.hit{ background:var(--magenta); box-shadow:0 0 8px var(--magenta); } .bs-cell.miss{ background:rgba(255,255,255,.08); color:var(--ink-faint); }
   .bs-fleet{ text-align:center; font-size:12px; color:var(--ink-dim); }
+  /* manual fleet placement */
+  .bs-grid.placing .bs-cell{ cursor:pointer; } .bs-grid.placing .bs-cell:hover{ box-shadow:inset 0 0 0 2px var(--violet); }
+  .bs-place-ctrls{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:10px; }
+  .bs-tray{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:4px 0 12px; }
+  .bs-ship{ display:flex; gap:2px; padding:6px; border-radius:9px; background:var(--panel-2); border:1px solid var(--line); }
+  .bs-ship.sel{ border-color:var(--violet); box-shadow:var(--glow-v); }
+  .bs-seg{ width:15px; height:15px; border-radius:3px; background:rgba(180,190,210,.65); }
 
   .mem{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; max-width:380px; margin:0 auto; }
   .mem-card{ aspect-ratio:1; border-radius:12px; font-size:30px; display:grid; place-items:center; background:linear-gradient(135deg,var(--panel-2),var(--bg-2)); border:1px solid var(--line); position:relative; }
@@ -64,12 +71,74 @@
   const memFace = id => { const [col, d] = MEM[id]; return `<svg viewBox="0 0 24 24" fill="${col}" class="icn" style="filter:drop-shadow(0 0 6px ${col})"><path d="${d}"/></svg>`; };
 
   /* ---------- 9. BATTLESHIP ---------- */
+  const BS_FLEET = [4, 3, 3, 2, 2]; // ship lengths each player places
+  const emptyBoard = () => ({ grid: Array.from({ length: 8 }, () => Array(8).fill(0)), hits: Array.from({ length: 8 }, () => Array(8).fill(0)) });
   Games.register({
     id: 'battleship', name: 'Battleship', emoji: '🚢', category: 'Strategy', accent: '#00f0ff',
-    tagline: 'Hunt & sink the fleet.',
-    init: host => ({ boards: [makeBoard(), makeBoard()], turn: host }),
+    tagline: 'Place your fleet, then hunt.',
+    // turn-based setup: host arranges fleet first, then partner; then firing begins.
+    init: host => ({ phase: 'place', boards: [emptyBoard(), emptyBoard()], turn: host, host }),
     render(ctx) {
-      const me = ctx.me, enemy = ctx.state.boards[1 - me], mine = ctx.state.boards[me];
+      const st = ctx.state, me = ctx.me;
+
+      /* ---- PLACEMENT PHASE ---- */
+      if (st.phase === 'place') {
+        if (!ctx.isMyTurn) {
+          ctx.root.append(waitFrame(ctx, `${ctx.players[st.turn].name} is placing their fleet…`));
+          waiting(ctx, ctx.players[st.turn].name);
+          return;
+        }
+        const pane = ctx.h('div', {}); ctx.root.append(pane);
+        let workGrid = ctx.state.boards[me].grid.map(row => row.slice());
+        let remaining = BS_FLEET.slice();
+        let placedShips = []; // { size, cells:[[r,c]...] }
+        let orient = 'h', selIdx = 0;
+        const fits = (sz, r, c, o) => { for (let k = 0; k < sz; k++) { const rr = r + (o === 'v' ? k : 0), cc = c + (o === 'h' ? k : 0); if (rr >= 8 || cc >= 8 || workGrid[rr][cc]) return false; } return true; };
+        function placeShip(sz, r, c, o) { const cells = []; for (let k = 0; k < sz; k++) { const rr = r + (o === 'v' ? k : 0), cc = c + (o === 'h' ? k : 0); workGrid[rr][cc] = 1; cells.push([rr, cc]); } placedShips.push({ size: sz, cells }); }
+        function onCell(r, c) {
+          if (workGrid[r][c]) { const idx = placedShips.findIndex(s => s.cells.some(([a, b]) => a === r && b === c)); if (idx >= 0) { placedShips[idx].cells.forEach(([a, b]) => workGrid[a][b] = 0); remaining.push(placedShips[idx].size); placedShips.splice(idx, 1); ctx.sound.tap(); draw(); } return; }
+          if (!remaining.length) return;
+          const sz = remaining[selIdx];
+          if (!fits(sz, r, c, orient)) { ctx.sound.bad(); return; }
+          placeShip(sz, r, c, orient); remaining.splice(selIdx, 1); if (selIdx >= remaining.length) selIdx = Math.max(0, remaining.length - 1);
+          ctx.sound.place(); draw();
+        }
+        function randomFill() {
+          workGrid = ctx.state.boards[me].grid.map(row => row.slice()); placedShips = []; remaining = [];
+          for (const sz of BS_FLEET) { let ok = false, t = 0; while (!ok && t++ < 600) { const o = Math.random() < 0.5 ? 'h' : 'v', r = rint(8), c = rint(8); if (fits(sz, r, c, o)) { placeShip(sz, r, c, o); ok = true; } } }
+          selIdx = 0; ctx.sound.place(); draw();
+        }
+        function confirmFleet() {
+          if (remaining.length) { ctx.sound.bad(); return; }
+          const s = ctx.clone(st); s.boards[me].grid = workGrid;
+          if (me === s.host) s.turn = 1 - s.host;          // partner places next
+          else { s.phase = 'play'; s.turn = s.host; }       // both ready → fire (host shoots first)
+          ctx.sound.good(); ctx.commit(s);
+        }
+        function draw() {
+          pane.innerHTML = '';
+          pane.append(ctx.h('div', { class: 'bs-place-ctrls' },
+            ctx.h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { orient = orient === 'h' ? 'v' : 'h'; ctx.sound.tap(); draw(); } }, orient === 'h' ? '↔ Horizontal' : '↕ Vertical'),
+            ctx.h('button', { class: 'btn btn-ghost btn-sm', onclick: randomFill }, '🎲 Random'),
+            ctx.h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { workGrid = ctx.state.boards[me].grid.map(row => row.slice()); placedShips = []; remaining = BS_FLEET.slice(); selIdx = 0; ctx.sound.tap(); draw(); } }, '↺ Reset')));
+          if (remaining.length) {
+            const tray = ctx.h('div', { class: 'bs-tray' });
+            remaining.forEach((sz, i) => { const ship = ctx.h('button', { class: 'bs-ship' + (i === selIdx ? ' sel' : ''), onclick: () => { selIdx = i; ctx.sound.tap(); draw(); } }); for (let k = 0; k < sz; k++) ship.append(ctx.h('span', { class: 'bs-seg' })); tray.append(ship); });
+            pane.append(ctx.h('div', { class: 'bs-label' }, 'TAP A SHIP, SET DIRECTION, THEN TAP YOUR WATERS'), tray);
+          }
+          const grid = ctx.h('div', { class: 'bs-grid mine placing' });
+          for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) { const cell = ctx.h('div', { class: 'bs-cell' + (workGrid[r][c] ? ' ship' : '') }); cell.onclick = () => onCell(r, c); grid.append(cell); }
+          pane.append(ctx.h('div', { class: 'board-frame bs-wrap' }, ctx.h('div', { class: 'bs-label' }, 'YOUR FLEET — tap a placed ship to remove it'), grid));
+          const ready = remaining.length === 0;
+          pane.append(ctx.h('button', { class: 'btn btn-block mt ' + (ready ? 'btn-primary' : 'btn-ghost'), onclick: confirmFleet }, ready ? 'Confirm fleet ▶' : `Place ${remaining.length} more ship${remaining.length > 1 ? 's' : ''}`));
+        }
+        draw();
+        ctx.msg('Arrange your fleet, then confirm', ctx.players[me].color);
+        return;
+      }
+
+      /* ---- FIRING PHASE ---- */
+      const enemy = ctx.state.boards[1 - me], mine = ctx.state.boards[me];
       ctx.root.append(ctx.turnBar({ scores: [remaining(ctx.state.boards[0]), remaining(ctx.state.boards[1])] }));
       const wrap = ctx.h('div', { class: 'board-frame bs-wrap' });
       wrap.append(ctx.h('div', { class: 'bs-label' }, 'ENEMY WATERS' + (ctx.isMyTurn ? ' — tap to fire' : '')));
@@ -102,21 +171,6 @@
       }
     },
   });
-  function makeBoard() {
-    const grid = Array.from({ length: 8 }, () => Array(8).fill(0)), hits = Array.from({ length: 8 }, () => Array(8).fill(0));
-    for (const sz of [4, 3, 3, 2, 2]) {
-      let placed = false, t = 0;
-      while (!placed && t++ < 400) {
-        const horiz = Math.random() < 0.5, r = rint(8), c = rint(8);
-        if (horiz && c + sz > 8) continue; if (!horiz && r + sz > 8) continue;
-        let ok = true; for (let k = 0; k < sz; k++) { const rr = r + (horiz ? 0 : k), cc = c + (horiz ? k : 0); if (grid[rr][cc]) { ok = false; break; } }
-        if (!ok) continue;
-        for (let k = 0; k < sz; k++) { const rr = r + (horiz ? 0 : k), cc = c + (horiz ? k : 0); grid[rr][cc] = 1; }
-        placed = true;
-      }
-    }
-    return { grid, hits };
-  }
   function remaining(b) { let n = 0; for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (b.grid[r][c] && b.hits[r][c] !== 1) n++; return n; }
 
   /* ---------- 10. MEMORY MATCH ---------- */
@@ -160,10 +214,14 @@
   });
 
   /* ---------- 11. WORD DUEL ---------- */
+  // Curated pool of common, guessable 5-letter answers (couple-/fun-themed + everyday words).
+  // Guesses are validated against the full shared dictionary (window.DICT.five()).
+  const WD_WORDS = ['HEART','LOVER','DREAM','SMILE','SPARK','HONEY','BLOOM','CHARM','SWEET','LIGHT','MUSIC','DANCE','PEACE','MAGIC','SHINE','BRAVE','GRACE','LUCKY','HAPPY','CRUSH','ADORE','FLIRT','ANGEL','BLISS','CHEER','LAUGH','MERRY','JOLLY','PROUD','GLEAM','BEACH','CANDY','CLOUD','RIVER','OCEAN','STORM','FLAME','PEARL','AMBER','CORAL','FROST','SUNNY','RAINY','MISTY','SHORE','SANDY','WAVES','BROOK','CLIFF','EARTH','SPACE','STARS','COMET','LUNAR','SOLAR','ORBIT','NIGHT','GLOBE','APPLE','BERRY','PEACH','MANGO','LEMON','OLIVE','MAPLE','GRAPE','MELON','HONEY','TIGER','EAGLE','ROBIN','HORSE','PANDA','WHALE','OTTER','KOALA','SUGAR','SPICE','TOAST','CREAM','MOCHA','LATTE','PIZZA','PASTA','SALAD','PLATE','FEAST','PARTY','DRESS','CROWN','JEWEL','SCARF','GLOVE','BOOTS','WATCH','PHONE','PIANO','FLUTE','STAGE','VERSE','NOVEL','STORY','PAINT','BRUSH','FRAME','PHOTO','MOVIE','SCENE','ACTOR','DAISY','TULIP','LILAC','POPPY','LOTUS','FIELD','GRASS','PLANT','PETAL','FRUIT','CABIN','HOTEL','TRAIN','PLANE','BEACH','TENTS','VENUS','CUPID','ROMEO','BELLE','KISSY'];
+
   Games.register({
     id: 'word-duel', name: 'Word Duel', emoji: '🔤', category: 'Word', accent: '#b6ff3a',
     tagline: 'Race to crack the word.',
-    init: host => { const W = ['HEART','LOVER','DREAM','SMILE','SPARK','HONEY','BLOOM','CHARM','SWEET','LIGHT','MUSIC','DANCE','PEACE','MAGIC','SHINE','BRAVE','GRACE','LUCKY','HAPPY','CRUSH']; return { answer: W[rint(W.length)], guesses: [], turn: host }; },
+    init: host => { return { answer: WD_WORDS[rint(WD_WORDS.length)], guesses: [], turn: host }; },
     render(ctx) {
       const st = ctx.state, MAX = 8; let cur = '';
       ctx.root.append(ctx.turnBar());
@@ -201,6 +259,7 @@
       }
       function submit() {
         if (cur.length !== 5) { ctx.sound.bad(); ctx.msg('Need 5 letters!', 'var(--gold)'); return; }
+        if (window.DICT && cur !== st.answer && !window.DICT.five().has(cur.toLowerCase())) { ctx.sound.bad(); ctx.msg('Not in the word list — guess a real word', 'var(--gold)'); return; }
         const res = score(cur, st.answer); ctx.sound.place();
         const s = ctx.clone(st); s.guesses.push({ by: ctx.me, word: cur, res });
         if (cur === st.answer) return ctx.commit(s, ctx.me);
@@ -289,15 +348,38 @@
   });
 
   /* ---------- COUPLE QUIZ ---------- */
+  // Tagged question banks. Each item is a binary [A, B] this-or-that.
+  // Host picks a "vibe" each round → fresh, varied, never monotonous.
+  const CQ_BANKS = {
+    sweet: [['Beach holiday','Mountain trip'],['Coffee','Chai'],['Early bird','Night owl'],['Save it','Spend it'],['Cats','Dogs'],['Pizza','Biryani'],['Cozy movie night','Big party'],['Texting','Calling'],['Plan everything','Go with the flow'],['Window seat','Aisle seat'],['Sunrise','Sunset'],['Tea in bed','Breakfast out'],['Handwritten note','Long voice note'],['Slow dance','Roadtrip singalong'],['Forehead kiss','Bear hug'],['Stargazing','Rainy day in'],['Home-cooked dinner','Fancy restaurant'],['Surprise gift','Planned gift'],['Cuddle','Hold hands'],['Books','Movies'],['City lights','Countryside'],['Spontaneous trip','Planned vacation'],['Flowers','Chocolates'],['Sweet texts','Cute calls'],['Sleep in','Watch the sunrise']],
+    funny: [['Snort-laugh','Silent wheeze'],['Trip on flat ground','Walk into a glass door'],['Sing badly & loud','Dance with no rhythm'],['Steal the blanket','Hog the whole bed'],['Talk in your sleep','Snore like a truck'],['Reply in memes','Reply in voice notes'],['Burn the toast','Flood the kitchen'],['Cry at ads','Laugh at the wrong moment'],['Overthink everything','Forget everything'],['Always late','Annoyingly early'],['Lose the keys','Lose the phone'],['Ugliest cry','Loudest sneeze'],['Pet every stray dog','Chase the pigeons'],['Hopeless with directions','Hopeless with names'],['Eat the last slice','Blame the dog'],['Text the wrong person','Like an old photo by mistake'],['Hangry monster','Sleepy zombie'],['Dramatic sulk','Petty grudge'],['Worst dancer at the wedding','Loudest one at the movie'],['Fake laugh','Fake gasp'],['Loud chewer','Loud typer'],['Bad at lying','Bad at secrets']],
+    spicy: [['Lights on','Lights off'],['Tease','Please'],['Slow & gentle','Fast & wild'],['Take the lead','Be led'],['Neck kisses','Back scratches'],['Morning fun','Midnight fun'],['Dominant','Submissive'],['Make the first move','Be chased'],['Whisper naughty things','Show, don’t tell'],['Shower together','Bath together'],['Lace','Bare'],['Bite','Kiss'],['Truth or dare','Strip poker'],['Blindfold','Handcuffs'],['Quickie','Marathon'],['Public tease','Private show'],['Love bites','Long massage'],['Roleplay','Keep it real'],['Silk sheets','Skin on skin'],['Send a risky pic','Leave a risky note'],['Get teased in public','Tease back'],['Take control','Give control'],['Sweet talk','Dirty talk'],['Eye contact','Hands everywhere'],['Stay quiet','Be loud']],
+  };
+  function cqSample(vibe, n) {
+    let pool;
+    if (vibe === 'mix') { pool = []; ['sweet','funny','spicy'].forEach(k => pool.push(...CQ_BANKS[k])); }
+    else pool = CQ_BANKS[vibe] || CQ_BANKS.sweet;
+    return shuffle(pool.slice()).slice(0, n).map(p => p.slice());
+  }
+  const CQ_VIBES = [['sweet','💕 Sweet'],['funny','😂 Funny'],['spicy','🌶️ Spicy'],['mix','🎲 Mix']];
   Games.register({
     id: 'couple-quiz', name: 'Who Knows Who?', emoji: '💞', category: 'Couple', accent: '#ff2fa6',
     tagline: 'Guess your partner’s pick.',
-    init: host => {
-      const Q = [['Beach holiday','Mountain trip'],['Coffee','Chai'],['Early bird','Night owl'],['Save it','Spend it'],['Cats','Dogs'],['Pizza','Biryani'],['Cozy movie night','Big party'],['Texting','Calling'],['Sweet','Spicy'],['Plan everything','Go with the flow'],['Window seat','Aisle seat'],['Sunrise','Sunset']];
-      return { questions: shuffle(Q.slice()).slice(0, 6), idx: 0, scores: [0, 0], guess: null, answer: null, phase: 'guess', host };
-    },
+    init: host => ({ phase: 'setup', vibe: null, questions: null, idx: 0, scores: [0, 0], guess: null, answer: null, host }),
     render(ctx) {
       const st = ctx.state, me = ctx.me;
+      // vibe-pick phase — host chooses the mood, then questions are drawn
+      if (st.phase === 'setup') {
+        if (me === st.host) {
+          const grid = ctx.h('div', { class: 'cq-opts' }, CQ_VIBES.map(([key, lbl]) =>
+            ctx.h('button', { class: 'cq-opt', onclick: () => { const s = ctx.clone(st); s.vibe = key; s.questions = cqSample(key, 6); s.phase = 'guess'; ctx.sound.tap(); ctx.commit(s); } }, lbl)));
+          ctx.root.append(ctx.h('div', { class: 'board-frame' },
+            ctx.h('div', { class: 'cq-q', style: `color:${ctx.players[me].color}` }, 'Pick tonight’s vibe 😏'),
+            grid));
+          ctx.msg('Choose the mood for this round', ctx.players[me].color);
+        } else { ctx.root.append(waitFrame(ctx, `${ctx.players[st.host].name} is picking the vibe…`)); waiting(ctx, ctx.players[st.host].name); }
+        return;
+      }
       const guesser = st.idx % 2, answerer = 1 - guesser, q = st.questions[st.idx];
       ctx.root.append(ctx.h('div', { class: 'score-line' }, ctx.h('span', { style: `color:${ctx.players[0].color}` }, ctx.players[0].name + ' ' + st.scores[0]), '  –  ', ctx.h('span', { style: `color:${ctx.players[1].color}` }, st.scores[1] + ' ' + ctx.players[1].name)));
       ctx.msg(`Round ${st.idx + 1} of ${st.questions.length}`);

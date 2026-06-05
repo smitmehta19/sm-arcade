@@ -38,12 +38,12 @@ const GAME_RULES = {
   'checkers': ['Move your pieces diagonally forward, one square.', 'Jump over your partner’s piece into an empty square to capture it — captures are forced, and you can chain multiple jumps in one turn.', 'Reach the far row to become a King (moves both directions).', 'Capture all their pieces — or leave them with no move — to win.'],
   'reversi': ['Place a disc so it traps a straight line of your partner’s discs between two of yours — those flip to your color.', 'You must make a flipping move; if you can’t, your turn is passed.', 'When the board fills, the most discs of your color wins.'],
   'gomoku': ['Take turns placing a stone on any empty point.', 'First to line up 5 stones in a row — any direction — wins.', 'Watch their lines and block before they reach five!'],
-  'battleship': ['Your fleet is placed automatically and hidden from your partner.', 'On your turn, tap a square in ENEMY WATERS to fire. 🔥 = hit, • = miss.', 'Sink your partner’s entire fleet before they sink yours.'],
+  'battleship': ['First, arrange your 5 ships on your own waters — tap a ship, set ↔/↕ direction, tap to drop it (or hit 🎲 Random). The host places first, then you.', 'Once both fleets are set, take turns firing at ENEMY WATERS. 🔥 = hit, • = miss.', 'Sink your partner’s entire fleet before they sink yours.'],
   'memory': ['On your turn, flip two cards.', 'Match a pair → you keep it and flip again. No match → they flip back and it’s your partner’s turn.', 'Most pairs when all are found wins. Remember where things are!'],
   'word-duel': ['There’s a secret 5-letter word; you take turns guessing it.', 'Tiles: 🟩 right letter & spot · 🟨 right letter, wrong spot · ⬛ not in the word.', 'First to guess the word wins. The little dot shows who made each guess.'],
   'hangman': ['One of you secretly types a word; the other tries to guess it.', 'The guesser picks letters — 6 wrong guesses completes the figure.', 'Guesser wins by revealing the whole word; the setter wins if the guesser runs out of lives.'],
   'rps': ['Each of you secretly picks Rock ✊, Paper ✋, or Scissors ✌️.', 'Rock beats Scissors, Scissors beats Paper, Paper beats Rock.', 'First to win 3 rounds takes the match.'],
-  'couple-quiz': ['Take turns: one of you guesses what the other will pick between two options.', 'Then the other reveals their honest answer.', 'A correct guess scores a point. Whoever knows the other best wins! 💞'],
+  'couple-quiz': ['The host picks a vibe — 💕 Sweet, 😂 Funny, 🌶️ Spicy, or 🎲 Mix.', 'Take turns: one guesses what the other will pick between two options; then the other reveals their honest answer.', 'A correct guess scores a point. Whoever knows the other best wins! 💞'],
   'pentago': ['On your turn do TWO things: place one marble on any empty spot, then rotate any one of the four 3×3 blocks (↺ or ↻).', 'The rotation can make or break lines — that’s the trick.', 'First to get 5 marbles in a row (after the twist) wins.'],
   'hex': ['Take turns placing one stone on any empty cell.', 'You own the <b>top &amp; bottom</b> edges; your partner owns <b>left &amp; right</b>.', 'First to build an unbroken chain of your stones linking your two sides wins. It can never end in a draw.'],
   'nine-mens-morris': ['<b>Phase 1:</b> take turns placing your 9 pieces on the points.', 'Make a “mill” (3 of yours in a line) → remove one of your partner’s pieces.', '<b>Phase 2:</b> slide pieces along lines to form new mills. With only 3 left you can “fly” anywhere.', 'Reduce your partner to 2 pieces (or no moves) to win.'],
@@ -300,8 +300,12 @@ function startMatch(gameId) {
   }
   // state is JSON-stringified: Firebase RTDB strips nulls/empties & mangles arrays, so we store a plain string
   const state = JSON.stringify(Games.byId(gameId).init(me));
-  Store.Net.setMatch({ gameId, host: me, status: 'waiting', state, starter: me, rematchReq: null,
-    series: { target: SERIES_TARGET, score: [0, 0] }, roundWinner: null, seriesWinner: null, by: me, t: Date.now() })
+  const match = { gameId, host: me, status: 'waiting', state, starter: me, rematchReq: null,
+    series: { target: SERIES_TARGET, score: [0, 0] }, roundWinner: null, seriesWinner: null, by: me, t: Date.now() };
+  // set locally BEFORE navigating so the stage paints the new game immediately
+  // (otherwise paint() briefly sees the old/null match and flashes "This game ended.")
+  currentMatch = match;
+  Store.Net.setMatch(match)
     .catch(err => { console.error(err); alert('Could not start the game online.\n\nYour Firebase rules likely need updating to allow "matches" and "presence" (see database.rules.json in the repo, then republish in the Realtime Database → Rules tab).\n\n' + err.message); location.hash = '#/'; });
   location.hash = '#/play/' + gameId;
 }
@@ -402,8 +406,10 @@ function renderStage(gameId) {
     // active or finished → render the game from state (stored as a JSON string)
     mount.innerHTML = '';
     let state = null;
-    try { if (typeof m.state === 'string') state = JSON.parse(m.state); } catch (e) { state = null; }
-    if (!state || state.turn === undefined && !['rps', 'couple-quiz'].includes(gameId)) {
+    try { state = typeof m.state === 'string' ? JSON.parse(m.state) : m.state; } catch (e) { state = null; }
+    // Only reject genuinely unusable state. (Phase-based games like two-truths,
+    // tug-of-war, rps, couple-quiz legitimately have no `turn` field — never gate on it.)
+    if (!state || typeof state !== 'object') {
       mount.append(waitCard('Couldn’t load this game — please start a fresh one.', 'Back to lobby', exitMatch)); return;
     }
     const ctx = {

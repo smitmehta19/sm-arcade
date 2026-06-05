@@ -63,9 +63,17 @@
   .cb-row{ display:flex; align-items:center; gap:8px; justify-content:center; }
   .cb-slot{ width:30px; height:30px; border-radius:50%; border:2px dashed var(--line); }
   .cb-peg{ width:30px; height:30px; border-radius:50%; box-shadow:inset 0 2px 4px rgba(0,0,0,.4); }
-  .cb-fb{ display:grid; grid-template-columns:1fr 1fr; gap:3px; width:24px; }
-  .cb-fb i{ width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.12); }
-  .cb-fb i.b{ background:#fff; } .cb-fb i.w{ background:var(--ink-faint); }
+  /* clear feedback: explicit counts, not cryptic pegs */
+  .cb-fb2{ display:flex; gap:6px; align-items:center; margin-left:8px; }
+  .cb-key{ display:inline-flex; align-items:center; gap:5px; font-family:var(--font-num); font-weight:900; font-size:16px; min-width:30px; justify-content:center; padding:4px 10px; border-radius:999px; }
+  .cb-key i{ width:14px; height:14px; border-radius:50%; flex:0 0 auto; }
+  .cb-key.exact{ background:rgba(46,160,67,.18); color:#8ef7c2; } .cb-key.exact i{ background:#2ea043; box-shadow:0 0 7px #2ea043; }
+  .cb-key.spot{ background:rgba(212,167,44,.15); color:#ffdf91; } .cb-key.spot i{ background:transparent; border:3px solid #e0b53a; box-sizing:border-box; }
+  .cb-key.zero{ opacity:.4; }
+  .cb-legend{ display:flex; gap:16px; justify-content:center; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--ink-dim); margin:0 0 12px; }
+  .cb-legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .cb-legend i{ width:13px; height:13px; border-radius:50%; flex:0 0 auto; }
+  .cb-legend i.exact{ background:#2ea043; box-shadow:0 0 6px #2ea043; } .cb-legend i.spot{ background:transparent; border:3px solid #e0b53a; box-sizing:border-box; }
   .cb-palette{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:8px; }
   .cb-color{ width:36px; height:36px; border-radius:50%; border:2px solid rgba(255,255,255,.2); box-shadow:inset 0 2px 5px rgba(0,0,0,.4); }
   .cb-color:active{ transform:scale(.88); }
@@ -395,10 +403,19 @@
       myGuesses.forEach(g => {
         const row = ctx.h('div', { class: 'cb-row' });
         g.guess.forEach(ci => row.append(ctx.h('div', { class: 'cb-peg', style: `background:${CB_COLORS[ci]}` })));
-        const fb = ctx.h('div', { class: 'cb-fb' }); for (let k = 0; k < 4; k++) fb.append(ctx.h('i', { class: k < g.black ? 'b' : (k < g.black + g.white ? 'w' : '') })); row.append(fb);
+        // clear counts: how many are in the right colour+spot, how many right colour wrong spot
+        row.append(ctx.h('div', { class: 'cb-fb2' },
+          ctx.h('span', { class: 'cb-key exact' + (g.black ? '' : ' zero') }, ctx.h('i', {}), String(g.black)),
+          ctx.h('span', { class: 'cb-key spot' + (g.white ? '' : ' zero') }, ctx.h('i', {}), String(g.white))));
         rows.append(row);
       });
-      ctx.root.append(ctx.h('div', { class: 'board-frame' }, ctx.h('p', { style: 'color:var(--ink-dim);margin:0 0 10px;font-size:12px;text-align:center' }, `Cracking ${ctx.players[1 - me].name}’s code · ⬤ right spot · ⚪ right colour`), rows.children.length ? rows : ctx.h('p', { class: 'center', style: 'color:var(--ink-faint)' }, 'No guesses yet')));
+      const legend = ctx.h('div', { class: 'cb-legend' },
+        ctx.h('span', {}, ctx.h('i', { class: 'exact' }), 'right colour & spot'),
+        ctx.h('span', {}, ctx.h('i', { class: 'spot' }), 'right colour, wrong spot'));
+      ctx.root.append(ctx.h('div', { class: 'board-frame' },
+        ctx.h('p', { style: 'color:var(--ink-dim);margin:0 0 8px;font-size:12px;text-align:center' }, `Cracking ${ctx.players[1 - me].name}’s code — match the counts to deduce it`),
+        legend,
+        rows.children.length ? rows : ctx.h('p', { class: 'center', style: 'color:var(--ink-faint)' }, 'No guesses yet')));
       if (ctx.isMyTurn) {
         let draft = [];
         const slots = ctx.h('div', { class: 'cb-row' });

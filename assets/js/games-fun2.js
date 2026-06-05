@@ -18,6 +18,8 @@
   .tt-stmt:active{ transform:scale(.98); }
   .tt-stmt.lie{ border-color:var(--magenta); box-shadow:var(--glow-m); } .tt-stmt.truth{ opacity:.6; }
   .tt-num{ display:inline-grid; place-items:center; width:24px; height:24px; border-radius:50%; background:var(--violet); color:#06070f; font-weight:900; font-size:12px; margin-right:10px; }
+  .tt-chip{ font-size:12px; padding:7px 11px; border-radius:999px; background:var(--bg-2); border:1px solid var(--glass-brd); color:var(--ink-dim); text-align:left; line-height:1.25; }
+  .tt-chip:active{ transform:scale(.96); border-color:var(--violet); }
 
   .tow{ padding:6px 0; }
   .tow-track{ position:relative; height:46px; margin:18px 0; border-radius:999px; background:var(--bg-2); border:1px solid var(--glass-brd); overflow:hidden; }
@@ -40,8 +42,13 @@
   /* ---------- GHOST (Word Trap) ---------- */
   const WORDS = new Set(('about above actor acute adore agile alert alien alive alley allow alone amber amend angel anger angle ankle apart apple apply arena armor aroma array arrow aside asset audio audit avoid awake award aware bacon badge baker basic beach beard beast began begin being below bench berry birth black blade blame blank blast blaze bleak blend bless blind block bloom blown blues blush board boast bonus boost booth bound brace brain brand brave bread break breed brick bride brief bring broad brook broom brown brush build built bunch burst cabin cable cadet candy cargo carry carve cause cease chain chair chalk charm chart chase cheap check cheer chess chest chief child china choir chord chose civic claim clamp clash class clean clear clerk click cliff climb cloak clock close cloth cloud clown coach coast color comet coral could count court cover crack craft crash crazy cream creek crest crime crisp cross crowd crown crumb crush crust curve dance dealt decay delay dense depth diary dirty ditch diver dizzy dough dozen draft drain drama drank dream dress dried drift drink drive drove drown dwell eager eagle early earth eaten ebony elbow elder elect elite ember empty enact enjoy enter entry equal equip erase error essay event every exact exalt exist extra fable faint fairy faith false fancy feast fence ferry fetch fever fiber field fiery fifth fifty fight final first fixed flair flame flank flash fleet flesh float flock flood floor flora flour flown fluid flung flush focus force forge forth forty found frame frank fraud fresh fried frost frown fruit funny gamer gauge ghost giant given giver glade glare glass gleam glide globe gloom glory glove going grace grade grain grand grant grape graph grasp grass grave graze great greed green greet grief grill grind groan groom grove grown guard guess guest guide guild guilt habit handy happy harsh haste hatch haven heart heavy hedge hello hence hobby honey honor horse hotel house human humor hurry ideal igloo image inbox index inner input intro irony issue ivory jelly jewel joker jolly judge juice jumbo knack knead kneel knife knock known label labor laden ladle lance large laser later laugh layer learn lease least leave ledge lemon level light lilac limit lined linen lions liver llama lobby local lodge logic loose lover lower loyal lucky lunar lunch lying magic major maker mango maple march mason match maybe mayor meant medal medic melon mercy merge merit metal meter midst might minor mirth mixer model money month moral motor mound mount mouse mouth mover movie music naval needy nerve never newly niche night noble noise north notch novel nurse oasis ocean offer often olive onion opera orbit order organ ought ounce outer owner ozone paint panel paper party pasta patch pause peace pearl pedal penny perch petal phase phone photo piano piece pilot pinch pitch pivot pixel pizza place plain plane plant plate plaza pleat plumb plump poetic point polar porch pouch pound power press price pride prime print prior prize probe prone proof proud prove pulse punch pupil puppy purse queen query quest quick quiet quilt quirk quota quote radar radio rainy raise rally ranch range rapid raven reach react ready realm rebel refer reign relax relay reply rerun reset rhyme rider ridge rifle rinse ripen risen rival river roast robin robot rocky rogue roost rough round route royal ruler rumor rural saint salad salon sandy sauce scale scarf scene scent scoop scope score scout scrap scrub seize sense serve seven shade shaft shake shall shame shape share shark sharp sheep sheer sheet shelf shell shift shine shiny shire shirt shock shore short shout shown shrub siege sight silly since siren sixth skate skill skirt skull slate sleep slice slide slime slope small smart smash smell smile smoke snack snail snake sneak sniff snowy solar solid solve sound south space spade spare spark speak spear speed spell spend spice spike spine spire spite splat spoke spoon sport spray squad squat stack staff stage stain stair stake stale stalk stamp stand stare stark start state steam steel steep steer stem stern stick stiff still sting stink stock stone stool stoop store storm story stout stove strap straw stray strip stuck study stuff style sugar suite sunny super surge swamp swarm swear sweat sweep sweet swell swept swift swing swirl sword table taken tally tango taper tarot taste teach tease teeth tempo tenor tense tenth thank theft their theme there these thick thief thing think third those three threw throb throw thumb tidal tiger tight title toast today token tonic tooth topic torch total touch tough towel tower toxic trace track trade trail train trait tramp trash tread treat trend trial tribe trick tried tripe troop trout truce truck truly trump trunk trust truth tulip tunic turbo tutor twice twist tying ulcer ultra uncle under union unity until upper upset urban usage usher usual utter vague valet valid value valve vapor vault venue verge verse video vigor villa vinyl viola viral virus visit vital vivid vocal vodka vogue voice voter vouch vowel wagon waist waltz waste watch water weary weave wedge weigh weird whale wharf wheat wheel where which while whine whirl white whole whose widen widow width wield wince winch windy wiser witch woken woman world worry worse worst worth would wound woven wrath wreck wrist write wrong yacht yearn yeast yield young youth zebra').split(' '));
   'star area idea also only word game love time play date team home book door rain snow moon tree fire gold cute dear wish hope star cake city baby cool warm cozy ring song kiss hand face'.split(' ').forEach(w => WORDS.add(w));
-  const isWord = f => f.length >= 4 && WORDS.has(f);
-  const hasPrefix = f => { for (const w of WORDS) if (w.startsWith(f)) return true; return false; };
+  // Prefer the big shared dictionary (window.DICT, ~36k common words → fair challenges
+  // like "orat"→"orator"); fall back to the small inline list if words.js didn't load.
+  const isWord = f => f.length >= 4 && (window.DICT ? window.DICT.has(f) : WORDS.has(f));
+  const hasPrefix = f => {
+    if (window.DICT) return window.DICT.hasPrefix(f);
+    for (const w of WORDS) if (w.startsWith(f)) return true; return false;
+  };
 
   Games.register({
     id: 'ghost', name: 'Ghost', emoji: '👻', category: 'Word', accent: '#9b7bff',
@@ -74,6 +81,25 @@
   });
 
   /* ---------- TWO TRUTHS & A LIE ---------- */
+  // Tap-to-fill statement ideas — a spicy/funny mix to keep rounds fresh.
+  const TT_PROMPTS = [
+    'I once kissed someone in a very public place.',
+    'I have a secret fantasy I’ve never told you.',
+    'I checked you out before we ever spoke.',
+    'I’ve sent a flirty text to the wrong person.',
+    'I’ve skinny-dipped at least once.',
+    'I have a hidden tattoo… or do I?',
+    'I thought about you the first night we met.',
+    'I’ve worn something just to drive you crazy.',
+    'I once laughed so hard I cried in public.',
+    'I’ve eaten food off the floor and said nothing.',
+    'I’ve practiced an argument in the mirror.',
+    'I once got stuck in a kids’ playground slide.',
+    'I secretly judge people’s phone wallpapers.',
+    'I’ve pretended to be on a call to avoid someone.',
+    'I’ve stalked your old photos way too far back.',
+    'I can’t parallel park to save my life.',
+  ];
   Games.register({
     id: 'two-truths', name: 'Two Truths & a Lie', emoji: '🤥', category: 'Couple', accent: '#ff4d9d',
     tagline: 'Spot your partner’s fib.',
@@ -87,7 +113,13 @@
         if (me === writer) {
           let lie = 0; const fields = [];
           const card = ctx.h('div', { class: 'board-frame' }, ctx.h('p', { style: 'color:var(--ink-dim);margin:0 0 12px;font-size:13px' }, 'Write 3 statements about yourself, then mark the LIE:'));
-          [0, 1, 2].forEach(i => { const f = ctx.h('input', { class: 'tt-field', placeholder: `Statement ${i + 1}…`, maxlength: '80' }); fields.push(f); card.append(f); });
+          const ideas = ctx.h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px' },
+            shuffle(TT_PROMPTS.slice()).slice(0, 3).map(p => ctx.h('button', {
+              class: 'tt-chip',
+              onclick: () => { const f = fields.find(x => !x.value.trim()); if (f) { f.value = p; ctx.sound.tap(); f.focus(); } else ctx.sound.bad(); },
+            }, p)));
+          card.append(ctx.h('p', { style: 'color:var(--violet);margin:0 0 6px;font-size:12px' }, '💡 Tap an idea to fill a blank — make it spicy 🌶️ or silly 😄:'), ideas);
+          [0, 1, 2].forEach(i => { const f = ctx.h('input', { class: 'tt-field', placeholder: `Statement ${i + 1}…`, maxlength: '90' }); fields.push(f); card.append(f); });
           const radio = ctx.h('div', { class: 'tt-radio' }, [0, 1, 2].map(i => ctx.h('button', { class: i === 0 ? 'on' : '', onclick: () => { lie = i; [...radio.children].forEach((b, j) => b.classList.toggle('on', j === i)); } }, i + 1)));
           card.append(ctx.h('div', { class: 'tt-mark' }, ctx.h('span', {}, 'The lie is #'), radio));
           card.append(ctx.h('button', { class: 'btn btn-primary btn-block mt', onclick: send }, 'Send to ' + ctx.players[guesser].name));
