@@ -451,7 +451,7 @@ function gameCard(g, s, i) {
     style: `--accent:${g.accent}; animation-delay:${Math.min(i * 32, 480)}ms`,
     onclick: () => startMatch(g.id),
   },
-    h('div', { class: 'gcard-top' }, h('span', { class: 'gcat' }, g.category), favBtn),
+    h('div', { class: 'gcard-top' }, favBtn),
     h('span', { class: 'gicon', html: Icons.game(g.id) }), h('span', { class: 'gname' }, g.name), h('span', { class: 'gtag' }, tag),
   );
   let lp;
