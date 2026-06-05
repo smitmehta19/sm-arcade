@@ -472,13 +472,26 @@ body.light::after{ opacity:.025; }
     0 22px 44px -18px rgba(0,0,0,.7),
     0 0 34px -8px var(--accent, var(--violet)); }
 .gcard:active{ transform:scale(.97); }
-/* refined category tag — a glassy capsule instead of bare text */
+/* top row of each card: category capsule + a tappable favourite star */
+.gcard-top{ position:absolute; top:9px; left:9px; right:9px; z-index:3;
+  display:flex; align-items:center; justify-content:flex-end; gap:7px; pointer-events:none; }
+.gcard-top > *{ pointer-events:auto; }
+/* refined category tag — a glassy capsule instead of bare text (now in the flow of .gcard-top) */
 .gcard .gcat{
-  top:10px; right:10px; padding:3px 8px; border-radius:999px; opacity:1;
+  position:static; top:auto; right:auto; padding:3px 8px; border-radius:999px; opacity:1;
   background:color-mix(in srgb, var(--accent, var(--violet)) 14%, rgba(255,255,255,.03));
   border:1px solid color-mix(in srgb, var(--accent, var(--violet)) 34%, transparent);
   backdrop-filter:blur(6px);
 }
+.gcard.is-fav .gcat{ display:inline-block; }   /* keep the category visible even when faved */
+.fav-btn{ flex:0 0 auto; width:27px; height:27px; border-radius:9px; display:grid; place-items:center;
+  font-size:15px; line-height:1; background:color-mix(in srgb, var(--bg-2) 70%, transparent);
+  border:1px solid var(--line); color:var(--ink-faint);
+  transition:transform .14s var(--ease-back), color .2s, border-color .2s, box-shadow .2s; }
+.fav-btn:hover{ color:var(--gold); border-color:color-mix(in srgb, var(--gold) 40%, transparent); }
+.fav-btn:active{ transform:scale(.8); }
+.fav-btn.on{ color:var(--gold); border-color:color-mix(in srgb, var(--gold) 55%, transparent);
+  background:color-mix(in srgb, var(--gold) 12%, transparent); box-shadow:0 0 12px -2px var(--gold); }
 
 /* the search field was a bare control on a dark page — give it the glass treatment */
 :root{ color-scheme:dark; } body.light{ color-scheme:light; }

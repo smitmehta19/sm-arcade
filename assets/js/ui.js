@@ -404,7 +404,12 @@ function renderHome() {
     else if (homeFilter !== 'All') games = games.filter(g => g.category === homeFilter);
     if (q) games = games.filter(g => (g.name + ' ' + g.tagline + ' ' + g.category).toLowerCase().includes(q));
     const grid = $('#gameGrid'); grid.innerHTML = '';
-    if (!games.length) { grid.append(h('div', { class: 'empty-note' }, '👀 No games match.')); return; }
+    if (!games.length) {
+      const msg = homeFilter === 'Favorites'
+        ? 'No favourites yet — tap the ☆ on any game to pin it here.'
+        : '👀 No games match.';
+      grid.append(h('div', { class: 'empty-note' }, msg)); return;
+    }
     games.forEach((g, i) => grid.append(gameCard(g, s, i)));
   }
 }
@@ -435,12 +440,18 @@ function gameCard(g, s, i) {
   const pg = s.perGame[g.id];
   const isFav = s.favorites.includes(g.id);
   const tag = pg && pg.plays ? `${g.tagline} · ${pg.plays}× played` : g.tagline;
+  // visible star toggle (tap to fav/unfav) — stops the tap from launching the game
+  const favBtn = h('button', {
+    class: 'fav-btn' + (isFav ? ' on' : ''), title: isFav ? 'Remove from favourites' : 'Add to favourites',
+    'aria-label': isFav ? 'Remove from favourites' : 'Add to favourites',
+    onclick: e => { e.preventDefault(); e.stopPropagation(); Store.toggleFav(g.id); Store.Sound.tap(); renderHome(); },
+  }, isFav ? '★' : '☆');
   const card = h('a', {
     class: 'gcard' + (isFav ? ' is-fav' : ''), href: 'javascript:void 0',
     style: `--accent:${g.accent}; animation-delay:${Math.min(i * 32, 480)}ms`,
     onclick: () => startMatch(g.id),
   },
-    h('span', { class: 'gcat' }, g.category), h('span', { class: 'fav' }, '★'),
+    h('div', { class: 'gcard-top' }, h('span', { class: 'gcat' }, g.category), favBtn),
     h('span', { class: 'gicon', html: Icons.game(g.id) }), h('span', { class: 'gname' }, g.name), h('span', { class: 'gtag' }, tag),
   );
   let lp;
