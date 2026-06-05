@@ -129,6 +129,10 @@ let reactUnsub = null;    // banter (emote/taunt) listener while a game is mount
 // in-game banter — tap to flash on your partner's screen
 const EMOTES = ['💩', '😏', '🔥', '😂', '😱', '👏', '🤔', '😤', '😎', '💀', '🤡', '👀', '🙄', '😘', '💪', '🥱'];
 const TAUNTS = [
+  // Smit & Meera's house specials 💞
+  "Flash to Win 👙", "Mirador pics? 👄", "Cosmos pls now", "Cosmos pics? 🍆", "Aunty move",
+  "Let me win I'm your Wife 💍", "Let me win I'm your husband 💖",
+  // classics
   "You're going DOWN 😤", "lol you're gonna lose", "u suck (lovingly) 😘", "I'm literally better than this",
   "Is your screen even ON? 👀", "Aww, you'll win one day 🥹", "Too easy 😎", "GG already? 😏",
   "I'm just warming up 🔥", "Did you forget the rules?", "Sweating yet? 💦", "This is painful to watch 😬",
