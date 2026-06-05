@@ -98,6 +98,8 @@
     id: 'pentago', name: 'Pentago', emoji: '🔵', category: 'Strategy', accent: '#2fe6ff',
     tagline: 'Place a marble, twist a block.',
     init: host => ({ board: Array.from({ length: 6 }, () => Array(6).fill(null)), turn: host, phase: 'place' }),
+    // timeout "skip" → opponent starts a fresh placement (any half-placed marble just stays unrotated)
+    skipTurn: (s, opp) => Object.assign({}, s, { turn: opp, phase: 'place' }),
     render(ctx) {
       const st = ctx.state, b = st.board, me = ctx.me;
       ctx.root.append(ctx.turnBar());

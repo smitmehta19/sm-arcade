@@ -107,6 +107,8 @@
     id: 'yahtzee', name: 'Yahtzee', emoji: '🎲', category: 'Dice', accent: '#ff9f45',
     tagline: 'Roll, hold, fill the card.',
     init: host => ({ turn: host, scores: [{}, {}], dice: [], held: [false, false, false, false, false], rollsLeft: 3, host }),
+    // on a timeout "skip", hand a CLEAN turn to the opponent (don't inherit my dice/rolls)
+    skipTurn: (s, opp) => Object.assign({}, s, { turn: opp, dice: [], held: [false, false, false, false, false], rollsLeft: 3 }),
     render(ctx) {
       const st = ctx.state, me = ctx.me;
       ctx.root.append(ctx.turnBar({ scores: [yTotal(st.scores[0]), yTotal(st.scores[1])] }));

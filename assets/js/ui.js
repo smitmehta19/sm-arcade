@@ -494,7 +494,7 @@ function createMatch(gameId, me, timer) {
     .catch(err => { console.error(err); alert('Could not start the game online.\n\nYour Firebase rules likely need updating to allow "matches" and "presence" (see database.rules.json in the repo, then republish in the Realtime Database → Rules tab).\n\n' + err.message); location.hash = '#/'; });
   location.hash = '#/play/' + gameId;
 }
-// the host's pre-game clock panel: on/off, duration, and (where safe) skip vs forfeit.
+// the host's pre-game clock panel: on/off, duration, and skip ("chance gone") vs forfeit.
 // Tracked as a singleton so navigating away / a match change tears it down cleanly
 // instead of leaving an orphan overlay floating over the app (a past crash source).
 let timerPanelEl = null, timerPanelGame = null;
@@ -520,12 +520,16 @@ function showTimerPanel(gameId, cap, onDone) {
         h('button', { onclick: () => { secs = Math.max(10, secs - 5); draw(); } }, '−'),
         h('div', { class: 'v' }, secs + 's'),
         h('button', { onclick: () => { secs = Math.min(180, secs + 5); draw(); } }, '+')));
-      if (!cap.tour) body.append(
-        h('p', { style: 'color:var(--ink-faint);font-size:12px;margin:12px 0 4px' }, 'When time runs out:'),
+      // BOTH choices are always offered — you decide what running out of time means.
+      body.append(
+        h('p', { style: 'color:var(--ink-faint);font-size:12px;margin:14px 0 4px' }, 'When time runs out:'),
         h('div', { class: 'tp-toggle' },
-          cap.skip ? h('button', { class: 'btn ' + (mode === 'skip' ? 'btn-primary' : 'btn-ghost'), onclick: () => { mode = 'skip'; draw(); } }, '⏭️ Skip turn') : '',
-          h('button', { class: 'btn ' + (mode === 'forfeit' ? 'btn-primary' : 'btn-ghost'), onclick: () => { mode = 'forfeit'; draw(); } }, '💀 Forfeit')));
-      else body.append(h('p', { style: 'color:var(--ink-faint);font-size:11px;margin:10px 4px 0' }, 'Each tournament game uses its own sensible timeout.'));
+          h('button', { class: 'btn ' + (mode === 'skip' ? 'btn-primary' : 'btn-ghost'), onclick: () => { mode = 'skip'; draw(); } }, '⏭️ Chance gone'),
+          h('button', { class: 'btn ' + (mode === 'forfeit' ? 'btn-primary' : 'btn-ghost'), onclick: () => { mode = 'forfeit'; draw(); } }, '💀 Forfeit')),
+        h('p', { style: 'color:var(--ink-faint);font-size:11px;margin:8px 6px 0;line-height:1.45' },
+          mode === 'skip'
+            ? 'Chance gone — your turn passes to your partner and the game keeps going.'
+            : (cap.tour ? 'Forfeit — you lose that game of the tournament.' : 'Forfeit — you lose the whole game.')));
     }
     body.append(h('button', { class: 'btn btn-primary btn-block mt', onclick: () => finish({ on, secs, mode }) }, on ? `Start · ${secs}s per turn` : 'Start (no timer)'));
   }
@@ -863,11 +867,20 @@ function renderStage(gameId) {
   }
   function fireTimeout(st, sub, clock, isTour) {
     if (!currentMatch || currentMatch.status !== 'active') return;
-    const mode = isTour ? (((TIMER_GAMES[st.subId] || {}).skip) ? 'skip' : 'forfeit') : (currentMatch.timer.mode || 'forfeit');
+    // the host's chosen mode wins; tournaments fall back to a per-sub-game default if none was set
+    const chosen = currentMatch.timer && currentMatch.timer.mode;
+    const mode = chosen || (isTour ? (((TIMER_GAMES[st.subId] || {}).skip) ? 'skip' : 'forfeit') : 'forfeit');
     const opp = 1 - clock;
     Store.Sound.bad();
-    if (mode === 'skip') { const flipped = Object.assign({}, sub, { turn: opp }); isTour ? tourCommit(flipped, undefined) : commitMove(gameId, flipped, undefined); }
-    else { isTour ? tourCommit(sub, opp) : commitMove(gameId, sub, opp); }
+    if (mode === 'skip') {
+      // "Chance gone" — pass the turn cleanly. A game may define skipTurn(state, opp)
+      // to reset its own mid-turn bits (e.g. Yahtzee's dice); else we just flip turn.
+      const def = isTour ? Games.byId(st.subId) : Games.byId(gameId);
+      const flipped = (def && def.skipTurn) ? def.skipTurn(sub, opp) : Object.assign({}, sub, { turn: opp });
+      isTour ? tourCommit(flipped, undefined) : commitMove(gameId, flipped, undefined);
+    } else {
+      isTour ? tourCommit(sub, opp) : commitMove(gameId, sub, opp);
+    }
   }
 
   // react to live match changes while mounted
