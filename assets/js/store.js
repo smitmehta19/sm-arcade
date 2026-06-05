@@ -17,7 +17,7 @@ const Store = (() => {
   });
 
   let state = load();
-  let db = null, cloud = false, ref = null;
+  let db = null, cloud = false, ref = null, serverOffset = 0;
   const subs = new Set();
 
   function load() {
@@ -70,6 +70,8 @@ const Store = (() => {
     ref = db.ref('rooms/' + (window.CLOUD.ROOM || 'default'));
     cloud = true;
     setPill('cloud');
+    // keep a synced clock so both phones count timers down to the same instant
+    try { db.ref('.info/serverTimeOffset').on('value', s => { serverOffset = s.val() || 0; }); } catch (e) {}
     cloudCbs.forEach(fn => { try { fn(); } catch (e) {} });
     // pull remote, merge newest-wins, then live-listen
     ref.on('value', snap => {
@@ -203,6 +205,7 @@ const Store = (() => {
     updateMatch(patch) { if (cloud) return db.ref('matches/' + ROOM() + '/active').update(patch); return Promise.resolve(); },
     clearMatch() { if (cloud) return db.ref('matches/' + ROOM() + '/active').remove(); return Promise.resolve(); },
     serverTime: () => (typeof firebase !== 'undefined' && firebase.database) ? firebase.database.ServerValue.TIMESTAMP : Date.now(),
+    serverNow: () => Date.now() + serverOffset,   // synced wall-clock for countdown timers
     // "come online & play" nudge — stored under matches/<room>/nudges/<seat> (already rule-permitted)
     sendNudge(targetSeat, fromSeat, fromName) { if (!cloud) return Promise.resolve(); return db.ref('matches/' + ROOM() + '/nudges/' + targetSeat).set({ from: fromSeat, name: fromName || '', t: Net.serverTime() }); },
     watchNudge(seat, cb) { if (!cloud) return () => {}; const r = db.ref('matches/' + ROOM() + '/nudges/' + seat); const fn = r.on('value', sn => cb(sn.val())); return () => r.off('value', fn); },

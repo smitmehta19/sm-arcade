@@ -119,6 +119,22 @@ const Overlay = (() => {
 let presence = {};        // { 0:{online,name,ts}, 1:{...} }
 let currentMatch = null;  // active match object or null
 let stageHook = null;     // set by the stage controller while a game is mounted
+let timerInterval = null; // countdown ticker while a timed game is mounted
+
+// Which games support a per-turn timer, and whether a "skip turn" timeout is SAFE
+// (true) or only "forfeit" makes sense (false — multi-phase turns / word & dice games).
+const TIMER_GAMES = {
+  'tic-tac-toe': { skip: true }, 'connect-four': { skip: true }, 'gomoku': { skip: true },
+  'dots-boxes': { skip: true }, 'reversi': { skip: true }, 'hex': { skip: true },
+  'quoridor': { skip: true }, 'onitama': { skip: true }, 'memory': { skip: true },
+  'battleship': { skip: true }, 'jaipur': { skip: true },
+  'checkers': { skip: false }, 'pentago': { skip: false }, 'quarto': { skip: false }, 'nine-mens-morris': { skip: false },
+  'ghost': { skip: false }, 'word-duel': { skip: false }, 'hangman': { skip: false },
+  'code-breaker': { skip: false }, 'liars-dice': { skip: false }, 'yahtzee': { skip: false },
+};
+const timerCap = gameId => TIMER_GAMES[gameId] || (Games.byId(gameId) && Games.byId(gameId).isTournament ? { skip: true, tour: true } : null);
+// next turn's deadline (synced server ms) when the current match has a live timer
+const freshDeadline = () => (currentMatch && currentMatch.timer && currentMatch.timer.on) ? (Store.Net.serverNow() + currentMatch.timer.secs * 1000) : null;
 
 function initNet() {
   Store.onCloud(() => {
@@ -158,6 +174,14 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   .badge .badge-em{ font-size:17px; line-height:1; margin-right:5px; }
   .badge.fun{ border-color:rgba(255,159,69,.5); background:linear-gradient(120deg, rgba(255,159,69,.14), rgba(255,47,166,.10)); }
   .badge.fun .badge-k{ color:var(--ink); }
+  .timer-bar{ position:relative; height:26px; border-radius:9px; overflow:hidden; background:var(--bg-2); border:1px solid var(--glass-brd); margin:0 0 10px; }
+  .timer-bar[hidden]{ display:none; }
+  .timer-bar .tb-fill{ position:absolute; left:0; top:0; bottom:0; width:100%; transition:width .25s linear; }
+  .timer-bar.ok .tb-fill{ background:linear-gradient(90deg,#2ea043,var(--lime)); }
+  .timer-bar.warn .tb-fill{ background:linear-gradient(90deg,#d4a72c,var(--gold)); }
+  .timer-bar.crit .tb-fill{ background:linear-gradient(90deg,#ff4d6d,var(--magenta)); }
+  .timer-bar .tb-txt{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.55); letter-spacing:.3px; }
+  .tp-toggle{ display:flex; gap:8px; justify-content:center; } .tp-toggle .btn{ flex:1; max-width:150px; }
 ` }));
 
 const Notify = {
@@ -214,6 +238,7 @@ async function sendNudge(me, partner) {
 const Router = (() => {
   function go() {
     stageHook = null;
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
     // identity gate
     if (Store.getIdentity() == null) { renderIdentity(); syncChrome('#/'); return; }
     const hash = location.hash || '#/';
@@ -384,23 +409,61 @@ function gameCard(g, s, i) {
 function startMatch(gameId) {
   const me = Store.getIdentity();
   if (!Store.Net.ready()) { alert('Not connected to the cloud yet — online play needs your internet + Firebase. Try again in a moment.'); return; }
-  Store.Sound.place();
   if (currentMatch && currentMatch.status !== 'finished' && currentMatch.gameId !== gameId) {
     if (!confirm('Start a new game? This ends the current one.')) return;
   }
+  Store.Sound.place();
+  const cap = timerCap(gameId);
+  if (cap && me === 0) { showTimerPanel(gameId, cap, timer => createMatch(gameId, me, timer)); return; } // only Smit sets the clock
+  createMatch(gameId, me, { on: false });
+}
+function createMatch(gameId, me, timer) {
   // state is JSON-stringified: Firebase RTDB strips nulls/empties & mangles arrays, so we store a plain string
   const state = JSON.stringify(Games.byId(gameId).init(me));
-  const match = { gameId, host: me, status: 'waiting', state, starter: me, roundWinner: null, by: me, t: Date.now() };
+  const match = { gameId, host: me, status: 'waiting', state, starter: me, roundWinner: null, timer: timer || { on: false }, by: me, t: Date.now() };
   // set locally BEFORE navigating so the stage paints the new game immediately
-  // (otherwise paint() briefly sees the old/null match and flashes "This game ended.")
   currentMatch = match;
   Store.Net.setMatch(match)
     .catch(err => { console.error(err); alert('Could not start the game online.\n\nYour Firebase rules likely need updating to allow "matches" and "presence" (see database.rules.json in the repo, then republish in the Realtime Database → Rules tab).\n\n' + err.message); location.hash = '#/'; });
   location.hash = '#/play/' + gameId;
 }
+// Smit's pre-game clock panel: on/off, duration, and (where safe) skip vs forfeit
+function showTimerPanel(gameId, cap, onDone) {
+  let on = false, secs = 30, mode = cap.skip ? 'skip' : 'forfeit';
+  const back = h('div', { class: 'rules-overlay' });
+  const card = h('div', { class: 'rules-card', style: 'text-align:center' });
+  const body = h('div', {}); card.append(body);
+  function draw() {
+    body.innerHTML = '';
+    body.append(
+      h('h3', {}, '⏱️ Turn timer'),
+      h('p', { style: 'color:var(--ink-dim);font-size:13px;margin:6px 0 12px' }, `A per-turn clock for ${esc(Games.byId(gameId).name)}.`),
+      h('div', { class: 'tp-toggle' },
+        h('button', { class: 'btn ' + (on ? 'btn-ghost' : 'btn-primary'), onclick: () => { on = false; draw(); } }, 'No timer'),
+        h('button', { class: 'btn ' + (on ? 'btn-primary' : 'btn-ghost'), onclick: () => { on = true; draw(); } }, 'Timer on')));
+    if (on) {
+      body.append(h('div', { class: 'ld-step', style: 'margin-top:14px' },
+        h('button', { onclick: () => { secs = Math.max(10, secs - 5); draw(); } }, '−'),
+        h('div', { class: 'v' }, secs + 's'),
+        h('button', { onclick: () => { secs = Math.min(180, secs + 5); draw(); } }, '+')));
+      if (!cap.tour) body.append(
+        h('p', { style: 'color:var(--ink-faint);font-size:12px;margin:12px 0 4px' }, 'When time runs out:'),
+        h('div', { class: 'tp-toggle' },
+          cap.skip ? h('button', { class: 'btn ' + (mode === 'skip' ? 'btn-primary' : 'btn-ghost'), onclick: () => { mode = 'skip'; draw(); } }, '⏭️ Skip turn') : '',
+          h('button', { class: 'btn ' + (mode === 'forfeit' ? 'btn-primary' : 'btn-ghost'), onclick: () => { mode = 'forfeit'; draw(); } }, '💀 Forfeit')));
+      else body.append(h('p', { style: 'color:var(--ink-faint);font-size:11px;margin:10px 4px 0' }, 'Each tournament game uses its own sensible timeout.'));
+    }
+    body.append(h('button', { class: 'btn btn-primary btn-block mt', onclick: () => { back.remove(); onDone({ on, secs, mode }); } }, on ? `Start · ${secs}s per turn` : 'Start (no timer)'));
+  }
+  draw(); back.append(card); document.body.append(back); Store.Sound.tap();
+  back.onclick = e => { if (e.target === back) { back.remove(); onDone({ on: false }); } };
+}
 function joinMatch() {
   Store.Sound.good();
-  Store.Net.updateMatch({ status: 'active', t: Date.now() });
+  const patch = { status: 'active', t: Date.now() }, dl = freshDeadline();
+  if (dl) patch.deadline = dl;                       // start the clock when the game goes live
+  if (currentMatch) currentMatch = Object.assign({}, currentMatch, { status: 'active' });
+  Store.Net.updateMatch(patch);
   if (currentMatch) location.hash = '#/play/' + currentMatch.gameId;
 }
 function optimistic(patch) { if (currentMatch) { currentMatch = Object.assign({}, currentMatch, patch); if (stageHook) stageHook(currentMatch); } }
@@ -410,6 +473,7 @@ function advanceRound(gameId) {
   const newStarter = 1 - (currentMatch && currentMatch.starter != null ? currentMatch.starter : 0);
   const state = JSON.stringify(Games.byId(gameId).init(newStarter));
   const patch = { state, status: 'active', starter: newStarter, roundWinner: null };
+  const dl = freshDeadline(); if (dl) patch.deadline = dl;
   optimistic(patch);
   Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
 }
@@ -442,10 +506,11 @@ function renderStage(gameId) {
     h('p', {}, game.tagline),
     h('button', { class: 'rules-btn', onclick: () => showRules(game) }, 'How to play'));
   const seriesBar = h('div', { class: 'series-bar', id: 'seriesBar' });
+  const timerBar = h('div', { class: 'timer-bar', hidden: '' });
   const mount = h('div', { class: 'game-wrap', id: 'gameMount' });
   const msg = h('div', { class: 'game-msg', id: 'gameMsg' });
   const endBtn = h('button', { class: 'end-btn', onclick: requestEndGame }, 'End game');
-  const stage = h('div', { class: 'stage' }, head, seriesBar, mount, msg, endBtn);
+  const stage = h('div', { class: 'stage' }, head, seriesBar, timerBar, mount, msg, endBtn);
   view.append(stage);
 
   let overlayMode = null; // null | 'endWait' | 'endAsk' | 'over' | 'tourMid' | 'tourEnd'
@@ -598,6 +663,7 @@ function renderStage(gameId) {
   function pushTour(t, status, roundWinner) {
     const patch = { state: JSON.stringify(t), status };
     if (roundWinner !== undefined) patch.roundWinner = roundWinner;
+    if (status === 'active' && t.phase === 'play') { const dl = freshDeadline(); if (dl) patch.deadline = dl; }
     currentMatch = Object.assign({}, currentMatch, patch);
     paint();
     Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
@@ -676,10 +742,40 @@ function renderStage(gameId) {
         if (winner === 0 || winner === 1) Store.recordResult(gid, winner === 0 ? 'p1' : 'p2');
         else if (winner === 'draw') Store.recordResult(gid, 'draw');
       }
-    } else patch = { state: stateStr, status: 'active' };
+    } else { patch = { state: stateStr, status: 'active' }; const dl = freshDeadline(); if (dl) patch.deadline = dl; }
     currentMatch = Object.assign({}, currentMatch, patch);
     paint();
     Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
+  }
+
+  // ----- per-turn countdown timer (synced via server time; both phones see the same clock) -----
+  let firedFor = null;
+  function paintTimer() {
+    const m = currentMatch;
+    if (!m || m.gameId !== gameId || m.status !== 'active' || !m.timer || !m.timer.on || !m.deadline) { timerBar.hidden = true; return; }
+    let st; try { st = JSON.parse(m.state); } catch (e) { timerBar.hidden = true; return; }
+    const isTour = !!game.isTournament;
+    if (isTour && st.phase !== 'play') { timerBar.hidden = true; return; }
+    const sub = isTour ? st.sub : st;
+    const clock = sub ? sub.turn : undefined;            // the player on the clock
+    if (clock == null) { timerBar.hidden = true; return; }
+    const remMs = m.deadline - Store.Net.serverNow();
+    const pct = Math.max(0, Math.min(100, (remMs / (m.timer.secs * 1000)) * 100));
+    const lvl = pct > 50 ? 'ok' : (pct > 22 ? 'warn' : 'crit');
+    timerBar.hidden = false;
+    timerBar.className = 'timer-bar show ' + lvl;
+    timerBar.innerHTML = `<div class="tb-fill" style="width:${pct}%"></div><div class="tb-txt">⏱ ${esc(s.players[clock].name)} · ${Math.max(0, Math.ceil(remMs / 1000))}s</div>`;
+    // enforce: the player on the clock fires at 0; the opponent fires after a 2s grace (covers a stalled/closed opponent)
+    if (m.deadline === firedFor) return;
+    if (me === clock ? remMs <= 0 : remMs <= -2000) { firedFor = m.deadline; fireTimeout(st, sub, clock, isTour); }
+  }
+  function fireTimeout(st, sub, clock, isTour) {
+    if (!currentMatch || currentMatch.status !== 'active') return;
+    const mode = isTour ? (((TIMER_GAMES[st.subId] || {}).skip) ? 'skip' : 'forfeit') : (currentMatch.timer.mode || 'forfeit');
+    const opp = 1 - clock;
+    Store.Sound.bad();
+    if (mode === 'skip') { const flipped = Object.assign({}, sub, { turn: opp }); isTour ? tourCommit(flipped, undefined) : commitMove(gameId, flipped, undefined); }
+    else { isTour ? tourCommit(sub, opp) : commitMove(gameId, sub, opp); }
   }
 
   // react to live match changes while mounted
@@ -688,6 +784,9 @@ function renderStage(gameId) {
     paint();
   };
   paint();
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(paintTimer, 250);
+  paintTimer();
 }
 
 function waitCard(title, sub, onBtn, spinner, extraBtn) {
