@@ -512,3 +512,88 @@ body.light::after{ opacity:.025; }
   .hero h1, .hero::after, .gcard .gicon .icn, .tour-cta::after, .btn-primary{ animation:none !important; }
   body::after{ opacity:.04; }
 }
+
+/* ============================================================
+   SCORES SCREEN — a glowing scoreboard, not a list of numbers
+   ============================================================ */
+.score-hero h2{ position:relative; display:inline-block; }
+.score-hero{ text-align:center; }
+.score-hero h2::after{
+  content:""; position:absolute; left:50%; bottom:-9px; transform:translateX(-50%);
+  width:64px; height:2px; border-radius:2px;
+  background:linear-gradient(90deg, transparent, var(--cyan), var(--magenta), transparent);
+  box-shadow:0 0 12px rgba(155,123,255,.5);
+}
+/* the headline numbers read like backlit LED counters */
+.bigvs .big{ text-shadow:0 0 30px currentColor, 0 0 8px rgba(0,0,0,.4); }
+.bigvs .c1 .big{ animation:scoreGlow 4s ease-in-out infinite; }
+.bigvs .c2 .big{ animation:scoreGlow 4s ease-in-out 2s infinite; }
+@keyframes scoreGlow{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.18); } }
+.bigvs .av{ filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); }
+.bigvs .mid{ animation:blink 2.2s steps(2) infinite; }
+
+/* win-share meter: a charged rail with a travelling sheen + a soft thumb */
+.meter{ position:relative; box-shadow:inset 0 0 14px rgba(0,0,0,.55), 0 0 0 1px var(--glass-brd); }
+.meter .fill{ position:relative; overflow:hidden; }
+.meter .fill::after{
+  content:""; position:absolute; inset:0; background:linear-gradient(100deg, transparent 30%, rgba(255,255,255,.45) 50%, transparent 70%);
+  background-size:220% 100%; animation:meterSheen 3.2s ease-in-out infinite;
+}
+@keyframes meterSheen{ 0%{ background-position:120% 0; } 100%{ background-position:-120% 0; } }
+
+/* stat tiles: lit top edge, glowing figures, springy press */
+.stat{ position:relative; transition:transform .18s var(--ease), box-shadow .25s, border-color .25s;
+  box-shadow:inset 0 2px 0 rgba(155,123,255,.34), inset 0 1px 0 rgba(255,255,255,.06), var(--shadow-soft); }
+.stat:active{ transform:scale(.97); }
+.stat .v{ text-shadow:0 0 18px rgba(155,123,255,.4); }
+
+/* taunt line — a marquee ribbon */
+.taunt-line{ position:relative; padding:10px 16px; }
+
+/* earned badges get a soft inner shine that drifts across */
+.badge.got{ position:relative; overflow:hidden; }
+.badge.got::after{ content:""; position:absolute; top:0; left:0; width:45%; height:100%; pointer-events:none;
+  background:linear-gradient(100deg, transparent, rgba(255,255,255,.22), transparent); animation:badgeShine 5s ease-in-out infinite; }
+@keyframes badgeShine{ 0%,100%{ transform:translateX(-160%) skewX(-16deg); } 55%,75%{ transform:translateX(320%) skewX(-16deg); } }
+
+/* by-game rows: lift on press, brighter game-coloured icon, glowing tallies */
+.lead-item{ transition:transform .16s var(--ease), box-shadow .25s, border-color .25s; }
+.lead-item:active{ transform:scale(.985); }
+.lead-item .le .icn{ filter:drop-shadow(0 0 9px currentColor); }
+.lead-item .lsc .a{ text-shadow:0 0 12px var(--p1); } .lead-item .lsc .b{ text-shadow:0 0 12px var(--p2); }
+
+/* ============================================================
+   BOARD FRAMES — every game looks like a lit arcade cabinet,
+   glowing in that game's signature accent (--accent set on .stage)
+   ============================================================ */
+.stage .board-frame{
+  position:relative;
+  border-color:color-mix(in srgb, var(--accent, var(--violet)) 28%, var(--glass-brd));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    0 0 0 1px color-mix(in srgb, var(--accent, var(--violet)) 16%, transparent),
+    0 18px 50px -22px color-mix(in srgb, var(--accent, var(--violet)) 55%, #000),
+    var(--shadow-soft);
+}
+/* a thin accent filament across the top of the cabinet */
+.stage .board-frame::before{
+  content:""; position:absolute; left:18px; right:18px; top:0; height:2px; border-radius:2px;
+  background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent, var(--violet)) 85%, transparent), transparent);
+  box-shadow:0 0 12px color-mix(in srgb, var(--accent, var(--violet)) 70%, transparent);
+}
+/* the stage title icon + heading echo the accent glow */
+.stage-head h2{ text-shadow:0 0 22px color-mix(in srgb, var(--accent, var(--violet)) 45%, transparent); }
+.stage-head .h2-icon .icn{ filter:drop-shadow(0 0 8px color-mix(in srgb, var(--accent, var(--violet)) 60%, transparent)); }
+
+/* the active player's turn chip pulls focus with a gentle breathing ring */
+.turnchip.active{ animation:turnBreath 2.4s ease-in-out infinite; }
+@keyframes turnBreath{ 0%,100%{ box-shadow:var(--glow-c-faint, 0 0 0 0 transparent); } }
+.turnchip.p1.active{ animation:turnBreathC 2.4s ease-in-out infinite; }
+.turnchip.p2.active{ animation:turnBreathM 2.4s ease-in-out infinite; }
+@keyframes turnBreathC{ 0%,100%{ box-shadow:0 0 0 1px var(--p1), 0 0 14px -4px var(--p1); } 50%{ box-shadow:0 0 0 1px var(--p1), 0 0 26px -2px var(--p1); } }
+@keyframes turnBreathM{ 0%,100%{ box-shadow:0 0 0 1px var(--p2), 0 0 14px -4px var(--p2); } 50%{ box-shadow:0 0 0 1px var(--p2), 0 0 26px -2px var(--p2); } }
+
+@media (prefers-reduced-motion: reduce){
+  .bigvs .c1 .big, .bigvs .c2 .big, .bigvs .mid, .meter .fill::after,
+  .badge.got::after, .turnchip.active{ animation:none !important; }
+}

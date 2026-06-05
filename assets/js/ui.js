@@ -592,7 +592,8 @@ function renderStage(gameId) {
     h('div', { class: 'rp-emotes' }, EMOTES.map(e => h('button', { class: 'rp-e', onclick: () => sendReact(e) }, e))),
     h('div', { class: 'rp-taunts' }, TAUNTS.map(t => h('button', { class: 'rp-t', onclick: () => sendReact(t) }, t))));
   const reactBtn = h('button', { class: 'react-btn', onclick: () => { reactPanel.classList.toggle('open'); Store.Sound.tap(); } }, '💬');
-  const stage = h('div', { class: 'stage' }, head, seriesBar, timerBar, mount, msg, endBtn, reactBtn, reactPanel);
+  // expose the game's signature colour so the board frame / chrome can glow in it
+  const stage = h('div', { class: 'stage', style: `--accent:${game.accent}` }, head, seriesBar, timerBar, mount, msg, endBtn, reactBtn, reactPanel);
   view.append(stage);
 
   let overlayMode = null; // null | 'endWait' | 'endAsk' | 'over' | 'tourMid' | 'tourEnd'
