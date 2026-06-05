@@ -283,7 +283,10 @@ const Router = (() => {
     stageHook = null;
     if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
     if (reactUnsub) { reactUnsub(); reactUnsub = null; }
-    if (typeof closeTimerPanel === 'function') closeTimerPanel(); // never orphan the clock picker
+    // Tear the clock picker down ONLY when leaving its game's stage. (startMatch
+    // navigates to the play route and THEN opens the picker, so the hashchange that
+    // navigation fires must not nuke the panel we're about to show for this game.)
+    if (timerPanelEl && location.hash !== '#/play/' + timerPanelGame) closeTimerPanel();
     // identity gate
     if (Store.getIdentity() == null) { renderIdentity(); syncChrome('#/'); return; }
     const hash = location.hash || '#/';
@@ -494,14 +497,14 @@ function createMatch(gameId, me, timer) {
 // the host's pre-game clock panel: on/off, duration, and (where safe) skip vs forfeit.
 // Tracked as a singleton so navigating away / a match change tears it down cleanly
 // instead of leaving an orphan overlay floating over the app (a past crash source).
-let timerPanelEl = null;
-function closeTimerPanel() { if (timerPanelEl) { timerPanelEl.remove(); timerPanelEl = null; } }
+let timerPanelEl = null, timerPanelGame = null;
+function closeTimerPanel() { if (timerPanelEl) { timerPanelEl.remove(); timerPanelEl = null; timerPanelGame = null; } }
 function showTimerPanel(gameId, cap, onDone) {
   closeTimerPanel();
   let on = false, secs = 30, mode = cap.skip ? 'skip' : 'forfeit', done = false;
   const finish = (timer) => { if (done) return; done = true; closeTimerPanel(); onDone(timer); };
   const back = h('div', { class: 'rules-overlay' });
-  timerPanelEl = back;
+  timerPanelEl = back; timerPanelGame = gameId;
   const card = h('div', { class: 'rules-card', style: 'text-align:center' });
   const body = h('div', {}); card.append(body);
   function draw() {
