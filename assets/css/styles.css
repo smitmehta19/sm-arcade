@@ -410,3 +410,105 @@ body.light .bg-glow{ opacity:.6; } body.light .vignette{ box-shadow:inset 0 0 16
 /* ---------- responsive ---------- */
 @media (min-width:680px){ .grid{ grid-template-columns:repeat(auto-fill, minmax(184px,1fr)); gap:16px; } .gcard{ min-height:158px; } .gcard .gicon .icn{ width:40px; height:40px; } }
 @media (max-width:380px){ .grid{ grid-template-columns:repeat(2,1fr); gap:11px; } .gcard{ min-height:124px; padding:13px 11px; } .gcard .gicon .icn{ width:28px; height:28px; } .mini-score{ font-size:14px; padding:6px 10px; } }
+
+/* ============================================================
+   DESIGN POLISH — depth, grain, marquee, touch-first card life
+   (additive layer; deepens the Refined-Neon direction)
+   ============================================================ */
+
+/* deeper, cinematic backdrop — a cold top-light fading into the void */
+body{
+  background:
+    radial-gradient(135% 75% at 50% -12%, #0c1330 0%, rgba(9,12,24,0) 58%),
+    radial-gradient(100% 60% at 100% 0%, rgba(255,77,157,.06), transparent 55%),
+    var(--bg);
+  background-attachment:fixed;
+}
+body.light{ background:
+    radial-gradient(135% 75% at 50% -12%, #ffffff 0%, rgba(238,241,251,0) 60%),
+    var(--bg); }
+
+/* filmic grain over the whole frame — tactile, premium, near-subliminal */
+body::after{
+  content:""; position:fixed; inset:0; z-index:200; pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.62' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:200px 200px; opacity:.05; mix-blend-mode:soft-light;
+}
+body.light::after{ opacity:.025; }
+
+/* arcade marquee hero — breathing neon + a glowing closing rule */
+@keyframes neonBreath{ 0%,100%{ filter:drop-shadow(0 0 14px rgba(155,123,255,.25)); } 50%{ filter:drop-shadow(0 0 26px rgba(155,123,255,.5)); } }
+.hero h1{ animation:floatUp .6s var(--ease) both, neonBreath 5.5s ease-in-out 1s infinite; }
+.hero::after{
+  content:""; display:block; width:128px; height:2px; margin:16px auto 0; border-radius:2px;
+  background:linear-gradient(90deg, transparent, var(--cyan), var(--violet), var(--magenta), transparent);
+  background-size:220% 100%; box-shadow:0 0 16px rgba(155,123,255,.55); animation:marqueeShimmer 4.5s linear infinite;
+}
+@keyframes marqueeShimmer{ from{ background-position:0% 0; } to{ background-position:220% 0; } }
+/* the live tally reads as a charged cyan→magenta filament */
+.mini-tally{
+  background:linear-gradient(90deg, var(--cyan), var(--violet) 50%, var(--magenta));
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent;
+  filter:drop-shadow(0 0 10px rgba(155,123,255,.3));
+}
+
+/* TOUCH-FIRST CARD LIFE — each game carries its accent identity at rest,
+   not only on hover (which never fires on a phone) */
+.gcard{
+  box-shadow:
+    inset 0 2px 0 color-mix(in srgb, var(--accent, var(--violet)) 42%, transparent),
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 10px 26px -16px color-mix(in srgb, var(--accent, var(--violet)) 50%, transparent),
+    var(--shadow-soft);
+}
+.gcard::before{ opacity:.34; } /* faint accent wash always present */
+.gcard .gicon .icn{ animation:iconFloat 4.8s ease-in-out infinite; }
+.gcard:nth-child(3n+2) .gicon .icn{ animation-delay:-1.6s; }
+.gcard:nth-child(3n)   .gicon .icn{ animation-delay:-3.2s; }
+@keyframes iconFloat{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-4px); } }
+.gcard:hover{ box-shadow:
+    inset 0 2px 0 color-mix(in srgb, var(--accent, var(--violet)) 90%, transparent),
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 22px 44px -18px rgba(0,0,0,.7),
+    0 0 34px -8px var(--accent, var(--violet)); }
+.gcard:active{ transform:scale(.97); }
+/* refined category tag — a glassy capsule instead of bare text */
+.gcard .gcat{
+  top:10px; right:10px; padding:3px 8px; border-radius:999px; opacity:1;
+  background:color-mix(in srgb, var(--accent, var(--violet)) 14%, rgba(255,255,255,.03));
+  border:1px solid color-mix(in srgb, var(--accent, var(--violet)) 34%, transparent);
+  backdrop-filter:blur(6px);
+}
+
+/* the search field was a bare control on a dark page — give it the glass treatment */
+:root{ color-scheme:dark; } body.light{ color-scheme:light; }
+.search{
+  background:var(--panel); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur);
+  border:1px solid var(--glass-brd); box-shadow:inset 0 1px 0 rgba(255,255,255,.06), var(--shadow-soft);
+  transition:border-color .2s, box-shadow .2s;
+}
+.search:focus-within{ border-color:var(--violet); box-shadow:var(--glow-v); }
+.search input{ color-scheme:dark; }
+
+/* idle chips get a hairline edge so the rail reads as a control, not floating text */
+.chip:not(.active){ border:1px solid var(--line); }
+
+/* glowing halo beneath the active bottom-nav tab (background paints behind content) */
+.nav-item.active{ background:radial-gradient(58% 74% at 50% 28%, color-mix(in srgb, var(--violet) 26%, transparent), transparent 72%); }
+
+/* tournament CTA earns a slow trophy-gold sheen sweep */
+.tour-cta{ position:relative; overflow:hidden; }
+.tour-cta::after{
+  content:""; position:absolute; top:0; left:0; width:45%; height:100%; pointer-events:none;
+  background:linear-gradient(100deg, transparent, rgba(255,210,58,.18), transparent); animation:ctaSweep 5.5s ease-in-out infinite;
+}
+@keyframes ctaSweep{ 0%,100%{ transform:translateX(-140%) skewX(-16deg); } 55%,70%{ transform:translateX(320%) skewX(-16deg); } }
+
+/* a touch more presence for primary actions — living gradient, no flicker */
+.btn-primary{ background-size:170% 170%; animation:btnFlow 7s ease infinite; }
+@keyframes btnFlow{ 0%,100%{ background-position:0% 50%; } 50%{ background-position:100% 50%; } }
+
+@media (prefers-reduced-motion: reduce){
+  .hero h1, .hero::after, .gcard .gicon .icn, .tour-cta::after, .btn-primary{ animation:none !important; }
+  body::after{ opacity:.04; }
+}
