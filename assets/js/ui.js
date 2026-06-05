@@ -209,6 +209,11 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   .react-pop .rp-txt{ background:var(--panel-2); border:1px solid var(--glass-brd); border-radius:16px; padding:11px 18px; font-size:17px; font-weight:800; color:var(--ink); box-shadow:0 10px 34px rgba(0,0,0,.55); max-width:82vw; text-align:center; }
   .react-pop .rp-txt small{ display:block; color:var(--gold); font-size:11px; font-weight:700; margin-bottom:2px; }
   @keyframes reactFloat{ 0%{ opacity:0; transform:translateX(-50%) translateY(24px) scale(.6); } 14%{ opacity:1; transform:translateX(-50%) translateY(0) scale(1.12); } 28%{ transform:translateX(-50%) translateY(0) scale(1); } 78%{ opacity:1; } 100%{ opacity:0; transform:translateX(-50%) translateY(-70px) scale(.92); } }
+  .game-wrap.moved{ animation:moveGlow .65s var(--ease); border-radius:16px; }
+  @keyframes moveGlow{ 0%{ box-shadow:0 0 0 0 rgba(155,123,255,.0); } 25%{ box-shadow:0 0 0 3px rgba(155,123,255,.7), 0 0 22px rgba(155,123,255,.4); } 100%{ box-shadow:0 0 0 0 rgba(155,123,255,0); } }
+  .turn-flash{ position:fixed; top:62px; left:50%; transform:translateX(-50%); z-index:65; background:var(--panel-2); border:1px solid var(--glass-brd); border-radius:999px; padding:8px 16px; font-size:13px; font-weight:700; color:var(--ink); box-shadow:0 6px 20px rgba(0,0,0,.5); pointer-events:none; animation:turnFlash 1.4s ease forwards; }
+  @keyframes turnFlash{ 0%{ opacity:0; transform:translateX(-50%) translateY(-10px); } 12%{ opacity:1; transform:translateX(-50%) translateY(0); } 80%{ opacity:1; } 100%{ opacity:0; } }
+  body.shake{ animation:screenShake .42s; } @keyframes screenShake{ 0%,100%{ transform:translate(0,0); } 20%{ transform:translate(-4px,2px); } 40%{ transform:translate(4px,-2px); } 60%{ transform:translate(-3px,-2px); } 80%{ transform:translate(3px,2px); } }
 ` }));
 
 const Notify = {
@@ -546,6 +551,14 @@ function renderStage(gameId) {
   view.append(stage);
 
   let overlayMode = null; // null | 'endWait' | 'endAsk' | 'over' | 'tourMid' | 'tourEnd'
+  let lastMoveT = currentMatch ? currentMatch.t : 0; // for the "opponent moved" feel cue
+  function flashMove() {
+    Store.Sound.move();
+    mount.classList.remove('moved'); void mount.offsetWidth; mount.classList.add('moved');
+    const p = s.players[partnerSeat(me)];
+    const badge = h('div', { class: 'turn-flash' }, `${p.emoji} ${esc(p.name)} moved`);
+    document.body.append(badge); setTimeout(() => { badge.remove(); }, 1400);
+  }
 
   function paint() {
     const m = currentMatch;
@@ -610,6 +623,9 @@ function renderStage(gameId) {
     } else if (!isTour && m.status === 'finished') {
       if (overlayMode !== 'over') { overlayMode = 'over'; showGameOver(m); }
     } else { overlayMode = null; Overlay.hide(); }
+
+    // "opponent moved" feel — glow the board + chime + a quick badge on a fresh move from your partner
+    if (m && m.t !== lastMoveT) { const fresh = lastMoveT !== 0; lastMoveT = m.t; if (fresh && m.status === 'active' && m.by === partnerSeat(me)) flashMove(); }
   }
 
   function tournamentHeader(t) {
@@ -685,6 +701,7 @@ function renderStage(gameId) {
       else if (w === 'draw' || w == null) res = { emoji: '🤝', title: 'Draw!', sub: 'No winner this time', party: false };
       else { const p = s.players[w]; res = { emoji: p.emoji, title: `${esc(p.name)} wins!`, sub: 'Added to your scoreboard 🏆', party: true }; }
       Store.Sound[(w === 'draw' || w == null || w === 'coop-loss') ? 'draw' : 'win']();
+      if (res.party) { document.body.classList.add('shake'); setTimeout(() => document.body.classList.remove('shake'), 450); }
       Overlay.show(res, [
         { label: 'Lobby', onClick: exitMatch },
         { label: `Play ${nxtG.name} →`, onClick: () => { Overlay.hide(); startMatch(nxt); } },
