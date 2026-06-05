@@ -57,6 +57,8 @@ const GAME_RULES = {
   'liars-dice': ['You each roll 5 <b>secret</b> dice. A bid claims how many dice show a face across <b>both</b> players — e.g. “three ⚄” = at least three 5s in total.', 'On your turn either <b>raise</b> the bid (more dice, or the same count with a higher face) or call <b>“Liar!”</b>.', 'On a call, all dice are revealed: if the bid was true the <b>caller</b> loses a die; if it was a bluff the <b>bidder</b> loses one. Lose all 5 dice and you’re out.', '<b>Example:</b> 10 dice are in play and the bid is “four ⚂”. You can see two ⚂ in your own hand, so four total is very believable — raise to “four ⚃” or “five ⚀”. Push the count too high and you’ll get called!'],
   'onitama': ['Each player has a <b>Master</b> (gold ring) + 4 students. Your legal moves come only from your <b>2 face-up cards</b>.', 'On your turn, tap a card, then move ONE piece by that card’s pattern (gold square = the piece, purple = where it may go) — capturing any enemy you land on.', 'Then the card you used <b>swaps with the “next” card</b> and goes to your opponent — so you’re always handing them their future moves.', '<b>Win two ways:</b> capture the enemy Master (Way of the Stone), OR move your Master onto the opponent’s starting temple square (Way of the Stream).'],
   'jaipur': ['Be the richer trader. On your turn do exactly ONE: <b>take</b> one good from the 5-card market, <b>take all 🐫 camels</b>, <b>exchange</b> 2+ of your cards (goods and/or camels) for the same number of market goods, or <b>sell</b> goods.', 'To sell, play any number of ONE good type and grab that many tokens (highest values first). Sell 3 / 4 / 5 at once for a <b>bonus</b> token. 💎 gold ⚪ silver are the priciest.', 'Camels never score on their own, but the player with the <b>most camels</b> at the end gets +5 — and they fuel big exchanges. Hand limit is 7 goods (camels are kept separately).', 'The round ends the moment <b>3 token piles are empty</b>; most rupees wins. <b>Example:</b> sell 3 🌶️ spice → take the top three spice tokens (5+3+3 = 11) <i>plus</i> a 3-sell bonus.'],
+  'letterpress': ['Tap tiles to spell a word (3+ letters); submitting claims every tile in it for <b>your</b> colour — stealing your partner’s un-locked tiles.', 'A tile is <b>locked 🔒</b> (can’t be stolen) when all its up/down/left/right neighbours are already its own colour. Build walls to protect your lead!', 'When every tile is claimed, the <b>most tiles wins</b>. You can’t replay a word, or just bolt letters onto an earlier one.'],
+  'codenames-duet': ['<b>Co-op!</b> Find all <b>9 secret agents</b> together before you run out of turns — and never tap an <b>assassin ☠️</b>.', 'On your turn you secretly see the key — give your partner a <b>one-word clue + a number</b> pointing at agent words.', 'They tap words: a green agent = keep going, a bystander ends the turn, the assassin = instant loss. You win or lose <b>together</b> — no scoreboard points, just pure teamwork. 💞'],
 };
 function showRules(game) {
   const back = h('div', { class: 'rules-overlay', onclick: e => { if (e.target === back) close(); } });
@@ -129,7 +131,7 @@ const TIMER_GAMES = {
   'quoridor': { skip: true }, 'onitama': { skip: true }, 'memory': { skip: true },
   'battleship': { skip: true }, 'jaipur': { skip: true },
   'checkers': { skip: false }, 'pentago': { skip: false }, 'quarto': { skip: false }, 'nine-mens-morris': { skip: false },
-  'ghost': { skip: false }, 'word-duel': { skip: false }, 'hangman': { skip: false },
+  'ghost': { skip: false }, 'word-duel': { skip: false }, 'hangman': { skip: false }, 'letterpress': { skip: false },
   'code-breaker': { skip: false }, 'liars-dice': { skip: false }, 'yahtzee': { skip: false },
 };
 const timerCap = gameId => TIMER_GAMES[gameId] || (Games.byId(gameId) && Games.byId(gameId).isTournament ? { skip: true, tour: true } : null);
@@ -648,9 +650,11 @@ function renderStage(gameId) {
     setTimeout(() => {
       if (overlayMode !== 'over') return;
       let res;
-      if (w === 'draw' || w == null) res = { emoji: '🤝', title: 'Draw!', sub: 'No winner this time', party: false };
+      if (w === 'coop-win') res = { emoji: '🎉', title: 'You both cracked it!', sub: 'Solved together — no points, all glory 💞', party: true };
+      else if (w === 'coop-loss') res = { emoji: '💀', title: 'You both lost…', sub: 'So close — run it back?', party: false };
+      else if (w === 'draw' || w == null) res = { emoji: '🤝', title: 'Draw!', sub: 'No winner this time', party: false };
       else { const p = s.players[w]; res = { emoji: p.emoji, title: `${esc(p.name)} wins!`, sub: 'Added to your scoreboard 🏆', party: true }; }
-      Store.Sound[(w === 'draw' || w == null) ? 'draw' : 'win']();
+      Store.Sound[(w === 'draw' || w == null || w === 'coop-loss') ? 'draw' : 'win']();
       Overlay.show(res, [
         { label: 'Lobby', onClick: exitMatch },
         { label: `Play ${nxtG.name} →`, onClick: () => { Overlay.hide(); startMatch(nxt); } },
