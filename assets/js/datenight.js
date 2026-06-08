@@ -10,7 +10,7 @@
   const css = `
   .dn{ max-width:560px; margin:0 auto; }
   .dn-head{ text-align:center; margin:6px 0 16px; }
-  .dn-head h2{ font-family:var(--font-display); font-weight:800; font-size:clamp(16px,4.6vw,22px); letter-spacing:.6px; margin:0;
+  .dn-head h2{ font-family:var(--font-display); font-weight:800; font-size:clamp(15px,4.2vw,21px); letter-spacing:.4px; margin:0; text-wrap:balance;
     background:linear-gradient(90deg,var(--magenta),var(--violet),var(--cyan)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent;
     filter:drop-shadow(0 0 14px rgba(155,123,255,.35)); }
   .dn-head p{ color:var(--ink-dim); font-size:13px; margin:8px 0 0; }
@@ -128,7 +128,7 @@
 
     const wrap = h('div', { class: 'dn' });
     wrap.append(h('div', { class: 'dn-head' },
-      h('h2', {}, '🎲 DATE NIGHT ROULETTE'),
+      h('h2', {}, 'DATE NIGHT ROULETTE'),
       h('p', {}, 'Spin for a way to spend an evening together — miles apart.')));
 
     // category filter
