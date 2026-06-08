@@ -293,6 +293,7 @@ const Router = (() => {
     Overlay.hide();
     const m = hash.match(/^#\/play\/(.+)$/);
     if (m) renderStage(m[1]);
+    else if (hash.startsWith('#/date')) renderDateNight();
     else if (hash.startsWith('#/scores')) renderScores();
     else if (hash.startsWith('#/us')) renderUs();
     else renderHome();
@@ -309,6 +310,7 @@ function syncChrome(hash) {
   $$('.nav-item').forEach(n => {
     const r = n.dataset.route;
     const on = (r === 'home' && (hash === '#/' || hash === '' || hash.startsWith('#/play')))
+            || (r === 'date' && hash.startsWith('#/date'))
             || (r === 'scores' && hash.startsWith('#/scores'))
             || (r === 'us' && hash.startsWith('#/us'));
     n.classList.toggle('active', on);

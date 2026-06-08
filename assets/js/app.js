@@ -6,7 +6,7 @@
   document.body.classList.toggle('light', s.settings.theme === 'light');
 
   // swap nav emoji for SVG icons
-  const navIcons = { home: 'play', scores: 'trophy', us: 'heart' };
+  const navIcons = { home: 'play', date: 'date', scores: 'trophy', us: 'heart' };
   $$('.nav-item').forEach(n => { const ico = n.querySelector('.ni-ico'); if (ico && navIcons[n.dataset.route]) ico.innerHTML = Icons.ui(navIcons[n.dataset.route]); });
 
   function paintChrome() {

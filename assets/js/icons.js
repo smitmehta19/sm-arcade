@@ -44,6 +44,7 @@ const Icons = (() => {
     play: wrap('<rect x="2.5" y="6.5" width="19" height="11" rx="4"/><path d="M7 12h2.5M8.25 10.75v2.5"/><circle cx="15.5" cy="11" r="1" ' + fc + '/><circle cx="17.5" cy="13" r="1" ' + fc + '/>'),
     trophy: wrap('<path d="M7 4h10v4.5a5 5 0 01-10 0z"/><path d="M7 5.5H4.5V7a3 3 0 003 3M17 5.5h2.5V7a3 3 0 01-3 3"/><path d="M10 13.5v2.5h4v-2.5M8.5 20h7M12 16v2"/>'),
     heart: wrap('<path d="M12 20s-7-4.6-7-9.2A3.8 3.8 0 0112 8a3.8 3.8 0 017 2.8C19 15.4 12 20 12 20z"/>'),
+    date: wrap('<rect x="3.5" y="4.5" width="17" height="15" rx="3.2" transform="rotate(8 12 12)"/><circle cx="9" cy="9.6" r="1.15" ' + fc + '/><circle cx="15.2" cy="9.1" r="1.15" ' + fc + '/><circle cx="12" cy="12.6" r="1.15" ' + fc + '/><circle cx="8.6" cy="15.2" r="1.15" ' + fc + '/><circle cx="14.8" cy="14.7" r="1.15" ' + fc + '/>'),
     search: wrap('<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.3-4.3"/>'),
     sound: wrap('<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a3.5 3.5 0 010 6M18.5 7a6.5 6.5 0 010 10"/>'),
     mute: wrap('<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 10l4 4M20 10l-4 4"/>'),

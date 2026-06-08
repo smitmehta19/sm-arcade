@@ -12,6 +12,7 @@ const Store = (() => {
     streak: { who: null, n: 0 }, // current win streak
     history: [],                 // recent results [{g, w, t}]
     favorites: [],               // gameIds
+    dateNight: { done: [], removed: [], faved: [] }, // shared date-roulette lists
     settings: { sound: true, theme: 'dark' },
     updated: 0,
   });
@@ -133,6 +134,14 @@ const Store = (() => {
     if (i >= 0) state.favorites.splice(i, 1); else state.favorites.push(gameId);
     save();
   }
+  function dateToggle(kind, id) { // kind: 'done' | 'removed' | 'faved' — shared, synced
+    if (!['done', 'removed', 'faved'].includes(kind)) return;
+    if (!state.dateNight) state.dateNight = { done: [], removed: [], faved: [] };
+    const arr = state.dateNight[kind] || (state.dateNight[kind] = []);
+    const i = arr.indexOf(id);
+    if (i >= 0) arr.splice(i, 1); else arr.push(id);
+    save();
+  }
   function setPlayer(idx, patch) { Object.assign(state.players[idx], patch); save(); }
   function setSetting(key, val) { state.settings[key] = val; save(); }
   function resetScores() {
@@ -226,7 +235,7 @@ const Store = (() => {
 
   return {
     initCloud, subscribe, get, player,
-    recordResult, recordTournament, adjustScore, toggleFav, setPlayer, setSetting, resetScores,
+    recordResult, recordTournament, adjustScore, toggleFav, dateToggle, setPlayer, setSetting, resetScores,
     Sound, isCloud: () => cloud,
     getIdentity, setIdentity, onCloud, Net,
   };
