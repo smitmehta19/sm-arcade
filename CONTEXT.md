@@ -1,144 +1,206 @@
 # 🧠 CONTEXT — S × M Arcade (agent handoff notes)
 
-> **Read this first when picking up this project.** It captures architecture, decisions,
-> and gotchas that aren't obvious from the code alone. Last major state: 21 games live,
-> premium theme, best-of-3 series, God-Mode gating, end-game consent.
+> **Read this first when picking up this project.** It captures architecture, decisions, and the
+> gotchas/mistakes that aren't obvious from the code. Keep it current when you change things.
+>
+> **Current state (2026-06-08):** 28 playable games + a Tournament meta-game, a Date Night
+> Roulette section, per-turn timers, leave-consent, badges/banter/juice, full design polish.
+> **Service worker cache: `sm-arcade-v38`.**
 
 ---
 
 ## What this is
-A **private, online, 2-player game arcade** for **Smit** & **Meera** (a couple, often miles apart).
-Each plays on their **own phone** and they play the **same live game** together (turn-based, synced).
+A **private, online, 2-player arcade** for **Smit** & **Meera** — a **long-distance couple**. Each plays
+on their **own phone**; they play the **same live game** together (turn-based, cloud-synced). The vibe is
+intentionally personal: flirty/spicy content is welcome (consensual, just the two of them).
 
-- **Players:** Smit = seat **0** = **cyan**. Meera = seat **1** = **magenta**.
-- **Live site:** https://smitmehta19.github.io/sm-arcade/
-- **GitHub repo:** https://github.com/smitmehta19/sm-arcade (public). Owner: `smitmehta19`.
+- **Players:** Smit = seat **0** = **cyan** (🦊). Meera = seat **1** = **magenta** (🦋).
+- **God-Mode:** only **Smit's device** (identity 0) may change names / reset / adjust scores. Meera gets a
+  troll popup (`trollMeera()` / `SM_TROLLS`). Name-change password = **`change`**. Score reset & adjust
+  password = **`smitwins`**.
+- **Live site:** https://smitmehta19.github.io/sm-arcade/ · **Repo:** https://github.com/smitmehta19/sm-arcade
 - **Local path:** `…\Desktop\Data\2026\April\TP analysis\smit-meera-arcade`
-- **Stack:** static HTML/CSS/vanilla JS (NO build step) · GitHub Pages · Firebase Realtime Database (anonymous auth) · installable PWA.
+- **Stack:** static HTML/CSS/vanilla JS (**NO build step**) · GitHub Pages · Firebase Realtime Database
+  (anonymous auth) · installable PWA. Fonts: Orbitron / Chakra Petch / Sora (Google Fonts, non-blocking).
 
 ---
 
 ## File map
 ```
-index.html                  shell, <script> includes, Google-font links, result-overlay markup
-sw.js                       service worker — NETWORK-FIRST, bump CACHE on every change (currently v12)
-manifest.webmanifest        PWA manifest
-database.rules.json         Firebase rules (rooms + matches + presence; auth required) — already published
-CONTEXT.md / README.md      this file / user-facing readme
-assets/icons/               icon.svg, favicon.svg
-assets/css/styles.css       "Refined Neon glass" theme: tokens, animation lib, ALL component styles
+index.html                 shell: <script> includes (ORDER MATTERS), font links, nav, overlay markup
+sw.js                      service worker — NETWORK-FIRST. Bump CACHE + add new JS to ASSETS every deploy.
+manifest.webmanifest       PWA manifest
+database.rules.json        Firebase rules (rooms + matches + presence; auth required) — already published
+CONTEXT.md / README.md     this file / user readme
+assets/css/styles.css      "Refined Neon glass" theme: tokens, animation lib, ALL shared component styles
+                           + design-polish layer + CLEAN GRID override (bottom of file)
 assets/js/
-  config.js                 PLAYERS_DEFAULT + window.CLOUD (Firebase keys, ENABLED:true, ROOM)
-  store.js                  state, localStorage, Firebase init (anon auth), scoreboard sync,
-                            identity (per-device), Net API (presence + match), Sound (WebAudio)
-  icons.js                  custom inline SVG line-icons — Icons.game(id) / Icons.ui(name)
-  ui.js                     Games registry, helpers (h/$/esc/clone), Overlay, Router, identity gate,
-                            lobby, match lifecycle, networked stage, Scores+badges, Settings, GAME_RULES,
-                            smModal + Meera-trolling
-  games-classic.js          6 games: tic-tac-toe, connect-four, dots-boxes, checkers, reversi, gomoku
-  games-mind.js             6 games: battleship, memory, word-duel, hangman, rps, couple-quiz
-  games-fun2.js             3 games: ghost, two-truths, tug-of-war
-  games-strategy2.js        6 games: pentago, hex, nine-mens-morris, quoridor, quarto, code-breaker
-  games-arcade.js           EMPTY (reflex games removed; not loaded by index.html)
-  app.js                    boot, chrome wiring, nav/sound SVG icons, initNet + initCloud, router, SW reg
+  config.js                PLAYERS_DEFAULT + window.CLOUD (Firebase keys, ENABLED, ROOM)
+  store.js                 state, localStorage, Firebase init (anon auth), scoreboard sync (server-timestamp
+                           versioning), per-device identity, Net API (presence/match/nudge/react), WebAudio Sound,
+                           dateNight lists (Store.dateToggle)
+  icons.js                 custom inline SVG line-icons — Icons.game(id) / Icons.ui(name)
+  ui.js                    Games registry, helpers (h/$/esc/clone), Overlay, Router, identity gate, lobby,
+                           match lifecycle, networked stage, TIMER system, tournament engine, banter/juice,
+                           Scores+badges+score-adjuster, Settings, rules, smModal/trollMeera
+  words.js                 dictionary (ghost/word-duel/hangman/letterpress validation)
+  games-classic.js         tic-tac-toe, connect-four, dots-boxes, checkers, reversi, gomoku
+  games-mind.js            battleship, memory, word-duel, hangman, rps, couple-quiz
+  games-fun2.js            ghost, two-truths            (tug-of-war was REMOVED)
+  games-strategy2.js       pentago, hex, nine-mens-morris, quoridor, quarto, code-breaker
+  games-dice.js            yahtzee, liars-dice          (SVG pip dice + roll animation)
+  games-cards.js           jaipur
+  games-abstract.js        onitama
+  games-word2.js           letterpress, codenames-duet  (codenames is co-op: coop:true)
+  games-draw.js            draw-guess                   (coop)
+  games-ultimate.js        ultimate-ttt
+  games-tournament.js      tournament (META-game: isTournament:true, buildSchedule)
+  datenight-data.js        window.DATE_NIGHT = {cats, lens, ideas[162]} — Date Night Roulette data (ids d1..d162)
+  datenight.js             window.renderDateNight — slot-machine UI + its own injected CSS
+  app.js                   boot, chrome wiring, nav SVG icons, leave-guard, initNet + initCloud, router, SW reg
 ```
-**21 games total.** Game-board CSS is injected as a `<style>` from inside each `games-*.js` (NOT in styles.css), but it inherits the shared CSS tokens (`--p1`, `--panel`, `--accent`, etc.).
+Per-game board CSS is injected as a `<style>` from inside each `games-*.js` (and `datenight.js`), but it
+inherits shared tokens (`--p1`, `--p2`, `--panel`, `--accent`, etc.). **Script order in index.html matters**:
+config → store → icons → ui → words → games-* → datenight-data → datenight → app.
 
 ---
 
-## Game module contract (netplay state machine)
-Every game calls `Games.register({ id, name, emoji, category, tagline, accent, init, render })`:
-- `init(hostSeat)` → returns a **serializable state object** that includes `turn` (and scores/phase as needed).
-- `render(ctx)` → fully draws the board from `ctx.state` into `ctx.root` (re-rendered on every sync).
-
-`ctx` =
-```
-{ root, h, $, esc, clone, players[], state, me /*my seat*/, turn, isMyTurn, status,
-  sound, turnBar(opts), msg(text,color), commit(nextState, winner?), seat(i) }
-```
-- Produce the next state from a **clone** (`ctx.clone(ctx.state)`), mutate, then `ctx.commit(next)`.
-- `commit(next)` → continue (turn-based games flip `next.turn` themselves; extra-turn games keep it).
-- `commit(next, 0 | 1 | 'draw')` → ends the **round**.
-- Phase/role games (rps, couple-quiz, code-breaker, two-truths, tug-of-war, hangman, quarto, pentago)
-  manage their own phase in `state` and decide interactivity from `me` + `state` (not just `turn`).
-- Ephemeral local UI (piece selection, typing buffers, staged moves) lives in the render closure and is
-  NOT committed until the move completes — so the opponent only sees finished moves.
+## Game module contract
+`Games.register({ id, name, emoji, category, tagline, accent, init, render, coop?, isTournament?, test?, skipTurn? })`
+- `init(hostSeat)` → serializable state incl. `turn` (+ scores/phase as needed).
+- `render(ctx)` → fully draws the board from `ctx.state` into `ctx.root` (re-runs on EVERY sync).
+- `ctx = { root, h, $, esc, clone, players[], state, me, turn, isMyTurn, status, sound, turnBar(opts),
+  msg(text,color), commit(next, winner?), seat(i) }`
+- `commit(next)` continues; `commit(next, 0|1|'draw')` ends the game; co-op uses `'coop-win'|'coop-loss'`.
+- Build next state from `ctx.clone(ctx.state)`; flip `next.turn` yourself. **Ephemeral UI** (selection,
+  typing buffers) stays in the render closure — only committed state syncs.
+- `skipTurn(state, opp)` (optional) → clean "pass" state for a timer **skip** on phase-based games
+  (defined for **yahtzee** & **pentago** so a skip doesn't hand the opponent stale mid-turn state).
+- `test` (optional) exposes pure logic for the headless harness.
 
 ---
 
 ## Match / sync model
-Active match lives at Firebase `matches/<ROOM>/active`:
+Active match at Firebase `matches/<ROOM>/active`:
 ```
 { gameId, host, status:'waiting'|'active'|'finished',
-  state,                 // ⚠ JSON STRING (see gotcha #1)
-  starter,               // seat that started the current round (alternates each round)
-  series:{target:2, score:[a,b]},   // best-of-3
-  roundWinner,           // 0|1|'draw' for the just-finished round
-  seriesWinner,          // null until a player reaches target → then the series winner
-  rematchReq,            // seat requesting a NEW series (handshake)
-  endReq,                // seat requesting to END the game (consent)
+  state,          // ⚠ JSON STRING (gotcha #1)
+  starter,        // seat that started the current round
+  roundWinner,    // 0|1|'draw'|'coop-win'|'coop-loss'
+  timer,          // { on, secs, mode:'skip'|'forfeit' }
+  deadline,       // server-ms when the current turn's clock expires (gotcha #2)
+  endReq,         // seat requesting to END (consent handshake)
   by, t }
 ```
-Presence at `presence/<ROOM>/<seat>` = `{online, name, ts}` (onDisconnect flips offline).
-Scoreboard at `rooms/<ROOM>` (Store; recordResult only fires at **series end**, once, by the committer).
+- **No more best-of-3 series** — every individual game win records immediately (series system was removed).
+- Presence: `presence/<ROOM>/<seat>` = `{online,name,ts}` (onDisconnect → offline).
+- Scoreboard + dateNight lists: `rooms/<ROOM>` (the whole `Store` state, set as an object).
+- Banter (emotes/taunts): `matches/<ROOM>/react` — **separate path so it never re-renders the live game.**
+- Nudges ("come online"): `matches/<ROOM>/nudges/<seat>`.
+- Synced clock: `Store.Net.serverNow()` = `Date.now() + serverOffset` (offset from `.info/serverTimeOffset`).
 
 ### Key flows (all in ui.js)
 - **Identity gate** → device picks Smit/Meera once (localStorage `sm_identity_v1`).
-- **Lobby** → presence dots + invite banner; tap a game = `startMatch` (status `waiting`) → partner taps **Join**.
-- **Best-of-3 series** → each round win bumps `series.score`; at target → `seriesWinner` set + `recordResult` once.
-  Round overlay = *Next round / End series (consent)*; series-end overlay = *New series (handshake) / Play X next / Lobby*.
-- **Rematch / New series** = handshake: `requestRematch` → partner `acceptRematch`; the **opposite of the requester** starts.
-- **End game** = consent: `requestEndGame` (sets `endReq`) → partner `agreeEndGame` (clears match) or `cancelEndGame`.
-  Offline partner ⇒ immediate exit. End-overlay has priority over all other overlays in `paint()`.
-- **Settings tab** (route still `#/us`, label "Settings"): name change gated — only **Smit** (identity 0) with password
-  **`change`**; **Meera** gets a random troll popup (`SM_TROLLS`). Score reset — Smit password **`smitwins`**; Meera trolled.
+- **Lobby** → presence dots, invite/resume banners, "nudge to come online", Tournament CTA.
+- **startMatch** → creates the match **immediately** (`waiting`), navigates to `#/play/<id>`, THEN (if the game
+  supports a timer) opens the timer picker on top. Partner taps **Join** → `active` + arms `deadline`.
+- **Per-turn timer** → `TIMER_GAMES` map, `timerCap`, `showTimerPanel` (a singleton overlay), `applyTimer`,
+  `paintTimer`/`fireTimeout`. Both players see the picker when they start a game; both **"⏭️ Chance gone"
+  (skip)** and **"💀 Forfeit"** are always offered. Enforcement: active player fires at 0, opponent after a 2s
+  grace (covers a dead opponent). Tournaments fall back to a per-sub-game default mode.
+- **Tournament** = meta-game in ui.js: flat `schedule` array (length N: 3/5/7/10/custom), `tournamentSetup`,
+  `startTournament`, `tourCommit`, `advanceTournament`. Co-op games excluded. Each sub-game records normally;
+  champion gets a bragging-only `tourWins` bump.
+- **Leave-consent** → `requestEndGame` sets `endReq`; partner agrees (`agreeEndGame`) or cancels. The **back
+  arrow AND brand link** route through this (app.js `leaveGuard`). Offline/not-active partner ⇒ clean exit.
+- **Scores tab** → big scoreboard, win-share meter, badges (incl. funny consolation ones), rivalry taunt,
+  by-game table, and the **score adjuster** (Smit-only, `smitwins`, `scoreEditUnlocked` per-session).
+- **Settings tab** (route `#/us`) → name change (Smit + `change`), theme/sound.
+- **Date Night Roulette** (route `#/date`, "Dates" tab) → slot machine over 162 LDR ideas; Save/Done/Remove/
+  Spin-again; done/removed/faved live in `Store.dateNight` (synced, shared). See `date-night-roulette` memory.
 
 ---
 
-## ⚠️ Gotchas (the load-bearing ones)
-1. **Firebase RTDB strips `null` and empty arrays.** A fresh board (all nulls) vanishes on round-trip →
-   the other device reads `undefined` → crash. **Fix in place:** game `state` is stored as a **JSON string**
-   (`JSON.stringify` in startMatch/advanceRound/acceptRematch/commitMove; `JSON.parse` in paint). Keep it that way.
-2. **Service worker is NETWORK-FIRST** (`sw.js`) so fixes reach phones immediately when online (offline still works
-   from cache). **Bump `CACHE` (e.g. v12→v13) on every deploy.** Add new JS files to the `ASSETS` list too.
-3. **`[hidden]` needs `[hidden]{display:none!important}`** (top of styles.css) — author `display` rules override the
-   attribute otherwise (this caused the early "stuck Winner overlay" bug).
-4. **Identity is per-device localStorage** — it's the only signal for the God-Mode/troll gating (a soft, fun lock).
-5. **Firebase rules** must cover `rooms`, `matches`, `presence` (see database.rules.json) — already published in console.
-   **Anonymous auth** is enabled in the Firebase console.
-6. **Avatars (🦊 Smit / 🦋 Meera) are intentionally still emoji** (personal choice). Everything else was de-emoji'd
-   to custom SVG via `icons.js`. If asked to "remove all emoji," these + a few in-game message accents remain.
-7. **Hidden-info games** (battleship ships, hangman word, word-duel answer, code-breaker secret) keep the secret in the
-   shared DB — a determined inspector could read it; the UI hides it. Acceptable for a trusting couple; true secrecy
-   needs a server (we avoid that to stay free).
-8. **Reflex games removed** (pong, air-hockey, snake, reaction, speed-math) — unplayable over ~0.5s RTDB latency.
-   `games-arcade.js` is intentionally empty.
+## ⚠️ Gotchas (load-bearing)
+1. **RTDB strips `null` & empty arrays.** Game `state` is stored as a **JSON STRING** (stringify on write,
+   parse in `paint`). The stage guard is `if (!state || typeof state !== 'object')` — **never require `turn`**
+   (phase games legitimately lack it). The main `Store` state is an object; empty arrays (e.g. `dateNight.done`)
+   get re-defaulted by `blankState()` on read.
+2. **Scoreboard sync uses a SERVER TIMESTAMP, not a counter.** `save()` sets `state.updated = Date.now()+serverOffset`.
+   (It used to be a per-device incrementing counter, which let the two phones disagree on "newest" and clobber
+   each other — that was the score-sync / "Meera has the streak" bug.) Merge rule: `remote.updated >= local` wins.
+3. **Service worker is NETWORK-FIRST.** Bump `CACHE` (vNN→vNN+1) **and** add any new JS file to `ASSETS` on
+   **every** deploy, or phones keep stale code. Currently **v38**.
+4. **Timer picker ↔ Router teardown.** `startMatch` navigates (fires `hashchange`→`Router.go`) and *then* opens
+   the picker. `Router.go` must only tear the picker down when leaving that game's route — it's tracked by
+   `timerPanelEl`/`timerPanelGame`. (Closing it unconditionally made the picker flash open and vanish.)
+5. **`[hidden]{display:none!important}`** (top of styles.css) — author `display` rules otherwise beat the attribute.
+6. **Identity is per-device localStorage** — the only signal for God-Mode/troll gating (a soft, fun lock).
+7. **Hidden-info games** keep the secret in the shared DB (UI hides it). Fine for a trusting couple; true secrecy
+   needs a server (avoided to stay free).
+8. **Avatars stay emoji** (🦊/🦋) on purpose; everything else is custom SVG via `icons.js`.
+
+---
+
+## 🐞 Mistakes & pitfalls we hit (so you don't repeat them)
+**Code bugs fixed:**
+- *Score divergence* → server-timestamp versioning (gotcha #2).
+- *Timer picker never showed* → Router teardown closed it on the start-navigation; fix = scope teardown to the
+  game's own route (gotcha #4).
+- *Tournament/timer crash* → match wasn't created until the host finished picking, so a concurrent start clashed.
+  Fix = create the match first, patch the timer on after (`applyTimer`).
+- *Skip corrupting phase games* → naive "flip turn" handed the opponent stale dice/phase; fix = optional
+  `def.skipTurn` (yahtzee resets dice/rolls, pentago → opponent places).
+- *Easy exit without consent* → back arrow + brand bypassed it; routed both through `requestEndGame`.
+- *Quoridor walls broken* → fragile `getBoundingClientRect` pixel math; rewrote as a CSS grid with real wall
+  gutters (a 17×17 track grid; cells on odd tracks, walls drop into even gutter tracks — no measuring).
+- *Unicode dice looked cheap* → SVG pip dice + tumble roll animation.
+- *8 new games showed a plain circle* → added custom SVG icons.
+- *Letterpress didn't show played words* → added a played-words log (`plays` field, separate from `played`).
+- *Cluttered game grid* (user feedback) → removed the per-card category pills + rainbow top stripes; one accent
+  (the icon) + a quiet star.
+- *Faves had no visible toggle* → added the ☆/★ button on cards.
+
+**Process pitfalls:**
+- **ruflo must stay disabled.** `.claude-flow/`, `.mcp.json`, `CLAUDE.md` are untracked junk — **NEVER `git add`
+  them.** Always stage explicit files. (ruflo hooks once spawned 0-byte junk files on every edit.)
+- **PowerShell 5.1:** `Get-Content` default encoding is ANSI and **corrupts UTF-8** (em-dashes/emojis) — use
+  `-Encoding UTF8` or `git checkout -- <file>` to restore. Multiline `git commit -m` mangles — use
+  `git commit -F <tempfile>`. No `&&`/`?:`/`??`.
+- **`git push` prints a red `NativeCommandError` on stderr but exits 0** — harmless (git writes progress to stderr).
+- **"I can't see the changes on my phone"** is almost always **PWA service-worker caching**, NOT a failed deploy.
+  Verify the deploy is live (`gh api repos/smitmehta19/sm-arcade/pages/builds/latest`, and curl the live
+  `sw.js`), then have them reload twice / force-quit the installed PWA.
+- **Headless Chrome renders emoji as fallback boxes** — don't judge emoji glyphs from screenshots.
 
 ---
 
 ## Build / test / deploy
-- **Preview locally:** `.claude/launch.json` runs `python -m http.server 8123` over the repo; use the `preview_*` tools.
-  Screenshots can time out only because of external font requests — the app itself works.
-- **Testing games (no 2-device locally):** drive each game with a **mock `ctx`** harness in the preview (build a fake
-  ctx whose `commit` captures state, click `.live` elements, loop to a win). This validated all 21 games' win/turn logic.
-- **Deploy:** `git push origin main` → GitHub Pages auto-builds (~1 min).
-  Status: `gh api repos/smitmehta19/sm-arcade/pages/builds/latest --jq '.status'` (wait for `built`).
-  Remote sometimes has README edits by the user → `git pull --rebase origin main` before push.
-- **Env quirks:** Windows PowerShell **5.1** — no `?:` ternary, no `&&`; for commit messages use `-m '...'` (single
-  quotes, avoid `"`) or a here-string. Commit trailer: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+- **No build step.** Edit files, commit, push.
+- **Portable node:** `C:/Users/Smit Mehta/nodejs-portable/node.exe`.
+- **Logic harnesses (in `%TEMP%`, NOT in the repo):**
+  - `sm-harness2.js` — module-level: loads all `games-*.js` with a mock DOM, drives each game to a winner.
+  - `sm-harness3.js` — integration: loads the REAL `ui.js` with mocked Store/DOM and drives tournament/timer/
+    nudge/banter/juice. Run: `node sm-harness*.js "<repo path>"`. Both must end "ALL … CHECKS PASSED ✓".
+- **Visual checks:** Chrome is at `C:/Program Files/Google/Chrome/Application/chrome.exe`. Build a small preview
+  HTML that links the **real** `assets/css/styles.css` (+ the relevant JS with a tiny `h`/`Store` mock) and
+  `--headless=new --screenshot`. Use `--virtual-time-budget=NNNN` to let `setTimeout` animations land.
+- **Deploy:** `git push origin main` → GitHub Pages auto-builds (~1 min). Confirm:
+  `gh api repos/smitmehta19/sm-arcade/pages/builds/latest --jq '.status'` → `built`.
+- **Commit trailer:** `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 
 ---
 
-## Firebase project (config in assets/js/config.js — public-safe keys)
-- Project `sm-arcade`, `databaseURL` `https://sm-arcade-default-rtdb.asia-southeast1.firebasedatabase.app`
-- `ROOM` = `smit-meera-e7c3bf6c17204234` (shared room secret; both devices use it).
-- To verify backend without phones: anon sign-in via Identity Toolkit REST, then read/write `matches/<ROOM>/__test`
-  with the returned idToken (sandbox sometimes can't reach `identitytoolkit.googleapis.com` — that's a sandbox limit).
+## Firebase (config in assets/js/config.js — public-safe keys)
+- Project `sm-arcade`, region asia-southeast1. `ROOM` is a shared secret both devices use.
+- Anonymous auth enabled; rules cover `rooms` + `matches` + `presence` (published).
 
 ---
 
-## Ideas / possible next steps (not done yet)
-- Per-move piece animations (currently the whole board re-renders on each sync — only entrance animations exist).
-- Sound polish / haptics; more badges & rivalry taunts.
-- Optional photos for personalization (profile pics, a "Love Memory" tile set).
-- More games; optional cloud-synced identity.
+## Open threads / next ideas
+- **Date Night list curation:** the user wanted to review all 162 ideas before building (I built it directly so
+  they can curate in-app via ✕ Remove). If they want to edit the master list, edit `datenight-data.js`
+  (ids `d1`–`d162` map to the list I presented in chat).
+- Per-move piece animations (board fully re-renders each sync today; only entrance animations exist).
+- Optional: a "surprise spin" Date Night shortcut on the home screen; result/rules overlays could get the same
+  accent-glow polish; profile photos.
