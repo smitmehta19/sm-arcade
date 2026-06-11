@@ -13,6 +13,7 @@ const Store = (() => {
     history: [],                 // recent results [{g, w, t}]
     favorites: [],               // gameIds
     dateNight: { done: [], removed: [], faved: [] }, // shared date-roulette lists
+    meet: { nextAt: null, lastMetAt: null }, // shared reunion countdown: ms timestamps (synced)
     settings: { sound: true, theme: 'dark' },
     updated: 0,
   });
@@ -142,6 +143,10 @@ const Store = (() => {
     if (i >= 0) arr.splice(i, 1); else arr.push(id);
     save();
   }
+  function setMeet(patch) { // { nextAt?, lastMetAt? } — ms timestamps or null; shared + synced
+    if (!state.meet) state.meet = { nextAt: null, lastMetAt: null };
+    Object.assign(state.meet, patch); save();
+  }
   function setPlayer(idx, patch) { Object.assign(state.players[idx], patch); save(); }
   function setSetting(key, val) { state.settings[key] = val; save(); }
   function resetScores() {
@@ -235,7 +240,7 @@ const Store = (() => {
 
   return {
     initCloud, subscribe, get, player,
-    recordResult, recordTournament, adjustScore, toggleFav, dateToggle, setPlayer, setSetting, resetScores,
+    recordResult, recordTournament, adjustScore, toggleFav, dateToggle, setMeet, setPlayer, setSetting, resetScores,
     Sound, isCloud: () => cloud,
     getIdentity, setIdentity, onCloud, Net,
   };

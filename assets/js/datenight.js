@@ -94,6 +94,44 @@
   .dn-li button:active{ transform:scale(.85); }
   .dn-li .un{ color:var(--magenta); } .dn-li .restore{ color:var(--lime); }
   .dn-empty{ text-align:center; color:var(--ink-faint); font-size:13.5px; padding:20px; }
+
+  /* "Us, in days" — reunion countdown card (sits at the foot of the Dates page) */
+  .mc{ max-width:560px; margin:26px auto 8px; border-radius:20px; padding:22px 18px; text-align:center; position:relative; overflow:hidden;
+    background:linear-gradient(180deg, rgba(20,26,48,.6), rgba(9,12,24,.55)); border:1px solid var(--glass-brd);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 18px 44px -26px #000, 0 0 0 1px rgba(155,123,255,.08); }
+  .mc::before{ content:''; position:absolute; left:18px; right:18px; top:0; height:2px; border-radius:2px;
+    background:linear-gradient(90deg,transparent,var(--violet),var(--magenta),transparent); box-shadow:0 0 12px rgba(155,123,255,.6); }
+  .mc-label{ font-family:var(--font-display); font-weight:700; font-size:11px; letter-spacing:3px; color:var(--ink-faint); margin:0 0 8px; }
+  .mc-num{ font-family:var(--font-display); font-weight:900; font-size:clamp(48px,17vw,74px); line-height:1; letter-spacing:1px;
+    background:linear-gradient(90deg,var(--magenta),var(--violet),var(--cyan)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent;
+    filter:drop-shadow(0 0 18px rgba(155,123,255,.4)); }
+  .mc-unit{ font-family:var(--font-display); font-weight:700; font-size:12px; letter-spacing:2.5px; color:var(--ink-dim); margin:5px 0 0; }
+  .mc-clock{ font-family:var(--font-num); font-size:21px; letter-spacing:3px; color:var(--ink); margin:12px 0 0; font-variant-numeric:tabular-nums; }
+  .mc-apart{ display:inline-flex; align-items:center; gap:8px; margin:16px 0 0; font-size:12.5px; color:var(--ink-faint); }
+  .mc-apart .e{ filter:drop-shadow(0 0 6px var(--magenta)); }
+  .mc-edit{ background:none; border:1px solid var(--line); color:var(--ink-faint); font-size:13px; padding:3px 9px; border-radius:9px; margin-left:4px; transition:color .2s, border-color .2s; }
+  .mc-edit:active{ color:var(--violet); border-color:var(--violet); }
+  .mc-cta{ display:inline-block; margin:16px auto 2px; padding:12px 20px; border-radius:12px; border:none;
+    font-family:var(--font-display); font-weight:800; letter-spacing:.6px; font-size:14px; color:#fff;
+    background:linear-gradient(135deg,var(--violet),var(--magenta)); box-shadow:0 12px 28px -12px rgba(255,77,157,.7); transition:transform .12s var(--ease); }
+  .mc-cta:active{ transform:scale(.97); }
+  /* celebration takeover at zero */
+  .mc.celebrate{ border-color:color-mix(in srgb,var(--gold) 40%,var(--glass-brd)); animation:mcPulse 2.2s ease infinite; }
+  .mc-party{ font-size:42px; margin:2px 0 6px; animation:floatUp .5s var(--ease) both; }
+  .mc-cele-h{ font-family:var(--font-display); font-weight:900; font-size:clamp(20px,6.4vw,28px); letter-spacing:1px; margin:0 0 6px; text-wrap:balance;
+    background:linear-gradient(90deg,var(--gold),var(--magenta),var(--gold)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; }
+  .mc-cele-sub{ color:var(--ink-dim); font-size:13.5px; margin:0 0 14px; }
+  @keyframes mcPulse{ 0%,100%{ box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 1px rgba(255,214,107,.12), 0 18px 44px -26px #000; }
+    50%{ box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 1px rgba(255,214,107,.34), 0 18px 52px -20px rgba(255,214,107,.28); } }
+  /* inline date editor */
+  .mc-editor{ display:flex; flex-direction:column; gap:11px; text-align:left; margin-top:8px; }
+  .mc-field label{ display:block; font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; color:var(--ink-faint); margin:0 0 5px; font-weight:700; }
+  .mc-field input{ width:100%; box-sizing:border-box; padding:11px 12px; border-radius:10px; background:var(--bg-2); border:1px solid var(--line); color:var(--ink); font-family:var(--font-ui); font-size:14px; }
+  .mc-erow{ display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:2px; }
+  .mc-erow button{ padding:11px; border-radius:10px; font-weight:700; font-size:13.5px; transition:transform .12s var(--ease); }
+  .mc-erow button:active{ transform:scale(.96); }
+  .mc-save{ background:linear-gradient(135deg,var(--violet),var(--magenta)); border:none; color:#fff; box-shadow:0 10px 24px -14px rgba(255,77,157,.7); }
+  .mc-cancel{ background:var(--panel-2); border:1px solid var(--glass-brd); color:var(--ink-dim); }
   `;
   document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
 
@@ -177,11 +215,18 @@
     elPanel = h('div', { class: 'dn-panel' });
     wrap.append(elStats, elListBtns, elPanel);
 
+    // reunion countdown — at the very foot of the page, below everything
+    wrap.append(renderMeetCard());
+
     view.append(wrap);
     updateMeta();
 
-    // live-refresh the shared lists/stats when your partner changes something
-    dnUnsub = Store.subscribe(() => { if ((location.hash || '').startsWith('#/date')) updateMeta(); });
+    // live-refresh the shared lists/stats + countdown when your partner changes something
+    dnUnsub = Store.subscribe(() => {
+      if (!(location.hash || '').startsWith('#/date')) return;
+      updateMeta();
+      if (!meetEditing) paintMeet();
+    });
   }
 
   function reelRow(idea) {
@@ -318,6 +363,102 @@
       }
       elPanel.append(li);
     });
+  }
+
+  /* ===================== "US, IN DAYS" REUNION COUNTDOWN =====================
+     One compact card: big day count + live hh:mm:ss to the next meet, a quiet
+     "apart for N days" subline, and a celebration takeover when the day arrives.
+     Both phones share one { nextAt, lastMetAt } via Store.setMeet (synced).      */
+  const DAY = 86400000;
+  const pad2 = n => String(n).padStart(2, '0');
+  const meetNow = () => (Store.Net && Store.Net.serverNow ? Store.Net.serverNow() : Date.now());
+  const meetData = () => Object.assign({ nextAt: null, lastMetAt: null }, Store.get().meet || {});
+  const ymd = ts => { const d = new Date(ts); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+  const fromInput = v => { if (!v) return null; const t = new Date(v + 'T00:00:00').getTime(); return isNaN(t) ? null : t; };
+  let elMeet = null, meetTick = null, meetEditing = false;
+
+  function renderMeetCard() {
+    if (meetTick) { clearInterval(meetTick); meetTick = null; }
+    meetEditing = false;
+    elMeet = h('div', { class: 'mc' });
+    paintMeet();
+    meetTick = setInterval(() => {
+      if (!(location.hash || '').startsWith('#/date')) { clearInterval(meetTick); meetTick = null; return; }
+      if (!meetEditing) paintMeet();
+    }, 1000);
+    return elMeet;
+  }
+
+  function paintMeet() {
+    if (!elMeet) return;
+    const m = meetData(), now = meetNow();
+    const apart = m.lastMetAt != null ? Math.max(0, Math.floor((now - m.lastMetAt) / DAY)) : null;
+    const apartTxt = a => `apart for ${a} ${a === 1 ? 'day' : 'days'}`;
+    elMeet.classList.remove('celebrate');
+    elMeet.innerHTML = '';
+
+    // meet day has arrived → celebration takeover (stays until they tap "we're together")
+    if (m.nextAt != null && now >= m.nextAt) {
+      elMeet.classList.add('celebrate');
+      elMeet.append(
+        h('div', { class: 'mc-party' }, '🎉'),
+        h('h3', { class: 'mc-cele-h' }, 'TODAY — WE’RE TOGETHER 💞'),
+        h('p', { class: 'mc-cele-sub' }, apart != null ? `after ${apart} ${apart === 1 ? 'day' : 'days'} apart` : 'the wait is over'),
+        h('button', { class: 'mc-cta', onclick: meetReunited }, 'We’re together 💞'));
+      return;
+    }
+
+    // counting down to a set reunion date
+    if (m.nextAt != null) {
+      const rem = m.nextAt - now, days = Math.floor(rem / DAY), r = rem - days * DAY;
+      const hh = Math.floor(r / 3600000), mm = Math.floor((r % 3600000) / 60000), ss = Math.floor((r % 60000) / 1000);
+      elMeet.append(
+        h('p', { class: 'mc-label' }, 'US, IN DAYS'),
+        h('div', { class: 'mc-num' }, String(days)),
+        h('p', { class: 'mc-unit' }, days === 1 ? 'DAY TILL WE MEET' : 'DAYS TILL WE MEET'),
+        h('div', { class: 'mc-clock' }, `${pad2(hh)} : ${pad2(mm)} : ${pad2(ss)}`));
+      const foot = h('div', { class: 'mc-apart' });
+      if (apart != null) foot.append(h('span', { class: 'e' }, '💞'), h('span', {}, apartTxt(apart)));
+      foot.append(h('button', { class: 'mc-edit', title: 'Set our dates', onclick: openMeetEditor }, '✎'));
+      elMeet.append(foot);
+      return;
+    }
+
+    // no reunion date set → show the apart-counter (if we know it) + a prompt to set the date
+    elMeet.append(h('p', { class: 'mc-label' }, 'US, IN DAYS'));
+    if (apart != null) {
+      elMeet.append(h('div', { class: 'mc-num' }, String(apart)), h('p', { class: 'mc-unit' }, apart === 1 ? 'DAY APART' : 'DAYS APART'));
+    } else {
+      elMeet.append(h('p', { class: 'mc-cele-sub', style: 'margin-top:10px' }, 'When’s the next time you’ll be in the same place?'));
+    }
+    elMeet.append(h('button', { class: 'mc-cta', onclick: openMeetEditor }, 'Set the day we meet →'));
+  }
+
+  function meetReunited() {
+    Store.Sound.win();
+    Store.setMeet({ lastMetAt: meetNow(), nextAt: null }); // today becomes "last met"; clear the countdown
+    paintMeet();
+  }
+
+  function openMeetEditor() {
+    if (!elMeet) return;
+    meetEditing = true;
+    const m = meetData();
+    elMeet.classList.remove('celebrate');
+    elMeet.innerHTML = '';
+    const nextInp = h('input', { type: 'date', value: m.nextAt != null ? ymd(m.nextAt) : '' });
+    const lastInp = h('input', { type: 'date', value: m.lastMetAt != null ? ymd(m.lastMetAt) : '', max: ymd(meetNow()) });
+    elMeet.append(
+      h('p', { class: 'mc-label' }, 'OUR DATES'),
+      h('div', { class: 'mc-editor' },
+        h('div', { class: 'mc-field' }, h('label', {}, 'The day we meet 💞'), nextInp),
+        h('div', { class: 'mc-field' }, h('label', {}, 'Last time we were together'), lastInp),
+        h('div', { class: 'mc-erow' },
+          h('button', { class: 'mc-cancel', onclick: () => { meetEditing = false; Store.Sound.tap(); paintMeet(); } }, 'Cancel'),
+          h('button', { class: 'mc-save', onclick: () => {
+            Store.setMeet({ nextAt: fromInput(nextInp.value), lastMetAt: fromInput(lastInp.value) });
+            meetEditing = false; Store.Sound.good(); paintMeet();
+          } }, 'Save'))));
   }
 
   window.renderDateNight = renderDateNight;
