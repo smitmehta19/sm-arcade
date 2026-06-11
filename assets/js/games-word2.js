@@ -130,7 +130,10 @@
     // bystander
     endTurn(s); return { next: s };
   }
-  function endTurn(s) { s.phase = 'clue'; s.turn = 1 - s.turn; s.clue = null; s.turnsLeft--; if (s.turnsLeft <= 0 && s.found < CN_AGENTS) s.over = 'loss'; }
+  // Roles are FIXED: the host always gives clues (sees the key), the other always guesses.
+  // We deliberately do NOT swap s.turn — if the guesser ever became clue-giver they'd see the
+  // red/assassin tiles and could avoid them on later guesses, killing the whole point of the game.
+  function endTurn(s) { s.phase = 'clue'; s.clue = null; s.turnsLeft--; if (s.turnsLeft <= 0 && s.found < CN_AGENTS) s.over = 'loss'; }
   Games.register({
     id: 'codenames-duet', name: 'Codenames Duet', emoji: '🕵️', category: 'Word', accent: '#2fe6ff',
     coop: true,

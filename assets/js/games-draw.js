@@ -18,7 +18,21 @@
   const waiting = (ctx, who) => ctx.msg(`Waiting for ${who || ctx.seat(1 - ctx.me).name}…`, 'var(--ink-faint)');
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  const DG_PROMPTS = ('cat dog fish bird snake lion tiger bear elephant monkey rabbit horse cow pig sheep duck frog owl fox wolf whale shark octopus crab butterfly bee spider snail turtle penguin apple banana pizza cake bread egg cheese burger fries donut icecream cookie carrot grapes lemon strawberry corn mushroom house car boat plane train bike rocket umbrella clock key book pencil scissors hammer ladder chair table lamp phone camera guitar drum bell crown ring glasses hat shoe sock shirt sun moon star cloud rain snow tree flower mountain river fire rainbow leaf cactus volcano island smile sleep dance swim read sing ghost robot alien skull heart anchor sword shield castle bridge tent kite balloon gift candle snowman lighthouse windmill').split(' ');
+  // Single-token clean words split from a string; multi-word + adult prompts added after.
+  // Guessing is space/punctuation-insensitive (see norm()), so "doggy style" / "69" all work.
+  const DG_CLEAN = ('cat dog fish bird snake lion tiger bear elephant monkey rabbit horse cow pig sheep duck frog owl fox wolf whale shark octopus crab butterfly bee spider snail turtle penguin apple banana pizza cake bread egg cheese burger fries donut icecream cookie carrot grapes lemon strawberry corn mushroom house car boat plane train bike rocket umbrella clock key book pencil scissors hammer ladder chair table lamp phone camera guitar drum bell crown ring glasses hat shoe sock shirt sun moon star cloud rain snow tree flower mountain river fire rainbow leaf cactus volcano island smile sleep dance swim read sing ghost robot alien skull heart anchor sword shield castle bridge tent kite balloon gift candle snowman lighthouse windmill ' +
+    // more easy-to-draw additions
+    'doughnut ladybug dolphin seahorse jellyfish flamingo peacock dinosaur unicorn dragon mermaid pumpkin pineapple watermelon cherry avocado pepper tomato icecube popsicle lollipop cupcake teapot mug spoon fork knife plate pan kettle toaster fridge bathtub toilet bed pillow couch clock window door stairs fence mailbox swing slide seesaw football basketball tennis bowling dice cards chess crayon brush paint magnet battery lightbulb plug compass map flag trophy medal balloon ribbon party hat sunglasses watch necklace earring lipstick comb mirror razor toothbrush soap bubble feather button zipper needle thread sock mitten scarf boot helmet crown wand broom cauldron coffin bat web spider cobweb').split(' ');
+  const DG_ADULT = [
+    'dick', 'pussy', 'boobs', 'butt', 'nipple', 'balls', 'condom', 'banana', 'eggplant', 'peach',
+    'cucumber', 'sausage', 'cherry', 'kiss', 'hug', 'bra', 'panties', 'thong', 'lingerie', 'handcuffs',
+    'whip', 'lipstick', 'bed', 'shower', 'hot tub', 'love bite', 'morning wood', 'blow up doll', 'g spot',
+    '69', 'doggy style', 'missionary', 'spooning', 'cowgirl', 'french kiss', 'strip tease', 'twerk',
+    'lap dance', 'wet dream', 'one night stand', 'netflix and chill', 'friends with benefits',
+    'hot dog in a bun', 'melons', 'peeled banana', 'cream pie', 'cucumber sandwich', 'pearl necklace',
+    'birthday suit', 'skinny dip', 'spank', 'tongue', 'wink', 'devil horns', 'horny devil',
+  ];
+  const DG_PROMPTS = DG_CLEAN.concat(DG_ADULT);
 
   function drawStrokes(canvas, strokes, extra) {
     const g = canvas.getContext && canvas.getContext('2d'); if (!g) return;   // harness-safe (mock canvas has no context)
