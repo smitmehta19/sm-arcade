@@ -95,36 +95,44 @@
   .dn-li .un{ color:var(--magenta); } .dn-li .restore{ color:var(--lime); }
   .dn-empty{ text-align:center; color:var(--ink-faint); font-size:13.5px; padding:20px; }
 
-  /* "Us, in days" — reunion countdown card (sits at the foot of the Dates page) */
-  .mc{ max-width:560px; margin:26px auto 8px; border-radius:20px; padding:22px 18px; text-align:center; position:relative; overflow:hidden;
-    background:linear-gradient(180deg, rgba(20,26,48,.6), rgba(9,12,24,.55)); border:1px solid var(--glass-brd);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 18px 44px -26px #000, 0 0 0 1px rgba(155,123,255,.08); }
-  .mc::before{ content:''; position:absolute; left:18px; right:18px; top:0; height:2px; border-radius:2px;
-    background:linear-gradient(90deg,transparent,var(--violet),var(--magenta),transparent); box-shadow:0 0 12px rgba(155,123,255,.6); }
-  .mc-label{ font-family:var(--font-display); font-weight:700; font-size:11px; letter-spacing:3px; color:var(--ink-faint); margin:0 0 8px; }
-  .mc-num{ font-family:var(--font-display); font-weight:900; font-size:clamp(48px,17vw,74px); line-height:1; letter-spacing:1px;
-    background:linear-gradient(90deg,var(--magenta),var(--violet),var(--cyan)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent;
-    filter:drop-shadow(0 0 18px rgba(155,123,255,.4)); }
-  .mc-unit{ font-family:var(--font-display); font-weight:700; font-size:12px; letter-spacing:2.5px; color:var(--ink-dim); margin:5px 0 0; }
-  .mc-clock{ font-family:var(--font-num); font-size:21px; letter-spacing:3px; color:var(--ink); margin:12px 0 0; font-variant-numeric:tabular-nums; }
-  .mc-apart{ display:inline-flex; align-items:center; gap:8px; margin:16px 0 0; font-size:12.5px; color:var(--ink-faint); }
-  .mc-apart .e{ filter:drop-shadow(0 0 6px var(--magenta)); }
-  .mc-edit{ background:none; border:1px solid var(--line); color:var(--ink-faint); font-size:13px; padding:3px 9px; border-radius:9px; margin-left:4px; transition:color .2s, border-color .2s; }
-  .mc-edit:active{ color:var(--violet); border-color:var(--violet); }
-  .mc-cta{ display:inline-block; margin:16px auto 2px; padding:12px 20px; border-radius:12px; border:none;
+  /* "Until we're together" — reunion countdown card (foot of the Dates page).
+     Explicit flex column so children ALWAYS stack vertically & centred. */
+  .mc{ position:relative; max-width:520px; margin:30px auto 6px; border-radius:22px; padding:26px 20px 22px; overflow:hidden;
+    display:flex; flex-direction:column; align-items:center; text-align:center;
+    background:radial-gradient(130% 100% at 50% -10%, rgba(155,123,255,.16), transparent 62%), linear-gradient(180deg, rgba(20,26,48,.7), rgba(9,12,24,.62));
+    border:1px solid var(--glass-brd);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 22px 52px -26px #000, 0 0 0 1px rgba(155,123,255,.08); }
+  .mc::before{ content:''; position:absolute; left:50%; top:0; transform:translateX(-50%); width:60%; height:2px; border-radius:2px;
+    background:linear-gradient(90deg,transparent,var(--violet),var(--magenta),transparent); box-shadow:0 0 14px rgba(155,123,255,.7); }
+  .mc-eyebrow{ font-family:var(--font-display); font-weight:700; font-size:10.5px; letter-spacing:3.5px; text-transform:uppercase; color:var(--ink-faint); margin:0; }
+  .mc-big{ font-family:var(--font-display); font-weight:900; font-size:clamp(58px,21vw,90px); line-height:.9; letter-spacing:1px; margin:12px 0 0;
+    background:linear-gradient(100deg,var(--cyan),var(--violet) 52%,var(--magenta)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent;
+    filter:drop-shadow(0 0 22px rgba(155,123,255,.45)); }
+  .mc-sub{ font-family:var(--font-display); font-weight:700; font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--ink-dim); margin:4px 0 0; }
+  .mc-clock{ display:flex; justify-content:center; gap:9px; margin:18px 0 0; }
+  .mc-seg{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:60px; padding:10px 6px 8px; border-radius:13px;
+    background:var(--bg-2); border:1px solid var(--line); }
+  .mc-seg-n{ font-family:var(--font-num); font-weight:800; font-size:23px; line-height:1; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .mc-seg-l{ font-size:9px; letter-spacing:1.5px; font-weight:700; color:var(--ink-faint); }
+  .mc-foot{ display:flex; align-items:center; gap:7px; margin:18px 0 0; font-size:12.5px; color:var(--ink-dim); }
+  .mc-foot .e{ filter:drop-shadow(0 0 6px var(--magenta)); }
+  .mc-edit{ position:absolute; top:13px; right:13px; width:30px; height:30px; display:grid; place-items:center; z-index:2;
+    border-radius:9px; background:rgba(255,255,255,.05); border:1px solid var(--line); color:var(--ink-faint); font-size:13px; transition:.18s; }
+  .mc-edit:active{ color:var(--violet); border-color:var(--violet); transform:scale(.9); }
+  .mc-cta{ margin:18px 0 2px; padding:13px 22px; border-radius:13px; border:none;
     font-family:var(--font-display); font-weight:800; letter-spacing:.6px; font-size:14px; color:#fff;
     background:linear-gradient(135deg,var(--violet),var(--magenta)); box-shadow:0 12px 28px -12px rgba(255,77,157,.7); transition:transform .12s var(--ease); }
   .mc-cta:active{ transform:scale(.97); }
   /* celebration takeover at zero */
-  .mc.celebrate{ border-color:color-mix(in srgb,var(--gold) 40%,var(--glass-brd)); animation:mcPulse 2.2s ease infinite; }
-  .mc-party{ font-size:42px; margin:2px 0 6px; animation:floatUp .5s var(--ease) both; }
-  .mc-cele-h{ font-family:var(--font-display); font-weight:900; font-size:clamp(20px,6.4vw,28px); letter-spacing:1px; margin:0 0 6px; text-wrap:balance;
+  .mc.celebrate{ border-color:color-mix(in srgb,var(--gold) 42%,var(--glass-brd));
+    background:radial-gradient(130% 100% at 50% -10%, rgba(255,214,107,.18), transparent 62%), linear-gradient(180deg, rgba(40,34,30,.6), rgba(12,10,18,.62)); }
+  .mc.celebrate::before{ background:linear-gradient(90deg,transparent,var(--gold),var(--magenta),transparent); }
+  .mc-party{ font-size:48px; margin:2px 0 8px; animation:floatUp .5s var(--ease) both; }
+  .mc-cele-h{ font-family:var(--font-display); font-weight:900; font-size:clamp(20px,6.4vw,28px); letter-spacing:.6px; margin:0 0 6px; text-wrap:balance;
     background:linear-gradient(90deg,var(--gold),var(--magenta),var(--gold)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; }
-  .mc-cele-sub{ color:var(--ink-dim); font-size:13.5px; margin:0 0 14px; }
-  @keyframes mcPulse{ 0%,100%{ box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 1px rgba(255,214,107,.12), 0 18px 44px -26px #000; }
-    50%{ box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 1px rgba(255,214,107,.34), 0 18px 52px -20px rgba(255,214,107,.28); } }
+  .mc-cele-sub{ color:var(--ink-dim); font-size:13.5px; margin:0; }
   /* inline date editor */
-  .mc-editor{ display:flex; flex-direction:column; gap:11px; text-align:left; margin-top:8px; }
+  .mc-editor{ width:100%; display:flex; flex-direction:column; gap:12px; text-align:left; margin-top:6px; }
   .mc-field label{ display:block; font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; color:var(--ink-faint); margin:0 0 5px; font-weight:700; }
   .mc-field input{ width:100%; box-sizing:border-box; padding:11px 12px; border-radius:10px; background:var(--bg-2); border:1px solid var(--line); color:var(--ink); font-family:var(--font-ui); font-size:14px; }
   .mc-erow{ display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:2px; }
@@ -389,11 +397,13 @@
     return elMeet;
   }
 
+  const meetSeg = (n, l) => h('div', { class: 'mc-seg' }, h('div', { class: 'mc-seg-n' }, n), h('div', { class: 'mc-seg-l' }, l));
+  const meetPencil = () => h('button', { class: 'mc-edit', title: 'Set our dates', onclick: openMeetEditor }, '✎');
+
   function paintMeet() {
     if (!elMeet) return;
     const m = meetData(), now = meetNow();
     const apart = m.lastMetAt != null ? Math.max(0, Math.floor((now - m.lastMetAt) / DAY)) : null;
-    const apartTxt = a => `apart for ${a} ${a === 1 ? 'day' : 'days'}`;
     elMeet.classList.remove('celebrate');
     elMeet.innerHTML = '';
 
@@ -401,6 +411,7 @@
     if (m.nextAt != null && now >= m.nextAt) {
       elMeet.classList.add('celebrate');
       elMeet.append(
+        meetPencil(),
         h('div', { class: 'mc-party' }, '🎉'),
         h('h3', { class: 'mc-cele-h' }, 'TODAY — WE’RE TOGETHER 💞'),
         h('p', { class: 'mc-cele-sub' }, apart != null ? `after ${apart} ${apart === 1 ? 'day' : 'days'} apart` : 'the wait is over'),
@@ -413,23 +424,21 @@
       const rem = m.nextAt - now, days = Math.floor(rem / DAY), r = rem - days * DAY;
       const hh = Math.floor(r / 3600000), mm = Math.floor((r % 3600000) / 60000), ss = Math.floor((r % 60000) / 1000);
       elMeet.append(
-        h('p', { class: 'mc-label' }, 'US, IN DAYS'),
-        h('div', { class: 'mc-num' }, String(days)),
-        h('p', { class: 'mc-unit' }, days === 1 ? 'DAY TILL WE MEET' : 'DAYS TILL WE MEET'),
-        h('div', { class: 'mc-clock' }, `${pad2(hh)} : ${pad2(mm)} : ${pad2(ss)}`));
-      const foot = h('div', { class: 'mc-apart' });
-      if (apart != null) foot.append(h('span', { class: 'e' }, '💞'), h('span', {}, apartTxt(apart)));
-      foot.append(h('button', { class: 'mc-edit', title: 'Set our dates', onclick: openMeetEditor }, '✎'));
-      elMeet.append(foot);
+        meetPencil(),
+        h('p', { class: 'mc-eyebrow' }, 'until we’re together'),
+        h('div', { class: 'mc-big' }, String(days)),
+        h('p', { class: 'mc-sub' }, days === 1 ? 'day to go' : 'days to go'),
+        h('div', { class: 'mc-clock' }, meetSeg(pad2(hh), 'HRS'), meetSeg(pad2(mm), 'MIN'), meetSeg(pad2(ss), 'SEC')));
+      if (apart != null) elMeet.append(h('div', { class: 'mc-foot' }, h('span', { class: 'e' }, '💞'), h('span', {}, `apart for ${apart} ${apart === 1 ? 'day' : 'days'}`)));
       return;
     }
 
     // no reunion date set → show the apart-counter (if we know it) + a prompt to set the date
-    elMeet.append(h('p', { class: 'mc-label' }, 'US, IN DAYS'));
+    elMeet.append(meetPencil(), h('p', { class: 'mc-eyebrow' }, apart != null ? 'us, apart' : 'us, in days'));
     if (apart != null) {
-      elMeet.append(h('div', { class: 'mc-num' }, String(apart)), h('p', { class: 'mc-unit' }, apart === 1 ? 'DAY APART' : 'DAYS APART'));
+      elMeet.append(h('div', { class: 'mc-big' }, String(apart)), h('p', { class: 'mc-sub' }, apart === 1 ? 'day apart' : 'days apart'));
     } else {
-      elMeet.append(h('p', { class: 'mc-cele-sub', style: 'margin-top:10px' }, 'When’s the next time you’ll be in the same place?'));
+      elMeet.append(h('p', { class: 'mc-cele-sub', style: 'margin-top:12px' }, 'When’s the next time you’ll be in the same place?'));
     }
     elMeet.append(h('button', { class: 'mc-cta', onclick: openMeetEditor }, 'Set the day we meet →'));
   }
@@ -449,7 +458,7 @@
     const nextInp = h('input', { type: 'date', value: m.nextAt != null ? ymd(m.nextAt) : '' });
     const lastInp = h('input', { type: 'date', value: m.lastMetAt != null ? ymd(m.lastMetAt) : '', max: ymd(meetNow()) });
     elMeet.append(
-      h('p', { class: 'mc-label' }, 'OUR DATES'),
+      h('p', { class: 'mc-eyebrow' }, 'OUR DATES'),
       h('div', { class: 'mc-editor' },
         h('div', { class: 'mc-field' }, h('label', {}, 'The day we meet 💞'), nextInp),
         h('div', { class: 'mc-field' }, h('label', {}, 'Last time we were together'), lastInp),
