@@ -88,32 +88,185 @@ function turnBar(ctx, opts = {}) {
   return h('div', { class: 'turnbar' }, chip(0), chip(1));
 }
 
+/* ============================================================
+   MOTION FX — generic per-move animations.
+   The stage re-renders the whole board on every sync, so we diff
+   piece positions between paints (FLIP) and animate the change:
+   slides, flips, drops, capture ghosts + a "last move" ring.
+   Zero game-logic changes: each game just declares its piece
+   selector here. kind: 'class' = owner from p0/p1 class ·
+   'text' = cell text (✕/◯) · 'self' = full class (unique pieces).
+   ============================================================ */
+const MOVE_FX = {
+  'tic-tac-toe':      { sel: '.ttt-cell',      kind: 'text'  },
+  'connect-four':     { sel: '.c4-cell',        kind: 'class', drop: '.c4' },
+  'checkers':         { sel: '.cb-pc',          kind: 'class', ghost: true },
+  'reversi':          { sel: '.rv-d',           kind: 'class' },
+  'gomoku':           { sel: '.gmk-c .st',      kind: 'class' },
+  'hex':              { sel: '.hex-c',          kind: 'class' },
+  'pentago':          { sel: '.pent-pc',        kind: 'class' },
+  'nine-mens-morris': { sel: '.mm-pt .pc',      kind: 'class', ghost: true },
+  'quoridor':         { sel: '.qd-pawn',        kind: 'class' },
+  'onitama':          { sel: '.on-pawn',        kind: 'class', ghost: true },
+  'ultimate-ttt':     { sel: '.ut-cell',        kind: 'class' },
+  'quarto':           { sel: '.qt-cell .qt-pc', kind: 'self'  },
+};
+const MotionFX = (() => {
+  const reduced = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const can = el => typeof el.animate === 'function';
+  function kindOf(el, cfg) {
+    if (cfg.kind === 'text') { const t = (el.textContent || '').trim(); return t || null; }
+    const m = /\bp[01]\b/.exec(el.className);
+    if (cfg.kind === 'self') return el.className.replace(/\b(live|sel|move|movable|removable|tgt|win|active)\b/g, '').trim() || null;
+    return m ? m[0] : null;
+  }
+  function snap(mount, cfg) {
+    const out = [];
+    mount.querySelectorAll(cfg.sel).forEach(el => {
+      const kind = kindOf(el, cfg); if (!kind) return;
+      const r = el.getBoundingClientRect(); if (!r.width && !r.height) return;
+      out.push({ el, kind, x: r.left + r.width / 2, y: r.top + r.height / 2, r });
+    });
+    return out;
+  }
+  const mark = el => { el.classList.remove('fx-mark'); void el.offsetWidth; el.classList.add('fx-mark'); };
+  function play(mount, cfg, before) {
+    if (!before || reduced()) return;
+    const after = snap(mount, cfg);
+    const key = p => Math.round(p.x / 8) + ':' + Math.round(p.y / 8); // ~8px = "same spot"
+    const oldAt = new Map(before.map(p => [key(p), p]));
+    const appeared = [], flipped = [];
+    for (const np of after) {
+      const op = oldAt.get(key(np));
+      if (op) { op.seen = true; if (op.kind !== np.kind) flipped.push(np); }
+      else appeared.push(np);
+    }
+    const removed = before.filter(p => !p.seen);
+    // pair each appearance with the nearest same-kind removal → the piece MOVED
+    for (const np of appeared.slice()) {
+      let best = null, bd = Infinity;
+      for (const op of removed) {
+        if (op.used || op.kind !== np.kind) continue;
+        const d = (op.x - np.x) ** 2 + (op.y - np.y) ** 2;
+        if (d < bd) { bd = d; best = op; }
+      }
+      if (!best || !can(np.el)) continue;
+      best.used = true; appeared.splice(appeared.indexOf(np), 1);
+      const dx = best.x - np.x, dy = best.y - np.y;
+      np.el.animate([
+        { transform: `translate(${dx}px,${dy}px)` },
+        { transform: `translate(${dx / 2}px,${dy / 2}px) scale(1.14)`, offset: .5 },
+        { transform: 'none' },
+      ], { duration: 340, easing: 'cubic-bezier(.22,.61,.36,1)' });
+      mark(np.el);
+    }
+    // unmatched removals → capture: a ghost of the old piece shrinks away in place
+    if (cfg.ghost) for (const op of removed) {
+      if (op.used) continue;
+      const g = op.el.cloneNode(true);
+      g.style.cssText += `;position:fixed;left:${op.r.left}px;top:${op.r.top}px;width:${op.r.width}px;height:${op.r.height}px;margin:0;pointer-events:none;z-index:90;`;
+      document.body.append(g);
+      if (can(g)) g.animate([
+        { transform: 'none', opacity: 1 },
+        { transform: 'scale(.3) rotate(24deg)', opacity: 0 },
+      ], { duration: 440, easing: 'ease-in' });
+      setTimeout(() => g.remove(), 460);
+    }
+    // brand-new pieces → gravity drop (connect four) or springy pop-in
+    appeared.forEach((np, i) => {
+      if (!can(np.el)) return;
+      if (cfg.drop) {
+        const board = np.el.closest(cfg.drop);
+        const dy = board ? (np.r.top - board.getBoundingClientRect().top + np.r.height) : 60;
+        np.el.animate([
+          { transform: `translateY(${-dy}px)` },
+          { transform: 'translateY(0) scale(1.06,.88)', offset: .8 },
+          { transform: 'none' },
+        ], { duration: Math.min(520, 190 + dy * .6), easing: 'cubic-bezier(.45,0,1,.55)' });
+      } else {
+        np.el.animate([
+          { transform: 'scale(.25)', opacity: 0 },
+          { transform: 'scale(1.14)', opacity: 1, offset: .7 },
+          { transform: 'none', opacity: 1 },
+        ], { duration: 280, delay: Math.min(i, 6) * 30, easing: 'cubic-bezier(.34,1.56,.64,1)', fill: 'backwards' });
+      }
+      mark(np.el);
+    });
+    // owner changed in place → coin-flip cascade (reversi lines)
+    flipped.forEach((np, i) => {
+      if (!can(np.el)) return;
+      np.el.animate([
+        { transform: 'rotateY(90deg) scale(.78)' },
+        { transform: 'none' },
+      ], { duration: 330, delay: Math.min(i, 9) * 45, easing: 'cubic-bezier(.34,1.56,.64,1)', fill: 'backwards' });
+      mark(np.el);
+    });
+  }
+  return { snap, play };
+})();
+
 /* ---------- result overlay ---------- */
 const Overlay = (() => {
+  let confettiRaf = null;
+  // full-screen canvas burst — two corner cannons, gravity + drag + spin
   function confetti() {
-    const box = $('#confetti'); box.innerHTML = '';
-    const colors = ['#00f0ff', '#ff2fa6', '#b266ff', '#ffd23a', '#b6ff3a'];
-    for (let i = 0; i < 70; i++) {
-      const c = document.createElement('i');
-      c.style.left = Math.random() * 100 + '%';
-      c.style.background = colors[i % colors.length];
-      c.style.animationDuration = (0.9 + Math.random() * 1.1) + 's';
-      c.style.animationDelay = (Math.random() * 0.3) + 's';
-      c.style.transform = `rotate(${Math.random() * 360}deg)`;
-      box.append(c);
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    killConfetti();
+    const cv = document.createElement('canvas');
+    cv.id = 'fxConfetti';
+    cv.style.cssText = 'position:fixed;inset:0;z-index:125;pointer-events:none;';
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+    document.body.append(cv);
+    const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+    const colors = ['#2fe6ff', '#ff4d9d', '#9b7bff', '#ffd66b', '#79f5b6', '#ffffff'];
+    const P = [];
+    for (let i = 0; i < 140; i++) {
+      const left = i % 2 === 0, a = (-Math.PI / 2) + (left ? 1 : -1) * (Math.PI / 5) * (0.35 + Math.random() * 0.9);
+      const v = 9 + Math.random() * 13;
+      P.push({
+        x: left ? -6 : innerWidth + 6, y: innerHeight * (0.55 + Math.random() * 0.3),
+        vx: Math.cos(a) * v * (left ? 1 : -1) * -1, vy: Math.sin(a) * v,
+        w: 5 + Math.random() * 6, hgt: 8 + Math.random() * 8,
+        rot: Math.random() * Math.PI, vr: (Math.random() - .5) * .3,
+        c: colors[i % colors.length], round: Math.random() < .25, delay: Math.random() * 14,
+      });
     }
+    let t = 0;
+    (function tick() {
+      t++;
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      let live = 0;
+      for (const p of P) {
+        if (t < p.delay) { live++; continue; }
+        p.vy += 0.32; p.vx *= 0.988; p.vy *= 0.992; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+        if (p.y < innerHeight + 30) live++;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.fillStyle = p.c; ctx.globalAlpha = Math.max(0, Math.min(1, 2.6 - t / 60));
+        if (p.round) { ctx.beginPath(); ctx.arc(0, 0, p.w / 2, 0, 7); ctx.fill(); }
+        else ctx.fillRect(-p.w / 2, -p.hgt / 2, p.w, p.hgt * (0.4 + Math.abs(Math.sin(p.rot * 2)) * 0.6));
+        ctx.restore();
+      }
+      if (live && t < 210) confettiRaf = requestAnimationFrame(tick);
+      else killConfetti();
+    })();
+  }
+  function killConfetti() {
+    if (confettiRaf) { cancelAnimationFrame(confettiRaf); confettiRaf = null; }
+    const old = $('#fxConfetti'); if (old) old.remove();
   }
   // buttons: [{ label, primary?, onClick }]
   function show({ emoji, title, sub, party = true }, buttons) {
     $('#resultEmoji').textContent = emoji;
     $('#resultTitle').innerHTML = title;
     $('#resultSub').innerHTML = sub || '';
-    if (party) confetti(); else $('#confetti').innerHTML = '';
+    const box = $('#confetti'); if (box) box.innerHTML = ''; // legacy CSS confetti box stays empty
+    if (party) confetti(); else killConfetti();
     const acts = $('#resultActions'); acts.innerHTML = '';
     (buttons || []).forEach(b => acts.append(h('button', { class: 'btn ' + (b.primary ? 'btn-primary' : 'btn-ghost'), onclick: () => b.onClick && b.onClick() }, b.label)));
     $('#resultOverlay').hidden = false;
   }
-  function hide() { $('#resultOverlay').hidden = true; $('#confetti').innerHTML = ''; }
+  function hide() { $('#resultOverlay').hidden = true; killConfetti(); }
   return { show, hide };
 })();
 
@@ -641,9 +794,14 @@ function renderStage(gameId) {
       return;
     }
     // active or finished → render from state (stored as a JSON string)
-    mount.innerHTML = '';
     let state = null;
     try { state = typeof m.state === 'string' ? JSON.parse(m.state) : m.state; } catch (e) { state = null; }
+    // Motion FX: snapshot piece positions BEFORE the wipe so the fresh render can
+    // animate the diff (slides / flips / drops / captures). Failure is cosmetic only.
+    const fxCfg = (state && typeof state === 'object') ? MOVE_FX[game.isTournament ? state.subId : gameId] : null;
+    let fxBefore = null;
+    if (fxCfg) { try { fxBefore = MotionFX.snap(mount, fxCfg); } catch (e) { fxBefore = null; } }
+    mount.innerHTML = '';
     // Only reject genuinely unusable state. (Phase-based games like two-truths,
     // rps, couple-quiz legitimately have no `turn` field — never gate on it.)
     if (!state || typeof state !== 'object') {
@@ -669,6 +827,7 @@ function renderStage(gameId) {
         seat: i => s.players[i],
       };
       try { renderDef.render(ctx); } catch (e) { console.error(e); msg.textContent = '⚠ ' + e.message; }
+      if (fxCfg && fxBefore && fxBefore.length) { try { MotionFX.play(mount, fxCfg, fxBefore); } catch (e) {} }
     }
 
     // ----- overlays -----

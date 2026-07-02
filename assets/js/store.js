@@ -173,15 +173,18 @@ const Store = (() => {
     o.connect(g); g.connect(c.destination);
     o.start(); o.stop(c.currentTime + dur);
   }
+  // subtle haptics alongside the beeps (Android Chrome; iOS ignores vibrate) —
+  // follows the same sound toggle so one switch controls all feedback
+  function buzz(pattern) { try { if (state.settings.sound && navigator.vibrate) navigator.vibrate(pattern); } catch (e) {} }
   const Sound = {
-    tap:   () => beep(660, 0.05, 'square', 0.12),
-    place: () => beep(330, 0.07, 'triangle', 0.16),
-    move:  () => beep(520, 0.05, 'sine', 0.12),
-    good:  () => { beep(523, .08); setTimeout(() => beep(784, .12), 80); },
-    bad:   () => beep(150, 0.18, 'sawtooth', 0.18),
-    win:   () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, .14, 'square', .2), i * 100)); },
-    draw:  () => { beep(400, .1); setTimeout(() => beep(300, .14), 120); },
-    countdown: () => beep(880, 0.08, 'square', 0.2),
+    tap:   () => { beep(660, 0.05, 'square', 0.12); },
+    place: () => { beep(330, 0.07, 'triangle', 0.16); buzz(12); },
+    move:  () => { beep(520, 0.05, 'sine', 0.12); buzz(10); },
+    good:  () => { beep(523, .08); setTimeout(() => beep(784, .12), 80); buzz([14, 40, 14]); },
+    bad:   () => { beep(150, 0.18, 'sawtooth', 0.18); buzz(50); },
+    win:   () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, .14, 'square', .2), i * 100)); buzz([18, 50, 18, 50, 70]); },
+    draw:  () => { beep(400, .1); setTimeout(() => beep(300, .14), 120); buzz(30); },
+    countdown: () => { beep(880, 0.08, 'square', 0.2); buzz(8); },
   };
 
   /* ---- device identity (which seat THIS device plays; local-only, not synced) ---- */

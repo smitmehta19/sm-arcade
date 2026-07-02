@@ -3,9 +3,11 @@
 > **Read this first when picking up this project.** It captures architecture, decisions, and the
 > gotchas/mistakes that aren't obvious from the code. Keep it current when you change things.
 >
-> **Current state (2026-06-08):** 28 playable games + a Tournament meta-game, a Date Night
-> Roulette section, per-turn timers, leave-consent, badges/banter/juice, full design polish.
-> **Service worker cache: `sm-arcade-v38`.**
+> **Current state (2026-07-02):** 28 playable games + a Tournament meta-game, a Date Night
+> Roulette section, per-turn timers, leave-consent, badges/banter/juice, full design polish,
+> and a **generic per-move motion layer** (slides/flips/drops/capture-ghosts + last-move ring),
+> canvas confetti physics, haptic feedback, and touch-press board feel.
+> **Service worker cache: `sm-arcade-v39`.**
 
 ---
 
@@ -77,6 +79,12 @@ config → store → icons → ui → words → games-* → datenight-data → d
 - `skipTurn(state, opp)` (optional) → clean "pass" state for a timer **skip** on phase-based games
   (defined for **yahtzee** & **pentago** so a skip doesn't hand the opponent stale mid-turn state).
 - `test` (optional) exposes pure logic for the headless harness.
+- **Per-move animations are automatic** via the `MOVE_FX` map + `MotionFX` module (top of ui.js):
+  the stage snapshots piece rects before each repaint and FLIP-animates the diff (slide / flip /
+  drop / capture-ghost + a gold `.fx-mark` ring). A new board game only needs a `MOVE_FX` entry
+  `{ sel, kind: 'class'|'text'|'self', drop?, ghost? }` — `'class'` reads the owner from a
+  `p0`/`p1` class, `'text'` from cell text, `'self'` from the full class list (unique pieces).
+  No game-logic changes; failures are caught and purely cosmetic.
 
 ---
 
@@ -201,6 +209,8 @@ Active match at Firebase `matches/<ROOM>/active`:
 - **Date Night list curation:** the user wanted to review all 162 ideas before building (I built it directly so
   they can curate in-app via ✕ Remove). If they want to edit the master list, edit `datenight-data.js`
   (ids `d1`–`d162` map to the list I presented in chat).
-- Per-move piece animations (board fully re-renders each sync today; only entrance animations exist).
+- ~~Per-move piece animations~~ ✅ DONE (MotionFX layer, v39). Games with clear pieces are covered;
+  memory/battleship/word games were deliberately left out (they have their own reveal interactions).
 - Optional: a "surprise spin" Date Night shortcut on the home screen; result/rules overlays could get the same
   accent-glow polish; profile photos.
+- Haptics (`navigator.vibrate`) ride the sound toggle (Android only; iOS Safari ignores it).
