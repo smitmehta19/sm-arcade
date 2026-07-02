@@ -21,7 +21,8 @@ intentionally personal: flirty/spicy content is welcome (consensual, just the tw
   troll popup (`trollMeera()` / `SM_TROLLS`). Name-change password = **`change`**. Score reset & adjust
   password = **`smitwins`**.
 - **Live site:** https://smitmehta19.github.io/sm-arcade/ · **Repo:** https://github.com/smitmehta19/sm-arcade
-- **Local path:** `…\Desktop\Data\2026\April\TP analysis\smit-meera-arcade`
+- **Local path:** `…\Desktop\Data\Code-r\NEwCOde\ClaudeCode\smit-meera-arcade` (the old
+  `…\2026\April\TP analysis\smit-meera-arcade` copy no longer exists)
 - **Stack:** static HTML/CSS/vanilla JS (**NO build step**) · GitHub Pages · Firebase Realtime Database
   (anonymous auth) · installable PWA. Fonts: Orbitron / Chakra Petch / Sora (Google Fonts, non-blocking).
 
