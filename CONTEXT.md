@@ -3,11 +3,13 @@
 > **Read this first when picking up this project.** It captures architecture, decisions, and the
 > gotchas/mistakes that aren't obvious from the code. Keep it current when you change things.
 >
-> **Current state (2026-07-02):** 28 playable games + a Tournament meta-game, a Date Night
+> **Current state (2026-07-02):** 37 playable games + a Tournament meta-game, a Date Night
 > Roulette section, per-turn timers, leave-consent, badges/banter/juice, full design polish,
-> and a **generic per-move motion layer** (slides/flips/drops/capture-ghosts + last-move ring),
+> a **generic per-move motion layer** (slides/flips/drops/capture-ghosts + last-move ring),
 > canvas confetti physics, haptic feedback, and touch-press board feel.
-> **Service worker cache: `sm-arcade-v39`.**
+> New in batch 3: **Chess, Dominoes, SOS, GOPS, Story Builder** + the **Score Duels** pack
+> (Reaction / Speed Math / Snake / 2048 — async local runs, only the score syncs).
+> **Service worker cache: `sm-arcade-v40`.**
 
 ---
 
@@ -57,7 +59,17 @@ assets/js/
   games-word2.js           letterpress, codenames-duet  (codenames is co-op: coop:true)
   games-draw.js            draw-guess                   (coop)
   games-ultimate.js        ultimate-ttt
-  games-tournament.js      tournament (META-game: isTournament:true, buildSchedule)
+  games-chess.js           chess — full rules (castle/en-passant/promotion picker/50-move);
+                           host = White, board flips for the other seat; test hooks exposed
+  games-board3.js          dominoes (draw&block), sos (6×6, extra turn on score), gops (secret bids)
+  games-story.js           story-builder (coop: alternate sentences, "The End" at 6+, auto at 14)
+  games-duels.js           SCORE DUELS: reaction-duel, speed-math, snake-duel, 2048-race.
+                           Async local runs — no `turn`; state = {seed, results:[null,null]};
+                           both play the SAME seeded run locally in a body-mounted fullscreen
+                           overlay (survives sync repaints), only the final score commits.
+                           `latest[id]` ctx map prevents clobbering the partner's result.
+  games-tournament.js      tournament (META-game: isTournament:true, buildSchedule —
+                           pools non-coop Word+Strategy, so chess/dominoes/sos auto-join)
   datenight-data.js        window.DATE_NIGHT = {cats, lens, ideas[162]} — Date Night Roulette data (ids d1..d162)
   datenight.js             window.renderDateNight — slot-machine UI + its own injected CSS
   app.js                   boot, chrome wiring, nav SVG icons, leave-guard, initNet + initCloud, router, SW reg

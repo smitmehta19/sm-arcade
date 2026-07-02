@@ -38,6 +38,16 @@ const Icons = (() => {
     'codenames-duet': wrap('<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M3.5 9.5h17M8 5.5v13M16 5.5v13"/><circle cx="12" cy="14" r="1.4" ' + fc + '/>'),
     'draw-guess': wrap('<path d="M3 21l1.2-4.2L14 7l3 3-9.8 9.8z"/><path d="M13 8l3 3"/><path d="M16.5 4.5l3 3a1.4 1.4 0 010 2L18 11l-3-3 1.5-1.5a1.4 1.4 0 012-2z" ' + fc + '/>'),
     'ultimate-ttt': wrap('<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M9 3.5v17M15 3.5v17M3.5 9h17M3.5 15h17" stroke-width="1.2"/><path d="M5 5.7h2.3M5.7 5v2.3" stroke-width="1.5"/><circle cx="18.8" cy="18.8" r="1.4" stroke-width="1.5"/>'),
+    // ---- batch 3 (chess/dominoes/sos/gops/story + score duels) ----
+    'chess': wrap('<path d="M9 6.5C9 5 10.3 3.5 12.2 3.5c2.6 0 4.3 2.2 4.3 4.6 0 2.6-1.6 4-3 5.4h-3c.5-1.4.3-2.4-.6-3.3L8.2 8.5l1.6-.6z"/><path d="M9 16.5h6.6l1 3.5H8z M10 13.5h5v3h-5z"/>'),
+    'dominoes': wrap('<rect x="4" y="3.5" width="8.5" height="17" rx="1.8" transform="rotate(-14 8 12)"/><rect x="12" y="6" width="8.5" height="15" rx="1.8" transform="rotate(9 16 13)"/><circle cx="7" cy="8" r="1" ' + fc + '/><circle cx="16.5" cy="10.5" r="1" ' + fc + '/><circle cx="18" cy="16.5" r="1" ' + fc + '/>'),
+    'sos': wrap('<path d="M8 5.5H5.5a1.8 1.8 0 000 3.6h-1a1.8 1.8 0 000 3.6H7"/><circle cx="12" cy="9.2" r="3.2"/><path d="M19.5 5.5H17a1.8 1.8 0 000 3.6h-1a1.8 1.8 0 000 3.6h2.5"/><path d="M5 19h14" stroke-dasharray="2.6 2.4"/>'),
+    'gops': wrap('<rect x="4" y="5" width="10" height="14" rx="1.8" transform="rotate(-9 9 12)"/><rect x="10" y="4.5" width="10" height="14" rx="1.8" transform="rotate(8 15 11.5)"/><path d="M15.2 8.2l1.9 2.6-1.9 2.6-1.9-2.6z" ' + fc + '/>'),
+    'story-builder': wrap('<path d="M4 5.5A2 2 0 016 4h5v15H6a2 2 0 00-2 1.5z"/><path d="M20 5.5A2 2 0 0018 4h-5v15h5a2 2 0 012 1.5z"/><path d="M6.8 8h2.4M6.8 11h2.4M14.8 8h2.4M14.8 11h2.4"/>'),
+    'reaction-duel': wrap('<path d="M13 3L6 13.5h4.5L10 21l7.5-10.5H13z" ' + fc + '/>'),
+    'speed-math': wrap('<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8 8.5h4M10 6.5v4"/><path d="M13.8 14.2l4 4M17.8 14.2l-4 4"/><path d="M6.8 15.2h4.4M6.8 17.6h4.4"/>'),
+    'snake-duel': wrap('<path d="M4.5 18.5h9a3 3 0 000-6h-5a3 3 0 010-6h8"/><circle cx="18" cy="6.5" r="1.6"/><circle cx="18.6" cy="6.2" r=".4" ' + fc + '/>'),
+    '2048-race': wrap('<rect x="3.5" y="3.5" width="17" height="17" rx="2.6"/><path d="M12 3.5v17M3.5 12h17" stroke-width="1.2"/><rect x="5.6" y="5.6" width="4.6" height="4.6" rx="1" ' + fc + '/><rect x="13.8" y="13.8" width="4.6" height="4.6" rx="1"/>'),
   };
 
   const UI = {

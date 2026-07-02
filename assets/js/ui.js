@@ -61,6 +61,15 @@ const GAME_RULES = {
   'codenames-duet': ['<b>Co-op!</b> Find all <b>9 secret agents</b> together before you run out of turns — and never tap an <b>assassin ☠️</b>.', 'On your turn you secretly see the key — give your partner a <b>one-word clue + a number</b> pointing at agent words.', 'They tap words: a green agent = keep going, a bystander ends the turn, the assassin = instant loss. You win or lose <b>together</b> — no scoreboard points, just pure teamwork. 💞'],
   'draw-guess': ['One of you gets a <b>secret word</b> and sketches it on the canvas — your partner watches it appear in real time.', 'Tap <b>“Done”</b> to hand it over, then your partner types guesses. A correct guess scores a point.', 'You swap who draws each round — most points after 6 rounds wins! 🎨'],
   'ultimate-ttt': ['It’s <b>9 tic-tac-toe boards</b> in a 3×3 grid. Win a small board by getting 3-in-a-row inside it.', 'The twist: the <b>cell</b> you play decides <b>which board your opponent must play next</b> — top-left cell sends them to the top-left board.', 'Sent to a board that’s already won or full? Then you may play <b>anywhere</b>. Win <b>three small boards in a row</b> to win it all. 🧠'],
+  'chess': ['The full royal game — the host plays <b>White</b> and moves first; the board flips so you each see your side at the bottom.', 'Tap a piece to see its legal moves: green dot = move, pink ring = capture. Castling, en passant and promotion (you pick the piece!) all work.', 'Trap the enemy king so it can’t escape — <b>checkmate</b> — to win. Stalemate, dead positions and the 50-move rule are automatic draws.'],
+  'dominoes': ['You each get <b>7 bones</b>; the rest are the boneyard. Take turns adding a bone whose number <b>matches an open end</b> of the line.', 'Can’t play? <b>Draw</b> from the boneyard until you can. Boneyard empty too? You pass.', 'First to play their <b>last bone</b> wins. If you’re both stuck, the <b>lowest total pips</b> in hand wins.'],
+  'sos': ['Take turns writing an <b>S or an O</b> (your choice, every turn) into any empty cell.', 'Complete <b>S-O-S</b> in any direction → +1 point, the cells light in your colour, and you <b>go again</b>.', 'One move can score several SOS lines at once! Board full → most points wins.'],
+  'gops': ['13 rounds. Each round a <b>diamond prize</b> (A=1 … K=13) is revealed; you both <b>secretly bid</b> one of your 13 spades.', 'Higher bid takes the prize points. <b>Tie → the prize rolls over</b> onto the next one — pots get juicy.', 'Every spade can be used only once, so spend big cards wisely. Most prize points after 13 rounds wins.'],
+  'story-builder': ['<b>Co-op!</b> A random opening line sets the scene; you take turns adding <b>one sentence each</b>.', 'Build on whatever your partner wrote — the weirder the better 😄', 'After 6 lines either of you can call <b>“The End”</b> (it auto-ends at 14). Read your masterpiece out loud — you win together. 💞'],
+  'reaction-duel': ['<b>Score Duel:</b> you each play the SAME run locally, whenever you like — only the score syncs. No lag, pure skill.', '5 rounds: wait for the pad to turn <b>GREEN</b>, then tap instantly. Tapping early costs a 500ms round.', 'Lowest <b>average reaction time</b> wins the point.'],
+  'speed-math': ['<b>Score Duel:</b> same 45-second quiz for both of you — play whenever, only the score syncs.', 'Tap the correct answer; wrong taps just burn your clock.', 'Most correct answers wins.'],
+  'snake-duel': ['<b>Score Duel:</b> identical apple layout for both of you — play your run whenever, only the score syncs.', 'Swipe (or use the arrow pad) to steer. Eat apples; walls and your own tail are fatal. It speeds up!', 'Most apples wins.'],
+  '2048-race': ['<b>Score Duel:</b> identical tile drops for both of you — play whenever, only the score syncs.', 'Swipe to slide the board; equal tiles merge and score. You have <b>2 minutes</b> (or until you jam the board).', 'Highest score wins.'],
 };
 function showRules(game) {
   const back = h('div', { class: 'rules-overlay', onclick: e => { if (e.target === back) close(); } });
@@ -110,6 +119,9 @@ const MOVE_FX = {
   'onitama':          { sel: '.on-pawn',        kind: 'class', ghost: true },
   'ultimate-ttt':     { sel: '.ut-cell',        kind: 'class' },
   'quarto':           { sel: '.qt-cell .qt-pc', kind: 'self'  },
+  'chess':            { sel: '.ch-pc',          kind: 'class', ghost: true },
+  'sos':              { sel: '.sos-c',          kind: 'text'  },
+  'dominoes':         { sel: '.dm-line .dmt',   kind: 'self'  },
 };
 const MotionFX = (() => {
   const reduced = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -302,6 +314,7 @@ const TIMER_GAMES = {
   'checkers': { skip: false }, 'pentago': { skip: false }, 'quarto': { skip: false }, 'nine-mens-morris': { skip: false },
   'ghost': { skip: false }, 'word-duel': { skip: false }, 'hangman': { skip: false }, 'letterpress': { skip: false },
   'code-breaker': { skip: false }, 'liars-dice': { skip: false }, 'yahtzee': { skip: false },
+  'chess': { skip: false }, 'dominoes': { skip: false }, 'sos': { skip: true },
 };
 const timerCap = gameId => TIMER_GAMES[gameId] || (Games.byId(gameId) && Games.byId(gameId).isTournament ? { skip: true, tour: true } : null);
 // next turn's deadline (synced server ms) when the current match has a live timer
