@@ -83,18 +83,29 @@ function showRules(game) {
 }
 
 /* ---------- shared turn/score bar (rebuilt from state each paint) ---------- */
+const lastTurnByRoute = new Map(); // route → last seen turn, for the hand-off glide
 function turnBar(ctx, opts = {}) {
   const s = Store.get(); const turn = ctx.state.turn;
   function chip(i) {
     const active = turn === i;
-    const sc = opts.scores ? h('span', { class: 'sc' }, String(opts.scores[i])) : '';
+    let sc = '';
+    if (opts.scores) { sc = h('span', { class: 'sc' }); rollNum(sc, location.hash + ':sc' + i, opts.scores[i]); }
     const kids = i === 0 ? [h('span', { class: 'dot' }), h('span', {}, s.players[0].name), sc]
                          : [sc, h('span', {}, s.players[1].name), h('span', { class: 'dot' })];
     const c = h('div', { class: 'turnchip p' + i + (active ? ' active' : '') }, kids);
     if (i === ctx.me) c.append(h('span', { class: 'you-tag' }, ' (you)'));
     return c;
   }
-  return h('div', { class: 'turnbar' }, chip(0), chip(1));
+  const bar = h('div', { class: 'turnbar' }, chip(0), chip(1));
+  // turn changed since the last paint → a glow orb glides across to the new player
+  const key = location.hash, prevTurn = lastTurnByRoute.get(key);
+  if (turn === 0 || turn === 1) lastTurnByRoute.set(key, turn);
+  if ((turn === 0 || turn === 1) && (prevTurn === 0 || prevTurn === 1) && prevTurn !== turn) {
+    const orb = h('div', { class: 'fx-handoff' + (turn === 1 ? ' to-r' : ' to-l') });
+    orb.style.background = turn === 1 ? 'var(--p2)' : 'var(--p1)';
+    bar.append(orb); setTimeout(() => orb.remove(), 500);
+  }
+  return bar;
 }
 
 /* ============================================================
@@ -184,6 +195,13 @@ const MotionFX = (() => {
       ], { duration: 440, easing: 'ease-in' });
       setTimeout(() => g.remove(), 460);
     }
+    // impact ripple where a piece just landed (skipped on multi-piece deals)
+    if (appeared.length && appeared.length <= 3) appeared.forEach(np => {
+      const rp = document.createElement('div'); rp.className = 'fx-ripple';
+      const sz = Math.max(np.r.width, np.r.height) * 1.7;
+      rp.style.cssText = `left:${np.x - sz / 2}px;top:${np.y - sz / 2}px;width:${sz}px;height:${sz}px;`;
+      document.body.append(rp); setTimeout(() => rp.remove(), 650);
+    });
     // brand-new pieces → gravity drop (connect four) or springy pop-in
     appeared.forEach((np, i) => {
       if (!can(np.el)) return;
@@ -217,11 +235,55 @@ const MotionFX = (() => {
   return { snap, play };
 })();
 
+/* ---------- win-line sweep — a glowing stroke through the winning cells.
+   Games call fxWinLine(gridEl, firstCellEl, lastCellEl, color) on their
+   final render; the SVG lives inside the grid so the next repaint clears it. */
+function fxWinLine(container, cellA, cellB, color) {
+  try {
+    if (!container || !cellA || !cellB) return;
+    const cr = container.getBoundingClientRect(); if (!cr.width) return;
+    const a = cellA.getBoundingClientRect(), b = cellB.getBoundingClientRect();
+    if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
+    const S = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(S, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${cr.width} ${cr.height}`);
+    svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:5;';
+    const x1 = a.left + a.width / 2 - cr.left, y1 = a.top + a.height / 2 - cr.top;
+    const x2 = b.left + b.width / 2 - cr.left, y2 = b.top + b.height / 2 - cr.top;
+    const line = document.createElementNS(S, 'line');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    const col = color || '#ffd66b';
+    line.setAttribute('stroke', col); line.setAttribute('stroke-width', '5'); line.setAttribute('stroke-linecap', 'round');
+    line.style.filter = `drop-shadow(0 0 7px ${col})`; line.style.opacity = '.9';
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    svg.append(line); container.append(svg);
+    if (line.animate && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+      line.style.strokeDasharray = len;
+      line.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 480, delay: 140, easing: 'cubic-bezier(.22,.61,.36,1)', fill: 'backwards' });
+    }
+  } catch (e) {}
+}
+
+/* ---------- rolling digits — numbers slide in when a tracked value changes ---------- */
+const rollVals = new Map();
+function rollNum(el, key, val) {
+  const prev = rollVals.get(key);
+  rollVals.set(key, val);
+  el.textContent = val;
+  if (prev === undefined || prev === val || !el.animate) return;
+  const up = typeof val === 'number' && typeof prev === 'number' && val < prev;
+  el.animate([
+    { transform: `translateY(${up ? '' : '-'}80%)`, opacity: 0 },
+    { transform: 'none', opacity: 1 },
+  ], { duration: 340, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+}
+
 /* ---------- result overlay ---------- */
 const Overlay = (() => {
   let confettiRaf = null;
-  // full-screen canvas burst — two corner cannons, gravity + drag + spin
-  function confetti() {
+  // full-screen canvas burst — two corner cannons, gravity + drag + spin.
+  // `tint` (a winner's colour) biases the palette so wins feel personal.
+  function confetti(tint) {
     if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     killConfetti();
     const cv = document.createElement('canvas');
@@ -231,7 +293,9 @@ const Overlay = (() => {
     cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
     document.body.append(cv);
     const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
-    const colors = ['#2fe6ff', '#ff4d9d', '#9b7bff', '#ffd66b', '#79f5b6', '#ffffff'];
+    const colors = tint
+      ? [tint, tint, tint, '#ffffff', '#ffd66b', tint]
+      : ['#2fe6ff', '#ff4d9d', '#9b7bff', '#ffd66b', '#79f5b6', '#ffffff'];
     const P = [];
     for (let i = 0; i < 140; i++) {
       const left = i % 2 === 0, a = (-Math.PI / 2) + (left ? 1 : -1) * (Math.PI / 5) * (0.35 + Math.random() * 0.9);
@@ -268,12 +332,25 @@ const Overlay = (() => {
     const old = $('#fxConfetti'); if (old) old.remove();
   }
   // buttons: [{ label, primary?, onClick }]
-  function show({ emoji, title, sub, party = true }, buttons) {
+  // color: winner's colour → tinted confetti, card glow, screen-edge flash
+  // stamp: extra badge on the card (e.g. "🔥 3 IN A ROW")
+  function show({ emoji, title, sub, party = true, color = null, stamp = null }, buttons) {
     $('#resultEmoji').textContent = emoji;
     $('#resultTitle').innerHTML = title;
     $('#resultSub').innerHTML = sub || '';
     const box = $('#confetti'); if (box) box.innerHTML = ''; // legacy CSS confetti box stays empty
-    if (party) confetti(); else killConfetti();
+    if (party) confetti(color); else killConfetti();
+    const card = $('#resultOverlay .result-card');
+    if (card) {
+      card.style.borderColor = color ? color : '';
+      card.style.boxShadow = color ? `inset 0 1px 0 rgba(255,255,255,.08), 0 0 44px -8px ${color}, var(--shadow)` : '';
+      const oldStamp = card.querySelector('.fx-stamp'); if (oldStamp) oldStamp.remove();
+      if (stamp) card.prepend(h('div', { class: 'fx-stamp' }, stamp));
+    }
+    if (color && party && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+      const edge = h('div', { class: 'fx-edge' }); edge.style.setProperty('--edge-c', color);
+      document.body.append(edge); setTimeout(() => edge.remove(), 1000);
+    }
     const acts = $('#resultActions'); acts.innerHTML = '';
     (buttons || []).forEach(b => acts.append(h('button', { class: 'btn ' + (b.primary ? 'btn-primary' : 'btn-ghost'), onclick: () => b.onClick && b.onClick() }, b.label)));
     $('#resultOverlay').hidden = false;
@@ -445,7 +522,8 @@ async function sendNudge(me, partner) {
    ROUTER
    ============================================================ */
 const Router = (() => {
-  function go() {
+  let lastHash = null;
+  function core() {
     stageHook = null;
     if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
     if (reactUnsub) { reactUnsub(); reactUnsub = null; }
@@ -465,6 +543,16 @@ const Router = (() => {
     else renderHome();
     syncChrome(hash);
     window.scrollTo(0, 0);
+  }
+  function go() {
+    // smooth screen-to-screen transitions (View Transitions API — progressive
+    // enhancement: unsupported browsers get the same instant swap as before)
+    const hash = location.hash || '#/';
+    const useVT = document.startViewTransition && lastHash !== null && lastHash !== hash
+      && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    lastHash = hash;
+    if (useVT) { try { document.startViewTransition(core); return; } catch (e) {} }
+    core();
   }
   return { go };
 })();
@@ -930,7 +1018,12 @@ function renderStage(gameId) {
       if (w === 'coop-win') res = { emoji: '🎉', title: 'You both cracked it!', sub: 'Solved together — no points, all glory 💞', party: true };
       else if (w === 'coop-loss') res = { emoji: '💀', title: 'You both lost…', sub: 'So close — run it back?', party: false };
       else if (w === 'draw' || w == null) res = { emoji: '🤝', title: 'Draw!', sub: 'No winner this time', party: false };
-      else { const p = s.players[w]; res = { emoji: p.emoji, title: `${esc(p.name)} wins!`, sub: 'Added to your scoreboard 🏆', party: true }; }
+      else {
+        const p = s.players[w];
+        res = { emoji: p.emoji, title: `${esc(p.name)} wins!`, sub: 'Added to your scoreboard 🏆', party: true, color: p.color };
+        const stk = Store.get().streak;                        // 3+ in a row → ON FIRE stamp
+        if (stk && stk.who === 'p' + (w + 1) && stk.n >= 3) { res.stamp = `🔥 ${stk.n} IN A ROW`; res.sub = `${esc(p.name)} is ON FIRE — someone stop them 🥵`; }
+      }
       Store.Sound[(w === 'draw' || w == null || w === 'coop-loss') ? 'draw' : 'win']();
       if (res.party) { document.body.classList.add('shake'); setTimeout(() => document.body.classList.remove('shake'), 450); }
       Overlay.show(res, [
@@ -1173,9 +1266,9 @@ function renderScores() {
   view.append(
     h('div', { class: 'score-hero' }, h('h2', {}, 'THE RIVALRY'),
       h('div', { class: 'bigvs' },
-        h('div', { class: 'col c1' }, h('div', { class: 'av' }, s.players[0].emoji), h('div', { class: 'nm' }, s.players[0].name), h('div', { class: 'big' }, String(p1))),
+        h('div', { class: 'col c1' }, h('div', { class: 'av' }, s.players[0].emoji), h('div', { class: 'nm' }, s.players[0].name), (() => { const el = h('div', { class: 'big' }); rollNum(el, 'scores:p1', p1); return el; })()),
         h('div', { class: 'mid' }, ':'),
-        h('div', { class: 'col c2' }, h('div', { class: 'av' }, s.players[1].emoji), h('div', { class: 'nm' }, s.players[1].name), h('div', { class: 'big' }, String(p2))))),
+        h('div', { class: 'col c2' }, h('div', { class: 'av' }, s.players[1].emoji), h('div', { class: 'nm' }, s.players[1].name), (() => { const el = h('div', { class: 'big' }); rollNum(el, 'scores:p2', p2); return el; })()))),
     h('div', { class: 'meter' }, h('div', { class: 'fill', style: `width:${pct}%` })),
     h('div', { class: 'meter-labels' }, h('span', { style: 'color:var(--p1)' }, `${s.players[0].name} ${pct}%`), h('span', { style: 'color:var(--p2)' }, `${s.players[1].name} ${100 - pct}%`)),
     h('div', { class: 'stat-row' },

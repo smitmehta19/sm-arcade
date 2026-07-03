@@ -20,11 +20,17 @@
   .bs-seg{ width:15px; height:15px; border-radius:3px; background:rgba(180,190,210,.65); }
 
   .mem{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; max-width:380px; margin:0 auto; }
-  .mem-card{ aspect-ratio:1; border-radius:12px; font-size:30px; display:grid; place-items:center; background:linear-gradient(135deg,var(--panel-2),var(--bg-2)); border:1px solid var(--line); position:relative; }
-  .mem-card.live{ cursor:pointer; } .mem-card.live:active{ transform:scale(.92); }
-  .mem-card.down{ background:linear-gradient(135deg,var(--violet),var(--magenta)); color:transparent; }
-  .mem-card.down::after{ content:'?'; position:absolute; font-family:var(--font-display); color:rgba(255,255,255,.5); font-size:16px; }
-  .mem-card.matched{ opacity:.32; transform:scale(.94); }
+  /* real 3D card flip: card = perspective stage, .mci = rotating inner, front/back faces */
+  .mem-card{ aspect-ratio:1; position:relative; perspective:560px; }
+  .mem-card.live{ cursor:pointer; } .mem-card.live:active .mci{ scale:.92; }
+  .mci{ position:absolute; inset:0; transform-style:preserve-3d; transition:transform .5s var(--ease-back), scale .12s var(--ease); }
+  .mem-card.down .mci{ transform:rotateY(180deg); }
+  .mcf, .mcb{ position:absolute; inset:0; border-radius:12px; display:grid; place-items:center;
+    backface-visibility:hidden; -webkit-backface-visibility:hidden; border:1px solid var(--line); }
+  .mcf{ font-size:30px; background:linear-gradient(135deg,var(--panel-2),var(--bg-2)); box-shadow:inset 0 1px 0 rgba(255,255,255,.07); }
+  .mcb{ transform:rotateY(180deg); background:linear-gradient(135deg,var(--violet),var(--magenta)); }
+  .mcb::after{ content:'?'; font-family:var(--font-display); color:rgba(255,255,255,.55); font-size:16px; }
+  .mem-card.matched{ opacity:.32; } .mem-card.matched .mci{ scale:.94; }
 
   .wd-grid{ display:grid; gap:6px; justify-content:center; margin-bottom:14px; }
   .wd-row{ display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
@@ -56,6 +62,7 @@
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = rint(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const waiting = (ctx, who) => ctx.msg(`Waiting for ${who || ctx.seat(1 - ctx.me).name}…`, 'var(--ink-faint)');
   const scheduled = new Set();
+  let memPrev = null; // memory: which cards were face-up on the previous paint (for the 3D flip)
 
   // memory-match symbols (custom SVG, no emoji)
   const MEM = [
@@ -182,12 +189,27 @@
       const st = ctx.state, me = ctx.me; let firstLocal = null;
       ctx.root.append(ctx.turnBar({ scores: st.scores }));
       const grid = ctx.h('div', { class: 'mem' });
+      // the grid is rebuilt on every sync, so remember which cards were face-up
+      // last paint and replay the 3D flip on any card whose side changed
+      const memKey = st.deck.join(',');
+      const prev = (memPrev && memPrev.key === memKey) ? memPrev.shown : null;
+      const nowShown = [];
       const cards = st.deck.map((e, i) => {
         const shown = st.matched[i] || (st.reveal && st.reveal.includes(i));
-        const card = ctx.h('div', { class: 'mem-card' + (shown ? '' : ' down') + (st.matched[i] ? ' matched' : '') + (ctx.isMyTurn && !st.reveal && !st.matched[i] ? ' live' : '') }, shown ? ctx.h('span', { class: 'mem-face', html: memFace(e) }) : '');
+        nowShown[i] = !!shown;
+        const inner = ctx.h('div', { class: 'mci' },
+          ctx.h('div', { class: 'mcf' }, ctx.h('span', { class: 'mem-face', html: shown ? memFace(e) : '' })),
+          ctx.h('div', { class: 'mcb' }));
+        const card = ctx.h('div', { class: 'mem-card' + (shown ? '' : ' down') + (st.matched[i] ? ' matched' : '') + (ctx.isMyTurn && !st.reveal && !st.matched[i] ? ' live' : '') }, inner);
+        if (prev && prev[i] !== !!shown) {                     // side changed since last paint → animate
+          inner.style.transition = 'none';
+          inner.style.transform = prev[i] ? 'rotateY(0deg)' : 'rotateY(180deg)';
+          requestAnimationFrame(() => { void inner.offsetWidth; inner.style.transition = ''; inner.style.transform = ''; });
+        }
         if (ctx.isMyTurn && !st.reveal && !st.matched[i]) card.onclick = () => flip(i, card, e);
         grid.append(card); return card;
       });
+      memPrev = { key: memKey, shown: nowShown };
       ctx.root.append(ctx.h('div', { class: 'board-frame' }, grid));
       // resolve a mismatch reveal (the player whose turn it is hides them and passes)
       if (st.reveal) {
@@ -200,7 +222,12 @@
       }
       ctx.isMyTurn ? ctx.msg('Your turn — flip two', ctx.players[me].color) : waiting(ctx);
       function flip(i, card, e) {
-        if (firstLocal == null) { firstLocal = i; card.classList.remove('down'); card.innerHTML = '<span class="mem-face">' + memFace(e) + '</span>'; ctx.sound.tap(); return; }
+        if (firstLocal == null) {                             // local flip — CSS transition plays on the class change
+          firstLocal = i; card.classList.remove('down');
+          card.querySelector('.mem-face').innerHTML = memFace(e);
+          if (memPrev && memPrev.key === memKey) memPrev.shown[i] = true;
+          ctx.sound.tap(); return;
+        }
         if (i === firstLocal) return;
         ctx.sound.tap();
         const s = ctx.clone(st);

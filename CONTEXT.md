@@ -9,7 +9,13 @@
 > canvas confetti physics, haptic feedback, and touch-press board feel.
 > New in batch 3: **Chess, Dominoes, SOS, GOPS, Story Builder** + the **Score Duels** pack
 > (Reaction / Speed Math / Snake / 2048 — async local runs, only the score syncs).
-> **Service worker cache: `sm-arcade-v40`.**
+> **Graphics pass 2 (all tiers):** SVG chess piece set · Memory 3D card flips (cross-render
+> replay via module-level `memPrev`) · win-line sweeps (`fxWinLine` — ttt/c4/gomoku/ultimate) ·
+> winner-coloured result overlay + edge flash + streak "ON FIRE" stamp (`Overlay.show`
+> `color`/`stamp`) · impact ripples in MotionFX · rolling digits (`rollNum`) on turnbar/
+> mini-score/Scores · turn hand-off orb · View Transitions on route change (progressive) ·
+> gyro parallax on the aurora (Android only, CSS `translate` so it composes with the
+> keyframe transform). **Service worker cache: `sm-arcade-v41`.**
 
 ---
 

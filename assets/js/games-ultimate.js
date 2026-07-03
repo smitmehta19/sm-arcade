@@ -64,6 +64,11 @@
         meta.append(mini);
       }
       ctx.root.append(ctx.h('div', { class: 'board-frame' }, meta));
+      // sweep the winning line of mini-boards
+      for (const p of [0, 1]) {
+        const wl = LINES.find(l => l.every(i => st.won[i] === p));
+        if (wl) { fxWinLine(meta, meta.children[wl[0]], meta.children[wl[2]], ctx.players[p].color); break; }
+      }
       ctx.isMyTurn ? ctx.msg(st.active != null ? 'Play in the highlighted board' : 'Free move — play in any open board', ctx.players[me].color) : waiting(ctx);
       function play(m, c) { const { next, winner } = utApply(st, me, m, c); ctx.sound.place(); ctx.commit(next, winner); }
     },

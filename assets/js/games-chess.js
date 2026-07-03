@@ -15,20 +15,34 @@
   .ch-sq.mv::after{ content:''; position:absolute; width:26%; height:26%; border-radius:50%; background:rgba(182,255,58,.55); pointer-events:none; }
   .ch-sq.cap::after{ content:''; position:absolute; inset:6%; border-radius:50%; border:3px solid rgba(255,77,157,.75); pointer-events:none; }
   .ch-sq.chk{ box-shadow:inset 0 0 0 100px rgba(255,77,109,.28); }
-  .ch-pc{ font-size:7.4vw; line-height:1; user-select:none; filter:drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
-  @media(min-width:520px){ .ch-pc{ font-size:37px; } }
-  .ch-pc.p0{ color:var(--p1); text-shadow:0 0 9px rgba(47,230,255,.55); }
-  .ch-pc.p1{ color:var(--p2); text-shadow:0 0 9px rgba(255,77,157,.55); }
+  .ch-pc{ width:82%; height:82%; user-select:none; }
+  .ch-pc svg{ width:100%; height:100%; display:block; }
+  .ch-pc.p0{ color:var(--p1); filter:drop-shadow(0 2px 3px rgba(0,0,0,.65)) drop-shadow(0 0 7px rgba(47,230,255,.45)); }
+  .ch-pc.p1{ color:var(--p2); filter:drop-shadow(0 2px 3px rgba(0,0,0,.65)) drop-shadow(0 0 7px rgba(255,77,157,.45)); }
   .ch-promo{ display:flex; gap:10px; justify-content:center; margin-top:12px; }
-  .ch-promo button{ width:56px; height:56px; border-radius:13px; background:var(--panel-2); border:1px solid var(--gold); font-size:30px; box-shadow:0 0 14px -4px var(--gold); }
+  .ch-promo button{ width:56px; height:56px; border-radius:13px; background:var(--panel-2); border:1px solid var(--gold); box-shadow:0 0 14px -4px var(--gold); display:grid; place-items:center; }
+  .ch-promo button svg{ width:36px; height:36px; }
   .ch-promo button:active{ transform:scale(.9); }
-  .ch-cap-row{ display:flex; gap:2px; justify-content:center; min-height:18px; font-size:14px; opacity:.8; margin-top:8px; flex-wrap:wrap; }
+  .ch-cap-row{ display:flex; gap:2px; justify-content:center; min-height:18px; opacity:.85; margin-top:8px; flex-wrap:wrap; }
+  .ch-cap-row span{ display:inline-block; width:15px; height:15px; }
+  .ch-cap-row svg{ width:100%; height:100%; display:block; }
   .ch-cap-row .p0{ color:var(--p1); } .ch-cap-row .p1{ color:var(--p2); }
   `;
   document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
 
-  const GL = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
-  const glyph = t => GL[t] + '︎'; // text-style variation selector — never emoji
+  /* custom SVG piece set — silhouettes in currentColor with a dark contact
+     outline + a specular sheen, so they read crisply on both square shades
+     and tint perfectly to each seat's neon (font glyphs varied per phone). */
+  const PC_BASE = '<path d="M6.6 20.3l.7-2.1h9.4l.7 2.1z"/>';
+  const PC_SVG = {
+    p: '<circle cx="12" cy="6.6" r="3"/><path d="M10.1 9.2h3.8l1.2 6.2H8.9z"/><path d="M7.4 18.2c.5-2 2-3 4.6-3s4.1 1 4.6 3l.4 2.1H7z"/>',
+    r: '<path d="M7 3.8h2.1v1.9h1.8V3.8h2.2v1.9h1.8V3.8H17v3.9l-1.3 1.5.7 6.6H7.6l.7-6.6L7 7.7z"/>' + PC_BASE,
+    n: '<path d="M9.3 4.4c.3-.9 1.1-1.4 2-1.2l.2 1c3 .4 5.8 2.7 6.3 6.4.4 2.9-.4 5.2-.9 7.2H8.7c.1-1.9 1.5-3.2 3-4.4 1-.8 1.8-1.5 1.7-2.4-.7.7-1.6 1.2-2.8 1.5-1.6.4-3.1-.3-3.5-1.6-.3-.9 0-1.8.7-2.5z"/><circle cx="13" cy="7.2" r=".75" fill="#0a0714" stroke="none"/>' + PC_BASE,
+    b: '<circle cx="12" cy="4.3" r="1.5"/><path d="M12 6.4c2.5 1.6 4 3.6 4 5.7 0 1.7-1 3.1-2.4 3.7H10.4C9 15.2 8 13.8 8 12.1c0-2.1 1.5-4.1 4-5.7z"/><path d="M12.6 8.4l-2.4 3.6" stroke="#0a0714" stroke-width="1.1" fill="none"/>' + PC_BASE,
+    q: '<circle cx="5.2" cy="6.4" r="1.15"/><circle cx="12" cy="4.9" r="1.15"/><circle cx="18.8" cy="6.4" r="1.15"/><path d="M5.6 8.3l2.7 3.2 1.9-4.4 1.8 3 1.8-3 1.9 4.4 2.7-3.2-1.2 7.9H6.8z"/>' + PC_BASE,
+    k: '<path d="M11.1 2.6h1.8v1.7h1.6v1.8h-1.6v1.7h-1.8V6.1H9.5V4.3h1.6z"/><path d="M8.1 8.9c1.2-.9 2.5-1.3 3.9-1.3s2.7.4 3.9 1.3c1.8 1.4 2.4 3.9 1.4 7.3H6.7c-1-3.4-.4-5.9 1.4-7.3z"/>' + PC_BASE,
+  };
+  const pieceSVG = t => `<svg viewBox="0 0 24 24" fill="currentColor" stroke="rgba(5,7,15,.5)" stroke-width=".5" stroke-linejoin="round" aria-hidden="true">${PC_SVG[t]}</svg>`;
 
   const inB = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
 
@@ -151,14 +165,14 @@
         const r = flip ? 7 - vr : vr, c = flip ? 7 - vc : vc;
         const isLast = st.last && ((st.last[0][0] === r && st.last[0][1] === c) || (st.last[1][0] === r && st.last[1][1] === c));
         const cell = ctx.h('div', { class: 'ch-sq ' + ((r + c) % 2 ? 'dark' : 'light') + (isLast ? ' last' : '') + (myCheck && myCheck[0] === r && myCheck[1] === c ? ' chk' : '') });
-        const pc = B[r][c]; if (pc) cell.append(ctx.h('div', { class: 'ch-pc p' + pc.p }, glyph(pc.t)));
+        const pc = B[r][c]; if (pc) cell.append(ctx.h('div', { class: 'ch-pc p' + pc.p, 'data-t': pc.t, html: pieceSVG(pc.t) }));
         if (ctx.isMyTurn) cell.onclick = () => onClick(r, c);
         sq[r][c] = cell; grid.append(cell);
       }
       ctx.root.append(ctx.h('div', { class: 'board-frame' }, grid));
       const capRow = ctx.h('div', { class: 'ch-cap-row' });
-      captured[0].forEach(t => capRow.append(ctx.h('span', { class: 'p0' }, glyph(t))));
-      captured[1].forEach(t => capRow.append(ctx.h('span', { class: 'p1' }, glyph(t))));
+      captured[0].forEach(t => capRow.append(ctx.h('span', { class: 'p0', html: pieceSVG(t) })));
+      captured[1].forEach(t => capRow.append(ctx.h('span', { class: 'p1', html: pieceSVG(t) })));
       ctx.root.append(capRow);
       const promoRow = ctx.h('div', { class: 'ch-promo', hidden: '' }); ctx.root.append(promoRow);
 
@@ -184,7 +198,7 @@
         if (pc.t === 'p' && r === lastRow(st, me)) {         // promotion → picker
           pendingPromo = { fr: sel.r, fc: sel.c, m };
           promoRow.hidden = false; promoRow.innerHTML = '';
-          ['q', 'r', 'b', 'n'].forEach(t => promoRow.append(ctx.h('button', { style: `color:${ctx.players[me].color}`, onclick: () => finish(t) }, glyph(t))));
+          ['q', 'r', 'b', 'n'].forEach(t => promoRow.append(ctx.h('button', { style: `color:${ctx.players[me].color}`, html: pieceSVG(t), onclick: () => finish(t) })));
           ctx.msg('Choose your promotion piece ✨', 'var(--gold)'); ctx.sound.good();
           return;
         }

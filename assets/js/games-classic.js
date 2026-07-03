@@ -51,6 +51,20 @@
 
   const waiting = ctx => ctx.msg(`⏳ Waiting for ${ctx.seat(1 - ctx.me).name}…`, 'var(--ink-faint)');
   const myMark = i => i === 0 ? '✕' : '◯';
+  // find a winning run of `need` on a grid board → {r1,c1,r2,c2,p} for the win-line sweep
+  function findRun(g, R, C, need) {
+    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+      const p = g[r][c]; if (p == null) continue;
+      for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+        const pr = r - dr, pc = c - dc;
+        if (pr >= 0 && pr < R && pc >= 0 && pc < C && g[pr][pc] === p) continue; // not the run's start
+        let n = 1, nr = r + dr, nc = c + dc;
+        while (nr >= 0 && nr < R && nc >= 0 && nc < C && g[nr][nc] === p) { n++; nr += dr; nc += dc; }
+        if (n >= need) return { r1: r, c1: c, r2: r + dr * (n - 1), c2: c + dc * (n - 1), p };
+      }
+    }
+    return null;
+  }
 
   /* ---------- 1. TIC-TAC-TOE ---------- */
   Games.register({
@@ -62,7 +76,7 @@
       ctx.root.append(ctx.turnBar());
       const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
       const winLine = lines.find(l => b[l[0]] != null && l.every(k => b[k] === b[l[0]]));
-      const grid = ctx.h('div', { class: 'ttt' });
+      const grid = ctx.h('div', { class: 'ttt' }); const cells = [];
       b.forEach((v, i) => {
         const cell = ctx.h('div', { class: 'ttt-cell' + (ctx.isMyTurn && v == null ? ' live' : '') + (winLine && winLine.includes(i) ? ' win' : '') });
         if (v != null) { cell.textContent = myMark(v); cell.style.color = ctx.players[v].color; }
@@ -73,9 +87,10 @@
           if (s.board.every(x => x != null)) return ctx.commit(s, 'draw');
           s.turn = 1 - ctx.me; ctx.commit(s);
         };
-        grid.append(cell);
+        cells.push(cell); grid.append(cell);
       });
       ctx.root.append(ctx.h('div', { class: 'board-frame' }, grid));
+      if (winLine) fxWinLine(grid, cells[winLine[0]], cells[winLine[2]], ctx.players[b[winLine[0]]].color);
       ctx.isMyTurn ? ctx.msg(`Your turn — you’re ${myMark(ctx.me)}`, ctx.players[ctx.me].color) : waiting(ctx);
     },
   });
@@ -96,6 +111,9 @@
         grid.append(col);
       }
       ctx.root.append(grid);
+      // sweep the winning four when the game is over
+      const wl = findRun(b, R, C, 4);
+      if (wl) fxWinLine(grid, grid.children[wl.c1].children[wl.r1], grid.children[wl.c2].children[wl.r2], ctx.players[wl.p].color);
       ctx.isMyTurn ? ctx.msg('Your turn — drop a disc', ctx.players[ctx.me].color) : waiting(ctx);
       function drop(c) {
         let r = -1; for (let i = R - 1; i >= 0; i--) if (b[i][c] == null) { r = i; break; }
@@ -268,6 +286,8 @@
         grid.append(cell);
       }
       ctx.root.append(ctx.h('div', { class: 'board-frame' }, grid));
+      const wl = findRun(b, N, N, 5);
+      if (wl) fxWinLine(grid, grid.children[wl.r1 * N + wl.c1], grid.children[wl.r2 * N + wl.c2], ctx.players[wl.p].color);
       ctx.isMyTurn ? ctx.msg('Your turn — place a stone', ctx.players[ctx.me].color) : waiting(ctx);
       function play(r, c) {
         const s = ctx.clone(ctx.state); s.board[r][c] = ctx.me; ctx.sound.place();
