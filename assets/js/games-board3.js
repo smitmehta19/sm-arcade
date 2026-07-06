@@ -24,7 +24,7 @@
   .dm-ends{ display:flex; gap:10px; justify-content:center; margin-top:12px; }
   .dm-ends .btn-sm{ border-color:var(--gold); color:var(--gold); }
   /* ---- SOS ---- */
-  .sos{ display:grid; grid-template-columns:repeat(6,1fr); gap:5px; aspect-ratio:1; }
+  .sos{ display:grid; grid-template-columns:repeat(6,1fr); grid-template-rows:repeat(6,1fr); gap:5px; aspect-ratio:1; }
   .sos-c{ display:grid; place-items:center; background:var(--bg-2); border:1px solid var(--line); border-radius:10px;
     font-family:var(--font-num); font-weight:900; font-size:7vw; color:var(--ink); }
   @media(min-width:520px){ .sos-c{ font-size:30px; } }

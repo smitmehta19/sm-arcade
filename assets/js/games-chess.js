@@ -7,15 +7,17 @@
    ============================================================ */
 (function () {
   const css = `
-  .ch{ display:grid; grid-template-columns:repeat(8,1fr); aspect-ratio:1; border-radius:12px; overflow:hidden; border:2px solid var(--line); }
-  .ch-sq{ position:relative; display:grid; place-items:center; }
+  /* rows are EXPLICIT 1fr — otherwise they size to content and every move
+     that adds/removes a piece from a row makes the whole board reflow */
+  .ch{ display:grid; grid-template-columns:repeat(8,1fr); grid-template-rows:repeat(8,1fr); aspect-ratio:1; border-radius:12px; overflow:hidden; border:2px solid var(--line); }
+  .ch-sq{ position:relative; }
   .ch-sq.dark{ background:rgba(120,70,220,.18); } .ch-sq.light{ background:rgba(255,255,255,.045); }
   .ch-sq.last{ box-shadow:inset 0 0 0 100px rgba(255,214,107,.10); }
   .ch-sq.sel{ box-shadow:inset 0 0 0 3px var(--gold); }
-  .ch-sq.mv::after{ content:''; position:absolute; width:26%; height:26%; border-radius:50%; background:rgba(182,255,58,.55); pointer-events:none; }
+  .ch-sq.mv::after{ content:''; position:absolute; inset:0; margin:auto; width:26%; height:26%; border-radius:50%; background:rgba(182,255,58,.55); pointer-events:none; }
   .ch-sq.cap::after{ content:''; position:absolute; inset:6%; border-radius:50%; border:3px solid rgba(255,77,157,.75); pointer-events:none; }
   .ch-sq.chk{ box-shadow:inset 0 0 0 100px rgba(255,77,109,.28); }
-  .ch-pc{ width:82%; height:82%; user-select:none; }
+  .ch-pc{ position:absolute; inset:9%; user-select:none; }
   .ch-pc svg{ width:100%; height:100%; display:block; }
   .ch-pc.p0{ color:var(--p1); filter:drop-shadow(0 2px 3px rgba(0,0,0,.65)) drop-shadow(0 0 7px rgba(47,230,255,.45)); }
   .ch-pc.p1{ color:var(--p2); filter:drop-shadow(0 2px 3px rgba(0,0,0,.65)) drop-shadow(0 0 7px rgba(255,77,157,.45)); }
