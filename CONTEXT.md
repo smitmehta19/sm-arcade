@@ -15,7 +15,13 @@
 > `color`/`stamp`) · impact ripples in MotionFX · rolling digits (`rollNum`) on turnbar/
 > mini-score/Scores · turn hand-off orb · View Transitions on route change (progressive) ·
 > gyro parallax on the aurora (Android only, CSS `translate` so it composes with the
-> keyframe transform). **Service worker cache: `sm-arcade-v41`.**
+> keyframe transform).
+> **Monthly seasons:** `Store` tracks `seasons {cur:{ym,p1,p2,draws}, past[]}` — lazy rollover
+> in `rollSeasons()` (called by `recordResult` AND `Store.seasonsTick()` from renderScores, so a
+> fresh month shows 0–0 without a game); finished months archive with their score, game-less
+> months don't; `past` capped at 36; `resetScores` clears it; stripped-empty-array self-heals.
+> Scores page shows the month race card, last-month result + trophy cabinet (`.season-card`).
+> **Service worker cache: `sm-arcade-v43`** (v42 fixed board wobble: explicit 1fr grid rows).
 
 ---
 

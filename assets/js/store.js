@@ -4,12 +4,16 @@
 const Store = (() => {
   const LS_KEY = 'sm_arcade_v1';
 
+  // 'YYYY-MM' for the current (or given) moment — the season key
+  function curYM(t) { const d = t ? new Date(t) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+
   const blankState = () => ({
     players: JSON.parse(JSON.stringify(window.PLAYERS_DEFAULT)),
     totals: { p1: 0, p2: 0, draws: 0 },
     perGame: {},                 // gameId -> {p1,p2,draws,plays}
     tourWins: [0, 0],            // tournament championships per seat (bragging only, not a score)
     streak: { who: null, n: 0 }, // current win streak
+    seasons: { cur: { ym: curYM(), p1: 0, p2: 0, draws: 0 }, past: [] }, // monthly race + trophy cabinet
     history: [],                 // recent results [{g, w, t}]
     favorites: [],               // gameIds
     dateNight: { done: [], removed: [], faved: [] }, // shared date-roulette lists
@@ -106,11 +110,32 @@ const Store = (() => {
   // means the genuinely-latest change always wins and both phones converge.
   function save() { state.updated = Date.now() + serverOffset; persistLocal(); pushCloud(); emit(); }
 
+  /* ---- monthly seasons ----
+     Lazy rollover: whenever a result lands (or the Scores page opens) in a
+     new month, the finished month is archived to `past` with its champion,
+     and the current race resets. RTDB strips empty arrays, so `past` is
+     re-defaulted on read. `ymNow` is injectable for the test harness. */
+  function rollSeasons(ymNow) {
+    ymNow = ymNow || curYM();
+    if (!state.seasons || !state.seasons.cur || !state.seasons.cur.ym) state.seasons = { cur: { ym: ymNow, p1: 0, p2: 0, draws: 0 }, past: [] };
+    if (!Array.isArray(state.seasons.past)) state.seasons.past = [];
+    const cur = state.seasons.cur;
+    if (cur.ym === ymNow) return false;
+    if (cur.p1 + cur.p2 + cur.draws > 0) state.seasons.past.push({ ym: cur.ym, p1: cur.p1, p2: cur.p2, draws: cur.draws });
+    state.seasons.past = state.seasons.past.slice(-36); // three years of trophies is plenty
+    state.seasons.cur = { ym: ymNow, p1: 0, p2: 0, draws: 0 };
+    return true;
+  }
+  // called by the Scores page so a fresh month shows 0–0 even before a game is played
+  function seasonsTick() { if (rollSeasons()) save(); return state.seasons; }
+
   /* ---- mutations ---- */
   function recordResult(gameId, winner /* 'p1' | 'p2' | 'draw' */) {
     if (!state.perGame[gameId]) state.perGame[gameId] = { p1: 0, p2: 0, draws: 0, plays: 0 };
     const g = state.perGame[gameId];
     g.plays++;
+    rollSeasons();
+    state.seasons.cur[winner === 'draw' ? 'draws' : winner]++;
     if (winner === 'draw') { state.totals.draws++; g.draws++; state.streak = { who: null, n: 0 }; }
     else {
       state.totals[winner]++; g[winner]++;
@@ -152,6 +177,7 @@ const Store = (() => {
   function resetScores() {
     state.totals = { p1: 0, p2: 0, draws: 0 };
     state.perGame = {}; state.streak = { who: null, n: 0 }; state.history = []; state.tourWins = [0, 0];
+    state.seasons = { cur: { ym: curYM(), p1: 0, p2: 0, draws: 0 }, past: [] };
     save();
   }
 
@@ -244,6 +270,7 @@ const Store = (() => {
   return {
     initCloud, subscribe, get, player,
     recordResult, recordTournament, adjustScore, toggleFav, dateToggle, setMeet, setPlayer, setSetting, resetScores,
+    seasonsTick, _rollSeasons: rollSeasons, curYM,
     Sound, isCloud: () => cloud,
     getIdentity, setIdentity, onCloud, Net,
   };
