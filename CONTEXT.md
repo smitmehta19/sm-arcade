@@ -32,13 +32,18 @@
 > `toLocale*String` — Smit types 10:00 Irish, Meera reads 14:30 IST automatically; all-day
 > entries store `YYYY-MM-DD` strings (same calendar day for both, no conversion). Delete: own
 > busy only; either can cancel an `us`. Entries auto-prune 60 days after they end.
-> **Password gate** (`gate.js`, loads right after config.js): one shared site password
-> (currently **`smitmeera`**, lowercase+trim-insensitive), stored ONLY as SHA-256 in
-> `window.GATE` in config.js (how-to-change comment there). Re-asked every `GATE.everyDays`
-> (10) days per device via localStorage `sm_gate_v1`. `Gate.ready(cb)` wraps ALL of app.js
-> boot — no cloud/presence/UI until unlocked. Fails open if `crypto.subtle` is missing so the
-> app can never brick. ⚠ It's a privacy curtain, not real security (public repo, client-side);
-> data protection remains Firebase rules + ROOM secret.
+> **Password gate v2** (`gate.js`, v48): one shared site password (currently
+> **`smitlovesmore`**, lowercase+trim-insensitive) verified with **PBKDF2-SHA256 · 310k
+> iterations** — only salts + verifier are committed (config.js has the change-password
+> recipe). The Firebase **ROOM id is DERIVED from the password** (second salt) and is NOT in
+> the repo; `CLOUD.ROOM` is null at rest and set by the gate at runtime; localStorage
+> `sm_gate_v2` = `{t, room}`, re-asked every 10 days. `store.js migrateLegacy()` copies the
+> old public `LEGACY_ROOM` data into the derived room on first connect and DELETES the legacy
+> rooms/matches/presence paths (safe: both phones hold full state locally and re-seed).
+> `Gate.ready(cb)` wraps ALL of app.js boot. Fails open onto LEGACY_ROOM without
+> `crypto.subtle`. Honest scope: a targeted attacker who GUESSES the exact passphrase still
+> gets in — the KDF only makes guessing ~10⁶× slower; the room derivation means the DB is no
+> longer readable without the password.
 > **Score placement (FINAL, 2026-07-03):** topbar mini-score = ALL-TIME · Play-page hero tally =
 > monthly race (with "<MONTH> RACE · resets monthly" tag) · Scores page = all-time hero on top,
 > month race + cabinet below.

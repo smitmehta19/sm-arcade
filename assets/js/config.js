@@ -2,16 +2,23 @@
    CONFIG — edit this file only
    ============================================================ */
 
-/* ---- Site password gate ----
-   One shared password for the whole site, re-asked every `everyDays`
-   days per device. Only the SHA-256 hash lives here (public repo!).
-   To change the password: run in any browser console →
-     crypto.subtle.digest('SHA-256', new TextEncoder().encode('newpassword'))
-       .then(b => console.log([...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('')))
-   …then paste the printed hash below. Passwords are checked
-   lowercase+trimmed, so caps don't matter when typing it. */
+/* ---- Site password gate (v2 — PBKDF2) ----
+   One shared password, re-asked every `everyDays` days per device.
+   Only the salts + a PBKDF2-SHA256 verifier (310k iterations) live in
+   this public repo — plaintext is never committed, and the Firebase
+   ROOM id is DERIVED from the password so it isn't in the repo either.
+   To change the password (both phones re-enter it once, data migrates
+   automatically): run in node →
+     node -e "const c=require('crypto');const pw='NEWPASSWORD'.toLowerCase();
+       console.log('verifier:', c.pbkdf2Sync(pw,'sm-gate-v2-verify-9f27c1',310000,32,'sha256').toString('hex'))"
+   …then paste the printed verifier below and set the OLD derived room
+   as LEGACY_ROOM in CLOUD (ask the app: it logs it on boot).
+   Passwords are checked lowercase+trimmed, so caps never matter. */
 window.GATE = {
-  sha256: '5209cff3c58d5ac883d0e28614ee1436de572a500f6bdb3241e5780680f4ec9b', // current password: smitmeera
+  saltV: 'sm-gate-v2-verify-9f27c1',
+  saltR: 'sm-gate-v2-room-4e81aa',
+  iters: 310000,
+  verifier: 'c6f91c85697a2120025ca65bfcd4677431249de6f1e8491b76adaefbe4cb04cd',
   everyDays: 10,
 };
 
@@ -40,7 +47,8 @@ window.PLAYERS_DEFAULT = [
    ============================================================ */
 window.CLOUD = {
   ENABLED: true,                              // cloud sync ON
-  ROOM: 'smit-meera-e7c3bf6c17204234',        // private shared room (both devices use this)
+  ROOM: null,                                 // ⚠ derived from the gate password at runtime — never committed
+  LEGACY_ROOM: 'smit-meera-e7c3bf6c17204234', // pre-v48 room; store.js migrates its data to the derived room, then deletes it
   config: {
     apiKey:            'AIzaSyAZJiYJ_5uWzpURqOnsOBhF6CCspwpvRys',
     authDomain:        'sm-arcade.firebaseapp.com',

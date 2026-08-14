@@ -1,16 +1,20 @@
 /* ============================================================
-   GATE — a single shared password for the whole site.
-   Asked once per device, then again every GATE.everyDays days.
-   The password is stored ONLY as a SHA-256 hash in config.js
-   (the repo is public, so plaintext must never be committed).
-   ⚠ This is a privacy curtain, not bank-grade security — the
-   source is public and the check runs client-side. Real data
-   protection stays where it always was: Firebase rules + ROOM.
-   To change the password: hash the new one (see config.js) and
-   bump GATE.sha256.
+   GATE v2 — one shared password for the whole site, and the real
+   security boundary for the data.
+   - The password is verified with PBKDF2-SHA256 (310k iterations,
+     salted). Only the salt + verifier live in the public repo, and
+     the slow KDF makes offline guessing ~a million times harder
+     than the old plain SHA-256.
+   - The Firebase ROOM id is DERIVED from the password (different
+     salt), so it is no longer committed anywhere. Without the
+     password you cannot even compute where the data lives.
+   - Asked again every GATE.everyDays days per device.
+   To change the password: compute new verifier via node/console
+   (see config.js comment) — both phones must re-enter it once, and
+   store.js auto-migrates the data to the newly-derived room.
    ============================================================ */
 const Gate = (() => {
-  const KEY = 'sm_gate_v1'; // ms timestamp of the last successful unlock on this device
+  const KEY = 'sm_gate_v2'; // JSON {t: unlock ms, room: derived room id}
   const cfg = () => window.GATE || null;
 
   const css = `
@@ -29,27 +33,36 @@ const Gate = (() => {
     font-family:'Sora',sans-serif; font-weight:700; font-size:15px; color:#fff;
     background:linear-gradient(135deg,#9b7bff,#ff4d9d); box-shadow:0 10px 26px -10px rgba(255,77,157,.7); }
   .gate-btn:active{ transform:scale(.96); }
+  .gate-btn[disabled]{ opacity:.6; }
   .gate-err{ min-height:18px; margin-top:10px; font-size:13px; font-weight:600; color:#ff4d9d; }
   .gate-hint{ margin-top:16px; font-size:11.5px; color:#5d6788; letter-spacing:.3px; }
   .gate-card.shake{ animation:gateShake .4s; }
   @keyframes gateShake{ 0%,100%{transform:translateX(0);} 20%,60%{transform:translateX(-8px);} 40%,80%{transform:translateX(8px);} }
   `;
 
-  async function sha256(text) {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  // PBKDF2-SHA256 → hex. Deliberately slow (iterations from config).
+  async function kdf(pw, salt, iters) {
+    const enc = s => new TextEncoder().encode(s);
+    const key = await crypto.subtle.importKey('raw', enc(pw), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc(salt), iterations: iters }, key, 256);
+    return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
+  function stored() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
+  function applyRoom(room) { if (window.CLOUD && room) window.CLOUD.ROOM = room; }
   function unlocked() {
-    const g = cfg(); if (!g || !g.sha256) return true;                 // no gate configured
-    if (!(window.crypto && crypto.subtle)) return true;                // ancient browser → fail open, never brick the app
-    const t = +(localStorage.getItem(KEY) || 0);
-    return t > 0 && (Date.now() - t) < (g.everyDays || 10) * 864e5;
+    const g = cfg(); if (!g || !g.verifier) return true;
+    if (!(window.crypto && crypto.subtle)) return true;              // ancient browser → fail open on the legacy room
+    const st = stored();
+    return !!(st && st.room && st.t && (Date.now() - st.t) < (g.everyDays || 10) * 864e5);
   }
 
-  // Runs cb only once the device is unlocked; otherwise shows the lock screen first.
   function ready(cb) {
-    if (unlocked()) { cb(); return; }
+    const g = cfg();
+    if (!g || !g.verifier || !(window.crypto && crypto.subtle)) {    // ungated / fail-open → legacy room keeps the app alive
+      applyRoom(window.CLOUD && window.CLOUD.LEGACY_ROOM); cb(); return;
+    }
+    if (unlocked()) { applyRoom(stored().room); cb(); return; }
     document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
     const card = document.createElement('div'); card.className = 'gate-card';
     card.innerHTML = `
@@ -58,29 +71,40 @@ const Gate = (() => {
       <input class="gate-in" type="password" placeholder="password" autocomplete="current-password" autocapitalize="off" spellcheck="false">
       <button class="gate-btn">Enter the arcade →</button>
       <div class="gate-err"></div>
-      <div class="gate-hint">You'll be asked again every ${(cfg().everyDays || 10)} days on this device.</div>`;
+      <div class="gate-hint">You'll be asked again every ${(g.everyDays || 10)} days on this device.</div>`;
     const wrap = document.createElement('div'); wrap.className = 'gate';
     wrap.append(card); document.body.append(wrap);
-    const inp = card.querySelector('.gate-in'), err = card.querySelector('.gate-err');
+    const inp = card.querySelector('.gate-in'), err = card.querySelector('.gate-err'), btn = card.querySelector('.gate-btn');
+    let busy = false;
     async function attempt() {
+      if (busy) return;
       const v = inp.value.trim().toLowerCase();
       if (!v) { inp.focus(); return; }
-      let hex = null;
-      try { hex = await sha256(v); } catch (e) { hex = null; }
-      if (hex === null || hex === cfg().sha256) {                      // hashing unavailable → fail open
-        localStorage.setItem(KEY, String(Date.now()));
+      busy = true; btn.disabled = true; btn.textContent = 'Checking…'; err.textContent = '';
+      let ver = null;
+      try { ver = await kdf(v, g.saltV, g.iters); } catch (e) { ver = null; }
+      if (ver === null) {                                            // KDF unavailable mid-flight → fail open, never brick
+        applyRoom(window.CLOUD && window.CLOUD.LEGACY_ROOM);
+        localStorage.setItem(KEY, JSON.stringify({ t: Date.now(), room: window.CLOUD && window.CLOUD.LEGACY_ROOM }));
+        wrap.remove(); cb(); return;
+      }
+      if (ver === g.verifier) {
+        const room = 'sm-' + (await kdf(v, g.saltR, g.iters)).slice(0, 24);
+        localStorage.setItem(KEY, JSON.stringify({ t: Date.now(), room }));
+        applyRoom(room);
         wrap.remove(); cb();
       } else {
+        busy = false; btn.disabled = false; btn.textContent = 'Enter the arcade →';
         err.textContent = '✕ Nope — that’s not it.';
         inp.value = '';
         card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
         inp.focus();
       }
     }
-    card.querySelector('.gate-btn').addEventListener('click', attempt);
+    btn.addEventListener('click', attempt);
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') attempt(); });
     setTimeout(() => inp.focus(), 60);
   }
 
-  return { ready, unlocked, _sha256: sha256, _KEY: KEY };
+  return { ready, unlocked, _kdf: kdf, _KEY: KEY };
 })();

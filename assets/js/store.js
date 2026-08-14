@@ -80,6 +80,33 @@ const Store = (() => {
     // keep a synced clock so both phones count timers down to the same instant
     try { db.ref('.info/serverTimeOffset').on('value', s => { serverOffset = s.val() || 0; }); } catch (e) {}
     cloudCbs.forEach(fn => { try { fn(); } catch (e) {} });
+    // one-time move off the old committed-in-the-repo room, then live-listen
+    migrateLegacy().then(listenRoom, listenRoom);
+  }
+  // The pre-v48 room id was committed publicly; the current room is derived from
+  // the gate password. Copy the old room's data into the new one (newest-wins)
+  // and delete the old paths so nothing readable remains at the public address.
+  // Safe to lose entirely: both phones hold the full Store state locally and
+  // re-seed the new room on their next save.
+  async function migrateLegacy() {
+    try {
+      const legacy = window.CLOUD.LEGACY_ROOM, cur = window.CLOUD.ROOM;
+      if (!cloud || !legacy || !cur || legacy === cur) return;
+      const lref = db.ref('rooms/' + legacy);
+      const lsnap = await lref.get();
+      if (lsnap.exists()) {
+        const lv = lsnap.val();
+        const csnap = await db.ref('rooms/' + cur).get();
+        if (!csnap.exists() || (lv.updated || 0) > (csnap.val().updated || 0)) {
+          await db.ref('rooms/' + cur).set(lv);
+        }
+        await lref.remove();
+      }
+      await db.ref('matches/' + legacy).remove().catch(() => {});
+      await db.ref('presence/' + legacy).remove().catch(() => {});
+    } catch (e) { console.warn('legacy room migration skipped (will retry next open)', e); }
+  }
+  function listenRoom() {
     // pull remote, merge newest-wins, then live-listen
     ref.on('value', snap => {
       const remote = snap.val();
