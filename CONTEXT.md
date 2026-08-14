@@ -20,10 +20,18 @@
 > in `rollSeasons()` (called by `recordResult` AND `Store.seasonsTick()` from renderScores, so a
 > fresh month shows 0–0 without a game); finished months archive with their score, game-less
 > months don't; `past` capped at 36; `resetScores` clears it; stripped-empty-array self-heals.
-> **The MONTH IS THE HEADLINE score** (user call, 2026-07): the Scores hero, win-share meter,
-> stats, taunt AND the topbar mini-score all show the current month's race (fresh 0–0 monthly);
-> all-time lives in a compact `.at-line` section below. Season history card = last-month verdict
-> + trophy cabinet.
+> **Scoreboard layout (final user call, 2026-07-03): ALL-TIME on top** — Scores hero, meter,
+> stats, taunt and the topbar mini-score are all-time totals; the **monthly race** (fresh 0–0,
+> rolling score, days left) + last-month verdict + trophy cabinet live in the section below.
+> **Nav rework:** Settings ("Us") left the bottom nav → ⚙ gear button in the topbar
+> (`#settingsBtn`, route `#/us` still works). Its nav slot is now **📅 Plans** (`#/plans`).
+> **Plans = shared couple calendar** (`plans.js`, `Store.plans[]` synced like everything):
+> entries are `busy` (per-person, their colour) or `us` (💞 proposed by one, **locked only when
+> the partner taps Confirm**; dashed cell = pending, gradient glow = confirmed).
+> **TIMEZONES: timed entries store UTC ms and render with the DEVICE's zone** via
+> `toLocale*String` — Smit types 10:00 Irish, Meera reads 14:30 IST automatically; all-day
+> entries store `YYYY-MM-DD` strings (same calendar day for both, no conversion). Delete: own
+> busy only; either can cancel an `us`. Entries auto-prune 60 days after they end.
 > **Password gate** (`gate.js`, loads right after config.js): one shared site password
 > (currently **`smitmeera`**, lowercase+trim-insensitive), stored ONLY as SHA-256 in
 > `window.GATE` in config.js (how-to-change comment there). Re-asked every `GATE.everyDays`
@@ -31,7 +39,7 @@
 > boot — no cloud/presence/UI until unlocked. Fails open if `crypto.subtle` is missing so the
 > app can never brick. ⚠ It's a privacy curtain, not real security (public repo, client-side);
 > data protection remains Firebase rules + ROOM secret.
-> **Service worker cache: `sm-arcade-v44`** (v42 fixed board wobble: explicit 1fr grid rows).
+> **Service worker cache: `sm-arcade-v45`** (v42 fixed board wobble: explicit 1fr grid rows).
 
 ---
 

@@ -8,23 +8,27 @@ Gate.ready(function boot() {
   document.body.classList.toggle('light', s.settings.theme === 'light');
 
   // swap nav emoji for SVG icons
-  const navIcons = { home: 'play', date: 'date', scores: 'trophy', us: 'heart' };
+  const navIcons = { home: 'play', date: 'date', scores: 'trophy', plans: 'calendar' };
   $$('.nav-item').forEach(n => { const ico = n.querySelector('.ni-ico'); if (ico && navIcons[n.dataset.route]) ico.innerHTML = Icons.ui(navIcons[n.dataset.route]); });
 
   function paintChrome() {
-    const sn = Store.seasonsTick();               // topbar shows THIS MONTH's race (resets monthly)
-    rollNum($('#msP1'), 'ms:p1', sn.cur.p1);
-    rollNum($('#msP2'), 'ms:p2', sn.cur.p2);
-    $('#soundBtn').innerHTML = Icons.ui(Store.get().settings.sound ? 'sound' : 'mute');
+    const st = Store.get();                       // topbar shows the ALL-TIME totals (user call)
+    rollNum($('#msP1'), 'ms:p1', st.totals.p1);
+    rollNum($('#msP2'), 'ms:p2', st.totals.p2);
+    $('#soundBtn').innerHTML = Icons.ui(st.settings.sound ? 'sound' : 'mute');
+    $('#settingsBtn').innerHTML = Icons.ui('gear');
   }
   Store.subscribe(() => {
     paintChrome();
     const hash = location.hash || '#/';
     if ((hash === '#/' || hash === '') && Store.getIdentity() != null) renderHome();
+    if (hash.startsWith('#/plans') && Store.getIdentity() != null) renderPlans(); // live calendar updates from the partner
   });
   paintChrome();
 
   $('#soundBtn').addEventListener('click', () => { Store.setSetting('sound', !Store.get().settings.sound); Store.Sound.tap(); });
+  // settings moved off the bottom nav (Plans took its slot) → gear in the topbar
+  $('#settingsBtn').addEventListener('click', () => { if (!leaveGuard()) { location.hash = '#/us'; } Store.Sound.tap(); });
 
   // Leaving a live game must go through BOTH-player consent — never a silent bail.
   // The back arrow AND the brand link both sit over the game (the bottom nav is

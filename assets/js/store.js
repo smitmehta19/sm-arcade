@@ -17,6 +17,7 @@ const Store = (() => {
     history: [],                 // recent results [{g, w, t}]
     favorites: [],               // gameIds
     dateNight: { done: [], removed: [], faved: [] }, // shared date-roulette lists
+    plans: [], // shared calendar entries (see planAdd) — timed entries store UTC ms, so each viewer sees their own local time
     meet: { nextAt: null, lastMetAt: null }, // shared reunion countdown: ms timestamps (synced)
     settings: { sound: true, theme: 'dark' },
     updated: 0,
@@ -172,6 +173,29 @@ const Store = (() => {
     if (!state.meet) state.meet = { nextAt: null, lastMetAt: null };
     Object.assign(state.meet, patch); save();
   }
+
+  /* ---- shared calendar (Plans tab) ----
+     entry = { id, kind:'busy'|'us', seat, title,
+               allDay:true  → d1/d2: 'YYYY-MM-DD' (same calendar day for both),
+               allDay:false → t1/t2: UTC ms (each phone renders its OWN local time),
+               confirmed (us only), createdAt }
+     RTDB strips empty arrays → plans re-defaulted on read like the others. */
+  function plansArr() { if (!Array.isArray(state.plans)) state.plans = []; return state.plans; }
+  function planEnd(e) { return e.allDay ? new Date(e.d2 + 'T23:59:59').getTime() : e.t2; }
+  function prunePlans() { const cutoff = Date.now() - 60 * 864e5; state.plans = plansArr().filter(e => planEnd(e) > cutoff); }
+  function planAdd(entry) {
+    plansArr();
+    entry.id = 'pl' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+    entry.createdAt = Date.now();
+    if (entry.kind === 'us') entry.confirmed = false;
+    state.plans.push(entry); prunePlans(); save();
+    return entry.id;
+  }
+  function planRemove(id) { state.plans = plansArr().filter(e => e.id !== id); save(); }
+  function planConfirm(id, seat) {
+    const e = plansArr().find(x => x.id === id);
+    if (e && e.kind === 'us' && e.seat !== seat) { e.confirmed = true; save(); }
+  }
   function setPlayer(idx, patch) { Object.assign(state.players[idx], patch); save(); }
   function setSetting(key, val) { state.settings[key] = val; save(); }
   function resetScores() {
@@ -271,6 +295,7 @@ const Store = (() => {
     initCloud, subscribe, get, player,
     recordResult, recordTournament, adjustScore, toggleFav, dateToggle, setMeet, setPlayer, setSetting, resetScores,
     seasonsTick, _rollSeasons: rollSeasons, curYM,
+    planAdd, planRemove, planConfirm,
     Sound, isCloud: () => cloud,
     getIdentity, setIdentity, onCloud, Net,
   };
