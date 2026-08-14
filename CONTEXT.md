@@ -39,7 +39,19 @@
 > boot — no cloud/presence/UI until unlocked. Fails open if `crypto.subtle` is missing so the
 > app can never brick. ⚠ It's a privacy curtain, not real security (public repo, client-side);
 > data protection remains Firebase rules + ROOM secret.
-> **Service worker cache: `sm-arcade-v45`** (v42 fixed board wobble: explicit 1fr grid rows).
+> **Score placement (FINAL, 2026-07-03):** topbar mini-score = ALL-TIME · Play-page hero tally =
+> monthly race (with "<MONTH> RACE · resets monthly" tag) · Scores page = all-time hero on top,
+> month race + cabinet below.
+> **SW fetches same-origin with `cache:'no-cache'`** (v46) — GitHub Pages serves JS with
+> max-age=600, and the browser HTTP cache fed our network-first SW 10-min-stale files right
+> after deploys (fresh index.html + old app.js = dead buttons/mixed versions). Forced ETag
+> revalidation makes deploys land atomically; never remove this.
+> **Plans partner-time preview** (v47): each device stamps its IANA zone on its seat
+> (`players[n].tz`, `Store.stampTz` at boot + identity pick); timed entries show a violet
+> "Meera sees 11:30 PM – 3:30 AM (Thu)" line and the composer previews it live. Timezone is
+> per-DEVICE — switching identity on one phone does NOT change the zone (and briefly stamps
+> the wrong seat until the real phone next opens; self-corrects).
+> **Service worker cache: `sm-arcade-v47`** (v42 fixed board wobble: explicit 1fr grid rows).
 
 ---
 
