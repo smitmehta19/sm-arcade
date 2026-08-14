@@ -633,10 +633,13 @@ function renderHome() {
     h('span', { class: 'tc-txt' }, h('b', {}, '🏆 Tournament'), h('small', {}, '5 random games · most wins is champion')),
     h('span', { class: 'tc-go' }, 'Start'));
 
-  // hero (compact)
+  // hero (compact) — the tally here is THIS MONTH's race (topbar shows all-time)
+  const seasonNow = Store.seasonsTick().cur;
+  const heroMonth = new Date(seasonNow.ym + '-01T12:00:00').toLocaleString('en', { month: 'long' }).toUpperCase();
   const hero = h('section', { class: 'hero mini' },
     h('h1', { html: `<span class="c">${esc(s.players[0].name)}</span><span class="vs">VS</span><span class="m">${esc(s.players[1].name)}</span>` }),
-    h('div', { class: 'mini-tally' }, `${s.totals.p1} — ${s.totals.p2}`),
+    h('div', { class: 'mini-tally' }, `${seasonNow.p1} — ${seasonNow.p2}`),
+    h('div', { class: 'tally-tag' }, `${heroMonth} RACE · resets monthly`),
     h('p', {}, pOn ? `${esc(s.players[partner].name)} is online — pick a game to challenge them.`
                    : `${esc(s.players[partner].name)} is offline — start a game and they’ll get the invite when they next open the app.`),
   );

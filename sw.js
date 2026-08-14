@@ -4,7 +4,7 @@
      every device immediately — no stale cached code).
    - When offline, fall back to the cached copy so the app still works.
    - Bump CACHE to force-drop old caches. */
-const CACHE = 'sm-arcade-v45';
+const CACHE = 'sm-arcade-v46';
 const ASSETS = [
   './',
   './index.html',
@@ -55,7 +55,12 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin !== location.origin) return; // Firebase/fonts → straight to network
   e.respondWith(
-    fetch(req)
+    // cache:'no-cache' forces an ETag revalidation with the server on EVERY load.
+    // GitHub Pages serves JS with max-age=600, so a plain fetch() could legally get
+    // 10-minute-stale files from the browser's HTTP cache — fresh index.html + stale
+    // app code = broken mixed versions (dead buttons, wrong scores). Revalidation is
+    // a cheap 304 when nothing changed, and both phones pick up deploys instantly.
+    fetch(req, { cache: 'no-cache' })
       .then(res => {
         if (res && res.status === 200) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {}); }
         return res;
