@@ -198,7 +198,14 @@ Active match at Firebase `matches/<ROOM>/active`:
    (It used to be a per-device incrementing counter, which let the two phones disagree on "newest" and clobber
    each other — that was the score-sync / "Meera has the streak" bug.) Merge rule: `remote.updated >= local` wins.
 3. **Service worker is NETWORK-FIRST.** Bump `CACHE` (vNN→vNN+1) **and** add any new JS file to `ASSETS` on
-   **every** deploy, or phones keep stale code. Currently **v38**.
+   **every** deploy, or phones keep stale code. Currently **v49**.
+3b. **NEVER call `save()` at boot before the cloud merge** (and never from `stampTz`). Bumping
+   `state.updated` pre-merge makes the phone treat its stale local state as newest → it ignores the
+   room and clobbers the partner's writes on its next save (the v47 "only I can see my calendar"
+   split-brain). `store.js mergeRemote()` is the guard: bulk state = newest-wins, but `plans` merge
+   PER-ENTRY (union by id, newer side wins same-id conflicts) with `plansDeleted` tombstones (cap 80)
+   so deletions never resurrect; per-seat `players[n].tz` survives from whichever side has it; if the
+   merge knows more than the room it `save()`s the merged truth back (idempotent → echo converges).
 4. **Timer picker ↔ Router teardown.** `startMatch` navigates (fires `hashchange`→`Router.go`) and *then* opens
    the picker. `Router.go` must only tear the picker down when leaving that game's route — it's tracked by
    `timerPanelEl`/`timerPanelGame`. (Closing it unconditionally made the picker flash open and vanish.)
