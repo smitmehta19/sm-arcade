@@ -77,6 +77,7 @@ Gate.ready(function boot() {
   // wire networking BEFORE connecting, so the onCloud hook is registered
   initNet();
   Store.initCloud();
+  Store.stampTz(Store.getIdentity()); // keep this device's timezone on record for the Plans preview
 
   Router.go();
 

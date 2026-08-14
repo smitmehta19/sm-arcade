@@ -52,6 +52,7 @@
   .pl-item .tx b{ font-size:14.5px; display:block; }
   .pl-item .tx small{ color:var(--ink-dim); font-size:12px; line-height:1.45; display:block; }
   .pl-item .tx .pend{ color:var(--gold); font-weight:700; }
+  .pl-item .tx .ptz{ color:var(--violet); font-size:11.5px; }
   .pl-x{ flex:0 0 auto; width:30px; height:30px; border-radius:9px; background:transparent; border:1px solid var(--line); color:var(--ink-faint); font-size:13px; }
   .pl-x:active{ transform:scale(.85); border-color:var(--magenta); color:var(--magenta); }
   .pl-ok{ flex:0 0 auto; padding:9px 13px; border-radius:11px; border:none; font-weight:700; font-size:12.5px; color:#fff;
@@ -93,6 +94,20 @@
     if (e.allDay) return `${who} · ${e.d1 === e.d2 ? 'all day' : 'until ' + fmtDayLong(e.d2)}`;
     const sameDay = localDayOf(e.t1) === localDayOf(e.t2);
     return `${who} · ${fmtTime(e.t1)} – ${sameDay ? '' : fmtDayLong(localDayOf(e.t2)) + ' '}${fmtTime(e.t2)} (your time)`;
+  }
+  // "what time is that for THEM" — uses the timezone each phone stamps on its
+  // seat, so you can sanity-check you're not proposing their 3am
+  function partnerTimeText(e, s, me) {
+    if (e.allDay) return '';
+    const p = s.players[1 - me], tz = p && p.tz;
+    try {
+      const myTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (!tz || tz === myTz) return '';
+      const f = ms => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: tz });
+      const wd = (ms, z) => new Date(ms).toLocaleDateString('en', Object.assign({ weekday: 'short' }, z ? { timeZone: z } : {}));
+      const shift = wd(e.t1, tz) !== wd(e.t1) ? ` (${wd(e.t1, tz)})` : '';
+      return `${p.emoji} ${esc(p.name)} sees ${f(e.t1)} – ${f(e.t2)}${shift}`;
+    } catch (err) { return ''; }
   }
 
   let view = null;          // {y, m} of the visible month
@@ -162,8 +177,23 @@
       const timeRow = h('div', { class: 'pl-row' }, 'From ', tFrom, ' to ', tTo, h('span', { style: 'font-size:11px' }, '(your local time)'));
       const dTo = h('input', { type: 'date', value: selDay });
       const spanRow = h('div', { class: 'pl-row', hidden: '' }, 'Until ', dTo, h('span', { style: 'font-size:11px' }, '(for multi-day blocks)'));
-      allDayChk.addEventListener('change', () => { timeRow.hidden = allDayChk.checked; spanRow.hidden = !allDayChk.checked; });
-      box.append(timeRow, spanRow);
+      // live "for them" preview while picking times — catches 3am proposals early
+      const pvw = h('div', { class: 'pl-row', style: 'color:var(--violet);font-size:12px;min-height:16px' });
+      function paintPvw() {
+        pvw.textContent = '';
+        if (allDayChk.checked) return;
+        const tz = partner.tz;
+        try {
+          const myTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          if (!tz || tz === myTz) return;
+          const f = v => new Date(selDay + 'T' + v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: tz });
+          pvw.textContent = `${partner.emoji} For ${partner.name} that’s ${f(tFrom.value || '18:00')} – ${f(tTo.value || '20:00')}`;
+        } catch (err) {}
+      }
+      tFrom.addEventListener('input', paintPvw); tTo.addEventListener('input', paintPvw);
+      allDayChk.addEventListener('change', () => { timeRow.hidden = allDayChk.checked; spanRow.hidden = !allDayChk.checked; paintPvw(); });
+      paintPvw();
+      box.append(timeRow, pvw, spanRow);
       box.append(h('button', { class: 'btn btn-primary btn-block', onclick: saveEntry },
         composeKind === 'us' ? `💞 Propose to ${esc(partner.name)} — ${fmtDayLong(selDay)}` : `Save — ${fmtDayLong(selDay)}`));
       root.append(box);
@@ -218,6 +248,7 @@
         h('div', { class: 'tx' },
           h('b', {}, esc(e.title)),
           h('small', {}, (withDate ? fmtDayLong(e.allDay ? e.d1 : localDayOf(e.t1)) + ' · ' : '') + whenText(e, s)),
+          (() => { const pt = partnerTimeText(e, s, me); return pt ? h('small', { class: 'ptz' }, pt) : ''; })(),
           pending ? h('small', { class: 'pend' }, mine ? `⏳ waiting for ${esc(partner.name)} to confirm` : '💌 they proposed — you in?') : ''),
       ];
       if (pending && !mine) kids.push(h('button', { class: 'pl-ok', onclick: () => { Store.planConfirm(e.id, me); Store.Sound.win(); renderPlans(); } }, '💞 Confirm'));

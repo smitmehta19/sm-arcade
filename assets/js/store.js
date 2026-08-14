@@ -240,7 +240,15 @@ const Store = (() => {
   /* ---- device identity (which seat THIS device plays; local-only, not synced) ---- */
   const ID_KEY = 'sm_identity_v1';
   function getIdentity() { const v = localStorage.getItem(ID_KEY); return v === '0' || v === '1' ? +v : null; }
-  function setIdentity(i) { localStorage.setItem(ID_KEY, String(i)); emit(); }
+  function setIdentity(i) { localStorage.setItem(ID_KEY, String(i)); stampTz(i); emit(); }
+  // record THIS device's timezone on its seat, so the partner's phone can
+  // preview "what time is that for them" on calendar entries
+  function stampTz(seat) {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (seat != null && tz && state.players[seat] && state.players[seat].tz !== tz) { state.players[seat].tz = tz; save(); }
+    } catch (e) {}
+  }
 
   /* ---- cloud-connected hooks (net layer subscribes here) ---- */
   const cloudCbs = new Set();
@@ -295,7 +303,7 @@ const Store = (() => {
     initCloud, subscribe, get, player,
     recordResult, recordTournament, adjustScore, toggleFav, dateToggle, setMeet, setPlayer, setSetting, resetScores,
     seasonsTick, _rollSeasons: rollSeasons, curYM,
-    planAdd, planRemove, planConfirm,
+    planAdd, planRemove, planConfirm, stampTz,
     Sound, isCloud: () => cloud,
     getIdentity, setIdentity, onCloud, Net,
   };
