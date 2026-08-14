@@ -18,6 +18,7 @@ const Store = (() => {
     favorites: [],               // gameIds
     dateNight: { done: [], removed: [], faved: [] }, // shared date-roulette lists
     plans: [], // shared calendar entries (see planAdd) — timed entries store UTC ms, so each viewer sees their own local time
+    plansDeleted: [], // tombstones [{id,t}] so deletions survive the per-entry plan merge
     meet: { nextAt: null, lastMetAt: null }, // shared reunion countdown: ms timestamps (synced)
     settings: { sound: true, theme: 'dark' },
     updated: 0,
@@ -107,19 +108,54 @@ const Store = (() => {
     } catch (e) { console.warn('legacy room migration skipped (will retry next open)', e); }
   }
   function listenRoom() {
-    // pull remote, merge newest-wins, then live-listen
     ref.on('value', snap => {
       const remote = snap.val();
-      if (remote && (remote.updated || 0) >= (state.updated || 0)) {
-        const localPrefs = state.settings; // keep local-only prefs if remote lacks them
-        state = Object.assign(blankState(), remote);
-        if (!remote.settings) state.settings = localPrefs;
-        persistLocal();
-        emit();
-      } else if (!remote) {
-        pushCloud(); // first write seeds the room
-      }
+      if (!remote) { pushCloud(); return; }   // first write seeds the room
+      mergeRemote(remote);
     }, err => { console.warn('Cloud read denied — check your Security Rules. Falling back to local.', err); cloud = false; setPill('local'); });
+  }
+
+  // Merge an incoming room snapshot. The bulk state is newest-wins (as before),
+  // but PLANS are merged PER-ENTRY with delete-tombstones, and each seat's
+  // device timezone survives from whichever side knows it — so one phone can
+  // never wipe out entries the other added while they were apart (the "only I
+  // can see my calendar" split-brain). If the merge ends up knowing more than
+  // the room does (or the room is older), we save() the merged truth back;
+  // the union is idempotent, so the echo of our own write merges to no-change.
+  function mergeRemote(remote) {
+    const remoteNewer = (remote.updated || 0) >= (state.updated || 0);
+    const lPlans = Array.isArray(state.plans) ? state.plans : [];
+    const rPlans = Array.isArray(remote.plans) ? remote.plans : [];
+    const lDel = Array.isArray(state.plansDeleted) ? state.plansDeleted : [];
+    const rDel = Array.isArray(remote.plansDeleted) ? remote.plansDeleted : [];
+    // union tombstones
+    const delMap = new Map();
+    lDel.concat(rDel).forEach(d => { if (d && d.id && (!delMap.has(d.id) || delMap.get(d.id).t < d.t)) delMap.set(d.id, d); });
+    const mergedDel = [...delMap.values()].sort((a, b) => b.t - a.t).slice(0, 80);
+    // union plans by id — insert the OLDER side first so the newer side's copy
+    // of the same entry wins (e.g. a fresher `confirmed` flag)
+    const older = remoteNewer ? lPlans : rPlans, newer = remoteNewer ? rPlans : lPlans;
+    const pm = new Map();
+    older.forEach(e => { if (e && e.id) pm.set(e.id, e); });
+    newer.forEach(e => { if (e && e.id) pm.set(e.id, e); });
+    mergedDel.forEach(d => pm.delete(d.id));
+    const mergedPlans = [...pm.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    // a seat's device timezone: whichever side has one (newer side preferred)
+    const tzFor = i => { const rp = (remote.players || [])[i] || {}, lp = (state.players || [])[i] || {}; return (remoteNewer ? (rp.tz || lp.tz) : (lp.tz || rp.tz)) || null; };
+    const tz0 = tzFor(0), tz1 = tzFor(1);
+    const roomLacks = JSON.stringify(mergedPlans) !== JSON.stringify(rPlans) || mergedDel.length !== rDel.length;
+    if (remoteNewer) {
+      const localPrefs = state.settings; // keep local-only prefs if remote lacks them
+      state = Object.assign(blankState(), remote);
+      if (!remote.settings) state.settings = localPrefs;
+    }
+    state.plans = mergedPlans;
+    state.plansDeleted = mergedDel;
+    if (tz0 && state.players[0]) state.players[0].tz = tz0;
+    if (tz1 && state.players[1]) state.players[1].tz = tz1;
+    persistLocal();
+    emit();
+    if (roomLacks || !remoteNewer) save();  // publish the merged truth; idempotent echo stops the loop
   }
   function pushCloud() { if (cloud && ref) ref.set(state).catch(() => {}); }
 
@@ -218,7 +254,13 @@ const Store = (() => {
     state.plans.push(entry); prunePlans(); save();
     return entry.id;
   }
-  function planRemove(id) { state.plans = plansArr().filter(e => e.id !== id); save(); }
+  function planRemove(id) {
+    state.plans = plansArr().filter(e => e.id !== id);
+    if (!Array.isArray(state.plansDeleted)) state.plansDeleted = [];
+    state.plansDeleted.push({ id, t: Date.now() });                  // tombstone: keeps the delete during merges
+    state.plansDeleted = state.plansDeleted.slice(-80);
+    save();
+  }
   function planConfirm(id, seat) {
     const e = plansArr().find(x => x.id === id);
     if (e && e.kind === 'us' && e.seat !== seat) { e.confirmed = true; save(); }
@@ -269,11 +311,15 @@ const Store = (() => {
   function getIdentity() { const v = localStorage.getItem(ID_KEY); return v === '0' || v === '1' ? +v : null; }
   function setIdentity(i) { localStorage.setItem(ID_KEY, String(i)); stampTz(i); emit(); }
   // record THIS device's timezone on its seat, so the partner's phone can
-  // preview "what time is that for them" on calendar entries
+  // preview "what time is that for them" on calendar entries.
+  // ⚠ MUST NOT call save(): it runs at boot BEFORE the cloud merge, and bumping
+  // `updated` there made every phone think its stale local state was newest —
+  // that was the v47 split-brain bug that broke two-way plan sync. The tz
+  // travels via the merge in mergeRemote / the next genuine save instead.
   function stampTz(seat) {
     try {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (seat != null && tz && state.players[seat] && state.players[seat].tz !== tz) { state.players[seat].tz = tz; save(); }
+      if (seat != null && tz && state.players[seat] && state.players[seat].tz !== tz) { state.players[seat].tz = tz; persistLocal(); emit(); }
     } catch (e) {}
   }
 
@@ -330,7 +376,7 @@ const Store = (() => {
     initCloud, subscribe, get, player,
     recordResult, recordTournament, adjustScore, toggleFav, dateToggle, setMeet, setPlayer, setSetting, resetScores,
     seasonsTick, _rollSeasons: rollSeasons, curYM,
-    planAdd, planRemove, planConfirm, stampTz,
+    planAdd, planRemove, planConfirm, stampTz, _mergeRemote: mergeRemote,
     Sound, isCloud: () => cloud,
     getIdentity, setIdentity, onCloud, Net,
   };
