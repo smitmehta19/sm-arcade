@@ -1,7 +1,9 @@
 /* ============================================================
    APP — boot, chrome wiring, net init, PWA
+   (the whole app waits behind the password gate — no cloud
+   connection, presence or UI until this device is unlocked)
    ============================================================ */
-(function boot() {
+Gate.ready(function boot() {
   const s = Store.get();
   document.body.classList.toggle('light', s.settings.theme === 'light');
 
@@ -10,10 +12,10 @@
   $$('.nav-item').forEach(n => { const ico = n.querySelector('.ni-ico'); if (ico && navIcons[n.dataset.route]) ico.innerHTML = Icons.ui(navIcons[n.dataset.route]); });
 
   function paintChrome() {
-    const st = Store.get();
-    rollNum($('#msP1'), 'ms:p1', st.totals.p1);   // digits roll in when the totals change
-    rollNum($('#msP2'), 'ms:p2', st.totals.p2);
-    $('#soundBtn').innerHTML = Icons.ui(st.settings.sound ? 'sound' : 'mute');
+    const sn = Store.seasonsTick();               // topbar shows THIS MONTH's race (resets monthly)
+    rollNum($('#msP1'), 'ms:p1', sn.cur.p1);
+    rollNum($('#msP2'), 'ms:p2', sn.cur.p2);
+    $('#soundBtn').innerHTML = Icons.ui(Store.get().settings.sound ? 'sound' : 'mute');
   }
   Store.subscribe(() => {
     paintChrome();
@@ -75,6 +77,7 @@
   Router.go();
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    if (document.readyState === 'complete') navigator.serviceWorker.register('sw.js').catch(() => {});
+    else window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
   }
-})();
+});

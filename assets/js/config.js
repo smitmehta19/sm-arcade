@@ -2,6 +2,19 @@
    CONFIG — edit this file only
    ============================================================ */
 
+/* ---- Site password gate ----
+   One shared password for the whole site, re-asked every `everyDays`
+   days per device. Only the SHA-256 hash lives here (public repo!).
+   To change the password: run in any browser console →
+     crypto.subtle.digest('SHA-256', new TextEncoder().encode('newpassword'))
+       .then(b => console.log([...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('')))
+   …then paste the printed hash below. Passwords are checked
+   lowercase+trimmed, so caps don't matter when typing it. */
+window.GATE = {
+  sha256: '5209cff3c58d5ac883d0e28614ee1436de572a500f6bdb3241e5780680f4ec9b', // current password: smitmeera
+  everyDays: 10,
+};
+
 /* ---- The two players (you!) ---- */
 window.PLAYERS_DEFAULT = [
   { id: 'p1', name: 'Smit',  emoji: '🦊', color: '#00f0ff' },  // player 1 = cyan

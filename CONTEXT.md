@@ -20,8 +20,18 @@
 > in `rollSeasons()` (called by `recordResult` AND `Store.seasonsTick()` from renderScores, so a
 > fresh month shows 0–0 without a game); finished months archive with their score, game-less
 > months don't; `past` capped at 36; `resetScores` clears it; stripped-empty-array self-heals.
-> Scores page shows the month race card, last-month result + trophy cabinet (`.season-card`).
-> **Service worker cache: `sm-arcade-v43`** (v42 fixed board wobble: explicit 1fr grid rows).
+> **The MONTH IS THE HEADLINE score** (user call, 2026-07): the Scores hero, win-share meter,
+> stats, taunt AND the topbar mini-score all show the current month's race (fresh 0–0 monthly);
+> all-time lives in a compact `.at-line` section below. Season history card = last-month verdict
+> + trophy cabinet.
+> **Password gate** (`gate.js`, loads right after config.js): one shared site password
+> (currently **`smitmeera`**, lowercase+trim-insensitive), stored ONLY as SHA-256 in
+> `window.GATE` in config.js (how-to-change comment there). Re-asked every `GATE.everyDays`
+> (10) days per device via localStorage `sm_gate_v1`. `Gate.ready(cb)` wraps ALL of app.js
+> boot — no cloud/presence/UI until unlocked. Fails open if `crypto.subtle` is missing so the
+> app can never brick. ⚠ It's a privacy curtain, not real security (public repo, client-side);
+> data protection remains Firebase rules + ROOM secret.
+> **Service worker cache: `sm-arcade-v44`** (v42 fixed board wobble: explicit 1fr grid rows).
 
 ---
 

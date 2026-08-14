@@ -1262,64 +1262,73 @@ function rivalryTaunt(s) {
 let scoreEditUnlocked = false; // Smit-only manual score editing, unlocked per session with the score password
 function renderScores() {
   const s = Store.get(); const view = $('#view'); view.innerHTML = '';
-  const { p1, p2, draws } = s.totals; const total = p1 + p2; const pct = total ? Math.round((p1 / total) * 100) : 50;
+  const { p1, p2, draws } = s.totals; const total = p1 + p2;
+
+  // THE HEADLINE IS THE MONTH — a fresh 0–0 race every month. All-time
+  // lives in its own smaller section below (user call, 2026-07).
+  const seasons = Store.seasonsTick();               // archives a finished month on first view
+  const cur = seasons.cur, past = (seasons.past || []).slice().reverse(); // newest first
+  const mLong = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleString('en', { month: 'long' }); };
+  const mShort = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleString('en', { month: 'short' }) + ' ’' + String(y).slice(2); };
+  const champ = e => e.p1 === e.p2 ? null : (e.p1 > e.p2 ? 0 : 1);
+  const now = new Date();
+  const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate();
+  const mLead = champ(cur), gapN = Math.abs(cur.p1 - cur.p2);
+  const mTotal = cur.p1 + cur.p2;
+  const mPct = mTotal ? Math.round((cur.p1 / mTotal) * 100) : 50;
+
   view.append(
-    h('div', { class: 'score-hero' }, h('h2', {}, 'THE RIVALRY'),
+    h('div', { class: 'score-hero' }, h('h2', {}, `THE ${mLong(cur.ym).toUpperCase()} RACE`),
       h('div', { class: 'bigvs' },
-        h('div', { class: 'col c1' }, h('div', { class: 'av' }, s.players[0].emoji), h('div', { class: 'nm' }, s.players[0].name), (() => { const el = h('div', { class: 'big' }); rollNum(el, 'scores:p1', p1); return el; })()),
+        h('div', { class: 'col c1' }, h('div', { class: 'av' }, s.players[0].emoji), h('div', { class: 'nm' }, s.players[0].name), (() => { const el = h('div', { class: 'big' }); rollNum(el, 'scores:mp1', cur.p1); return el; })()),
         h('div', { class: 'mid' }, ':'),
-        h('div', { class: 'col c2' }, h('div', { class: 'av' }, s.players[1].emoji), h('div', { class: 'nm' }, s.players[1].name), (() => { const el = h('div', { class: 'big' }); rollNum(el, 'scores:p2', p2); return el; })()))),
-    h('div', { class: 'meter' }, h('div', { class: 'fill', style: `width:${pct}%` })),
-    h('div', { class: 'meter-labels' }, h('span', { style: 'color:var(--p1)' }, `${s.players[0].name} ${pct}%`), h('span', { style: 'color:var(--p2)' }, `${s.players[1].name} ${100 - pct}%`)),
+        h('div', { class: 'col c2' }, h('div', { class: 'av' }, s.players[1].emoji), h('div', { class: 'nm' }, s.players[1].name), (() => { const el = h('div', { class: 'big' }); rollNum(el, 'scores:mp2', cur.p2); return el; })())),
+      h('div', { class: 'sn-lead' }, mLead == null
+        ? (mTotal ? `All square in ${mLong(cur.ym)} 🤝` : `Fresh month — first win takes the ${mLong(cur.ym)} lead! 🚀`)
+        : `${s.players[mLead].emoji} ${esc(s.players[mLead].name)} leads ${mLong(cur.ym)} by ${gapN}`),
+      h('div', { class: 'sn-days' }, `${daysLeft === 0 ? 'FINAL DAY — everything on the line' : daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' left this month'}`)),
+    h('div', { class: 'meter' }, h('div', { class: 'fill', style: `width:${mPct}%` })),
+    h('div', { class: 'meter-labels' }, h('span', { style: 'color:var(--p1)' }, `${s.players[0].name} ${mPct}%`), h('span', { style: 'color:var(--p2)' }, `${s.players[1].name} ${100 - mPct}%`)),
     h('div', { class: 'stat-row' },
-      h('div', { class: 'stat' }, h('div', { class: 'v' }, String(total + draws)), h('div', { class: 'k' }, 'MATCHES')),
-      h('div', { class: 'stat' }, h('div', { class: 'v' }, String(draws)), h('div', { class: 'k' }, 'DRAWS')),
+      h('div', { class: 'stat' }, h('div', { class: 'v' }, String(mTotal + cur.draws)), h('div', { class: 'k' }, 'THIS MONTH')),
+      h('div', { class: 'stat' }, h('div', { class: 'v' }, String(cur.draws)), h('div', { class: 'k' }, 'DRAWS')),
       h('div', { class: 'stat' }, h('div', { class: 'v', style: 'font-size:18px' }, s.streak.n ? `${(s.streak.who === 'p1' ? s.players[0] : s.players[1]).name} ×${s.streak.n}` : '—'), h('div', { class: 'k' }, 'STREAK'))),
   );
 
-  // ----- MONTHLY RACE + trophy cabinet (all-time above stays the legacy tally) -----
-  {
-    const seasons = Store.seasonsTick();               // archives a finished month on first view
-    const cur = seasons.cur, past = (seasons.past || []).slice().reverse(); // newest first
-    const mLong = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleString('en', { month: 'long' }); };
-    const mShort = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleString('en', { month: 'short' }) + ' ’' + String(y).slice(2); };
-    const champ = e => e.p1 === e.p2 ? null : (e.p1 > e.p2 ? 0 : 1);
-    const now = new Date();
-    const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate();
-    const lead = champ(cur), gapN = Math.abs(cur.p1 - cur.p2);
-    const scA = h('span', { class: 'a' }); rollNum(scA, 'season:p1', cur.p1);
-    const scB = h('span', { class: 'b' }); rollNum(scB, 'season:p2', cur.p2);
-    const card = h('div', { class: 'season-card' },
-      h('div', { class: 'sec-label' }, `🗓 THE ${mLong(cur.ym).toUpperCase()} RACE`),
-      h('div', { class: 'sn-now' },
-        h('div', { class: 'sn-sc' }, scA, h('span', { class: 'd' }, ' – '), scB),
-        h('div', { class: 'sn-lead' }, lead == null
-          ? (cur.p1 + cur.p2 ? `All square in ${mLong(cur.ym)} 🤝` : `Fresh month — first win takes the ${mLong(cur.ym)} lead! 🚀`)
-          : `${s.players[lead].emoji} ${esc(s.players[lead].name)} leads ${mLong(cur.ym)} by ${gapN}`),
-        h('div', { class: 'sn-days' }, `${daysLeft === 0 ? 'FINAL DAY — everything on the line' : daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' left'}${cur.draws ? ' · ' + cur.draws + ' draw' + (cur.draws === 1 ? '' : 's') : ''}`)));
-    if (past.length) {
-      const lm = past[0], lw = champ(lm);
-      card.append(h('div', { class: 'sn-last' }, 'Last month (' + mShort(lm.ym) + '): ',
-        lw == null ? h('span', {}, `ended level ${lm.p1}–${lm.p2} 🤝`)
-                   : h('b', { style: `color:${s.players[lw].color}` }, `${esc(s.players[lw].name)} took it ${lm.p1}–${lm.p2} 🏆`)));
-      const t0 = past.filter(e => champ(e) === 0).length, t1 = past.filter(e => champ(e) === 1).length;
-      const cab = h('div', { class: 'sn-cab' });
-      past.forEach(e => {
-        const w = champ(e);
-        cab.append(h('div', { class: 'sn-trophy' + (w == null ? ' tie' : ' w' + w) },
-          h('span', {}, w == null ? '🤝' : '🏆 ' + s.players[w].emoji),
-          h('b', {}, mShort(e.ym)), h('span', { class: 'ts' }, `${e.p1}–${e.p2}`)));
-      });
-      card.append(cab,
-        h('div', { class: 'sn-tally' }, `Trophy cabinet: ${s.players[0].emoji} ${esc(s.players[0].name)} ×${t0} · ${s.players[1].emoji} ${esc(s.players[1].name)} ×${t1}${past.length - t0 - t1 ? ' · shared ×' + (past.length - t0 - t1) : ''}`));
-    } else {
-      card.append(h('div', { class: 'sn-last' }, `First season in progress — ${mLong(cur.ym)}’s champion gets the first trophy 🏆`));
-    }
-    view.append(card);
+  // ----- season history: last month's verdict + the trophy cabinet -----
+  const card = h('div', { class: 'season-card' });
+  if (past.length) {
+    const lm = past[0], lw = champ(lm);
+    card.append(h('div', { class: 'sec-label' }, '🏆 SEASON HISTORY'));
+    card.append(h('div', { class: 'sn-last' }, 'Last month (' + mShort(lm.ym) + '): ',
+      lw == null ? h('span', {}, `ended level ${lm.p1}–${lm.p2} 🤝`)
+                 : h('b', { style: `color:${s.players[lw].color}` }, `${esc(s.players[lw].name)} took it ${lm.p1}–${lm.p2} 🏆`)));
+    const t0 = past.filter(e => champ(e) === 0).length, t1 = past.filter(e => champ(e) === 1).length;
+    const cab = h('div', { class: 'sn-cab' });
+    past.forEach(e => {
+      const w = champ(e);
+      cab.append(h('div', { class: 'sn-trophy' + (w == null ? ' tie' : ' w' + w) },
+        h('span', {}, w == null ? '🤝' : '🏆 ' + s.players[w].emoji),
+        h('b', {}, mShort(e.ym)), h('span', { class: 'ts' }, `${e.p1}–${e.p2}`)));
+    });
+    card.append(cab,
+      h('div', { class: 'sn-tally' }, `Trophy cabinet: ${s.players[0].emoji} ${esc(s.players[0].name)} ×${t0} · ${s.players[1].emoji} ${esc(s.players[1].name)} ×${t1}${past.length - t0 - t1 ? ' · shared ×' + (past.length - t0 - t1) : ''}`));
+  } else {
+    card.append(h('div', { class: 'sn-last' }, `First season in progress — ${mLong(cur.ym)}’s champion gets the first trophy 🏆`));
   }
+  view.append(card);
 
-  // affectionate trash-talk
-  view.append(h('div', { class: 'taunt-line' }, rivalryTaunt(s)));
+  // ----- all-time, since day one (compact — the race above is what matters) -----
+  view.append(h('div', { class: 'season-card' },
+    h('div', { class: 'sec-label' }, '∞ ALL-TIME — SINCE DAY ONE'),
+    h('div', { class: 'at-line' },
+      h('span', { class: 'a' }, `${s.players[0].emoji} ${esc(s.players[0].name)} `, (() => { const el = h('b'); rollNum(el, 'scores:p1', p1); return el; })()),
+      h('span', { class: 'sl' }, ' – '),
+      h('span', { class: 'b' }, (() => { const el = h('b'); rollNum(el, 'scores:p2', p2); return el; })(), ` ${esc(s.players[1].name)} ${s.players[1].emoji}`),
+      h('small', {}, ` · ${total + draws} matches · ${draws} draws`))));
+
+  // affectionate trash-talk about the CURRENT month's race
+  view.append(h('div', { class: 'taunt-line' }, rivalryTaunt({ players: s.players, totals: { p1: cur.p1, p2: cur.p2 } })));
   // per-player badges (each of you earns your own — including the funny ones)
   const badges = computeBadges(s);
   function badgeGroup(seat) {
