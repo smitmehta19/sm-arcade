@@ -19,6 +19,8 @@ const Store = (() => {
     dateNight: { done: [], removed: [], faved: [] }, // shared date-roulette lists
     plans: [], // shared calendar entries (see planAdd) — timed entries store UTC ms, so each viewer sees their own local time
     plansDeleted: [], // tombstones [{id,t}] so deletions survive the per-entry plan merge
+    story: [],        // Our Story: {kind:'moment', emoji,title,date?,recur?,place?,lat?,lon?,note?} + {kind:'period', start}
+    storyDeleted: [], // tombstones for story (same merge protection as plans)
     meet: { nextAt: null, lastMetAt: null }, // shared reunion countdown: ms timestamps (synced)
     settings: { sound: true, theme: 'dark' },
     updated: 0,
@@ -122,35 +124,44 @@ const Store = (() => {
   // can see my calendar" split-brain). If the merge ends up knowing more than
   // the room does (or the room is older), we save() the merged truth back;
   // the union is idempotent, so the echo of our own write merges to no-change.
+  // union tombstones from both sides (newest wins per id, capped)
+  function unionDeleted(a, b) {
+    const m = new Map();
+    (a || []).concat(b || []).forEach(d => { if (d && d.id && (!m.has(d.id) || m.get(d.id).t < d.t)) m.set(d.id, d); });
+    return [...m.values()].sort((x, y) => y.t - x.t).slice(0, 80);
+  }
+  // union a list of {id,…} entries — the OLDER side is inserted first so the
+  // NEWER side's copy of the same id wins (e.g. a fresher `confirmed` flag)
+  function unionById(older, newer, deleted) {
+    const m = new Map();
+    (older || []).forEach(e => { if (e && e.id) m.set(e.id, e); });
+    (newer || []).forEach(e => { if (e && e.id) m.set(e.id, e); });
+    (deleted || []).forEach(d => m.delete(d.id));
+    return [...m.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  }
   function mergeRemote(remote) {
     const remoteNewer = (remote.updated || 0) >= (state.updated || 0);
-    const lPlans = Array.isArray(state.plans) ? state.plans : [];
-    const rPlans = Array.isArray(remote.plans) ? remote.plans : [];
-    const lDel = Array.isArray(state.plansDeleted) ? state.plansDeleted : [];
-    const rDel = Array.isArray(remote.plansDeleted) ? remote.plansDeleted : [];
-    // union tombstones
-    const delMap = new Map();
-    lDel.concat(rDel).forEach(d => { if (d && d.id && (!delMap.has(d.id) || delMap.get(d.id).t < d.t)) delMap.set(d.id, d); });
-    const mergedDel = [...delMap.values()].sort((a, b) => b.t - a.t).slice(0, 80);
-    // union plans by id — insert the OLDER side first so the newer side's copy
-    // of the same entry wins (e.g. a fresher `confirmed` flag)
-    const older = remoteNewer ? lPlans : rPlans, newer = remoteNewer ? rPlans : lPlans;
-    const pm = new Map();
-    older.forEach(e => { if (e && e.id) pm.set(e.id, e); });
-    newer.forEach(e => { if (e && e.id) pm.set(e.id, e); });
-    mergedDel.forEach(d => pm.delete(d.id));
-    const mergedPlans = [...pm.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const arr = (o, k) => Array.isArray(o[k]) ? o[k] : [];
+    // per-entry merged collections (plans = calendar, story = Our Story memories/period logs)
+    const merged = {};
+    let roomLacks = false;
+    [['plans', 'plansDeleted'], ['story', 'storyDeleted']].forEach(([key, delKey]) => {
+      const del = unionDeleted(arr(state, delKey), arr(remote, delKey));
+      const list = unionById(
+        remoteNewer ? arr(state, key) : arr(remote, key),
+        remoteNewer ? arr(remote, key) : arr(state, key), del);
+      merged[key] = list; merged[delKey] = del;
+      if (JSON.stringify(list) !== JSON.stringify(arr(remote, key)) || del.length !== arr(remote, delKey).length) roomLacks = true;
+    });
     // a seat's device timezone: whichever side has one (newer side preferred)
     const tzFor = i => { const rp = (remote.players || [])[i] || {}, lp = (state.players || [])[i] || {}; return (remoteNewer ? (rp.tz || lp.tz) : (lp.tz || rp.tz)) || null; };
     const tz0 = tzFor(0), tz1 = tzFor(1);
-    const roomLacks = JSON.stringify(mergedPlans) !== JSON.stringify(rPlans) || mergedDel.length !== rDel.length;
     if (remoteNewer) {
       const localPrefs = state.settings; // keep local-only prefs if remote lacks them
       state = Object.assign(blankState(), remote);
       if (!remote.settings) state.settings = localPrefs;
     }
-    state.plans = mergedPlans;
-    state.plansDeleted = mergedDel;
+    Object.assign(state, merged);
     if (tz0 && state.players[0]) state.players[0].tz = tz0;
     if (tz1 && state.players[1]) state.players[1].tz = tz1;
     persistLocal();
@@ -265,6 +276,32 @@ const Store = (() => {
     const e = plansArr().find(x => x.id === id);
     if (e && e.kind === 'us' && e.seat !== seat) { e.confirmed = true; save(); }
   }
+
+  /* ---- Our Story: milestone moments + period logs (same merge safety as plans) ----
+     moment = {id, kind:'moment', emoji, title, date?'YYYY-MM-DD', recur?, place?, lat?, lon?, note?}
+     period = {id, kind:'period', start:'YYYY-MM-DD'} */
+  function storyArr() { if (!Array.isArray(state.story)) state.story = []; return state.story; }
+  function storySave(item) {
+    storyArr();
+    if (item.id) {                                    // edit in place
+      const i = state.story.findIndex(x => x.id === item.id);
+      if (i >= 0) state.story[i] = Object.assign({}, state.story[i], item);
+      else state.story.push(item);
+    } else {
+      item.id = 'st' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+      item.createdAt = Date.now();
+      state.story.push(item);
+    }
+    save();
+    return item.id;
+  }
+  function storyRemove(id) {
+    state.story = storyArr().filter(e => e.id !== id);
+    if (!Array.isArray(state.storyDeleted)) state.storyDeleted = [];
+    state.storyDeleted.push({ id, t: Date.now() });
+    state.storyDeleted = state.storyDeleted.slice(-80);
+    save();
+  }
   function setPlayer(idx, patch) { Object.assign(state.players[idx], patch); save(); }
   function setSetting(key, val) { state.settings[key] = val; save(); }
   function resetScores() {
@@ -377,6 +414,7 @@ const Store = (() => {
     recordResult, recordTournament, adjustScore, toggleFav, dateToggle, setMeet, setPlayer, setSetting, resetScores,
     seasonsTick, _rollSeasons: rollSeasons, curYM,
     planAdd, planRemove, planConfirm, stampTz, _mergeRemote: mergeRemote,
+    storySave, storyRemove,
     Sound, isCloud: () => cloud,
     getIdentity, setIdentity, onCloud, Net,
   };

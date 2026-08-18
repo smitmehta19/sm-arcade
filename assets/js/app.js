@@ -17,18 +17,22 @@ Gate.ready(function boot() {
     rollNum($('#msP2'), 'ms:p2', st.totals.p2);
     $('#soundBtn').innerHTML = Icons.ui(st.settings.sound ? 'sound' : 'mute');
     $('#settingsBtn').innerHTML = Icons.ui('gear');
+    $('#storyBtn').innerHTML = Icons.ui('heart');
   }
   Store.subscribe(() => {
     paintChrome();
     const hash = location.hash || '#/';
     if ((hash === '#/' || hash === '') && Store.getIdentity() != null) renderHome();
     if (hash.startsWith('#/plans') && Store.getIdentity() != null) renderPlans(); // live calendar updates from the partner
+    if (hash.startsWith('#/story') && Store.getIdentity() != null) renderStory();
   });
   paintChrome();
 
   $('#soundBtn').addEventListener('click', () => { Store.setSetting('sound', !Store.get().settings.sound); Store.Sound.tap(); });
   // settings moved off the bottom nav (Plans took its slot) → gear in the topbar
   $('#settingsBtn').addEventListener('click', () => { if (!leaveGuard()) { location.hash = '#/us'; } Store.Sound.tap(); });
+  // Our Story — dates, places & keepsakes — lives next to the gear
+  $('#storyBtn').addEventListener('click', () => { if (!leaveGuard()) { location.hash = '#/story'; } Store.Sound.tap(); });
 
   // Leaving a live game must go through BOTH-player consent — never a silent bail.
   // The back arrow AND the brand link both sit over the game (the bottom nav is

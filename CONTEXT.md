@@ -119,6 +119,14 @@ assets/js/
                            pools non-coop Word+Strategy, so chess/dominoes/sos auto-join)
   datenight-data.js        window.DATE_NIGHT = {cats, lens, ideas[162]} — Date Night Roulette data (ids d1..d162)
   datenight.js             window.renderDateNight — slot-machine UI + its own injected CSS
+  plans.js                 window.renderPlans — shared calendar (#/plans tab)
+  story.js                 window.renderStory — "Our Story" (#/story, ♥ topbar button): hero day-count,
+                           countdown chips, OSM place polaroids, big dates, discreet cycle tracker.
+                           ONE item type does both: {kind:'moment', emoji,title,date?,recur?,place?,lat?,lon?,note?}
+                           — a date puts it in the list/chips, lat+lon puts it in the places strip, both = both.
+                           Period logs are {kind:'period', start}. Static OSM tiles (2×2 grid offset so the pin
+                           centres) + Nominatim search on explicit tap only (≤1 req/s policy). NO Leaflet/API key.
+                           ⚠ day maths uses Date.UTC(y,m,d) — local-noon timestamps drift ±1 across DST.
   app.js                   boot, chrome wiring, nav SVG icons, leave-guard, initNet + initCloud, router, SW reg
 ```
 Per-game board CSS is injected as a `<style>` from inside each `games-*.js` (and `datenight.js`), but it
@@ -206,6 +214,8 @@ Active match at Firebase `matches/<ROOM>/active`:
    PER-ENTRY (union by id, newer side wins same-id conflicts) with `plansDeleted` tombstones (cap 80)
    so deletions never resurrect; per-seat `players[n].tz` survives from whichever side has it; if the
    merge knows more than the room it `save()`s the merged truth back (idempotent → echo converges).
+   The per-entry treatment is generic — `[['plans','plansDeleted'], ['story','storyDeleted']]` — so any
+   future shared list gets the same protection by adding its pair there.
 4. **Timer picker ↔ Router teardown.** `startMatch` navigates (fires `hashchange`→`Router.go`) and *then* opens
    the picker. `Router.go` must only tear the picker down when leaving that game's route — it's tracked by
    `timerPanelEl`/`timerPanelGame`. (Closing it unconditionally made the picker flash open and vanish.)

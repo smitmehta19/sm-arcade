@@ -540,6 +540,7 @@ const Router = (() => {
     else if (hash.startsWith('#/date')) renderDateNight();
     else if (hash.startsWith('#/scores')) renderScores();
     else if (hash.startsWith('#/plans')) renderPlans();
+    else if (hash.startsWith('#/story')) renderStory();
     else if (hash.startsWith('#/us')) renderUs();
     else renderHome();
     syncChrome(hash);
