@@ -10,10 +10,15 @@
 
    Maps: static OpenStreetMap tiles (no Leaflet, no API key, no build
    step) — a 2×2 tile grid offset so the pin lands dead centre.
-   Search: Nominatim, fired only on an explicit tap (their usage
-   policy asks for ≤1 req/sec — a couple tapping search can't breach it).
-   Cycle: prediction = last start + rolling average of the last ≤6
-   cycles (not a naive 28), with a ± window from real variability.
+   Setting a place, in order of least effort:
+     1. paste a Google Maps link (short goo.gl ones are resolved via
+        unshorten.me) → coordinates AND the place name, zero typing;
+     2. type a name → Photon + Nominatim searched in parallel;
+     3. drop a pin by dragging the map — works for places no database
+        knows (e.g. a small hotel that simply isn't in OpenStreetMap).
+   Cycle: prediction = last start + rolling average of recent cycles,
+   counting only 21–45 day gaps (longer = an unlogged period, see
+   cycleStats) with a ± window from real variability.
    ============================================================ */
 (function () {
   const css = `
@@ -252,6 +257,35 @@
     return null;
   }
   const isShortMapLink = t => /(maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(t || '');
+  // A Google Maps URL carries the place NAME as well as its coordinates —
+  // ".../maps/place/Aureole%2BHotel/@19.11,72.85/..." — so a pasted link can
+  // fill in both and the user never has to type or copy coordinates.
+  function parseMapsUrl(url) {
+    const c = parseCoords(url || '');
+    if (!c) return null;
+    let name = null;
+    const m = (url || '').match(/\/maps\/place\/([^\/@?]+)/);
+    if (m) {
+      try {
+        name = decodeURIComponent(m[1]).replace(/\+/g, ' ').trim();
+        if (/^[@\d.,\s-]*$/.test(name) || name.length < 2) name = null;     // a coordinate, not a name
+      } catch (e) { name = null; }
+    }
+    return { lat: c.lat, lon: c.lon, name };
+  }
+  // Short goo.gl links are a redirect that no web page may follow (Google sends
+  // no CORS headers). unshorten.me resolves them and DOES allow browser calls,
+  // so pasting a shared link can Just Work. Failure is non-fatal: the UI falls
+  // back to the manual routes. Note: the link is sent to that service to be
+  // resolved — it only ever sees the maps link, nothing else about the couple.
+  async function expandShortLink(url) {
+    try {
+      const r = await fetch('https://unshorten.me/json/' + encodeURIComponent(url));
+      const j = await r.json();
+      if (j && j.success && j.resolved_url) return j.resolved_url;
+    } catch (e) {}
+    return null;
+  }
 
   // Both engines run in PARALLEL and their results are interleaved — Photon is
   // forgiving with partial/misspelled names, Nominatim is stronger on addresses,
@@ -315,11 +349,25 @@
     const jumpBtn = h('button', { class: 'btn btn-sm', onclick: jump }, '🔍');
     sheet.append(h('div', { class: 'sy-inline', style: 'margin-bottom:9px' }, jumpIn, jumpBtn), jumpRes);
     let jumpTimer = null;
+    let jumpBusy = false;
     jumpIn.addEventListener('input', () => {
-      const c = parseCoords(jumpIn.value.trim());
+      const v = jumpIn.value.trim();
+      const c = parseCoords(v);
       if (c) { lat = c.lat; lon = c.lon; z = 17; jumpRes.innerHTML = ''; paint(); return; }
+      if (isShortMapLink(v)) {                                             // pasted a shared link → fly there
+        if (jumpBusy) return;
+        jumpBusy = true; jumpRes.innerHTML = '';
+        jumpRes.append(h('div', { class: 'sy-tip' }, '🔗 Finding that link…'));
+        expandShortLink(v).then(full => {
+          jumpBusy = false; jumpRes.innerHTML = '';
+          const got = full && parseMapsUrl(full);
+          if (got) { lat = got.lat; lon = got.lon; z = 18; jumpIn.value = ''; paint(); Store.Sound.good(); }
+          else jumpRes.append(h('div', { class: 'sy-tip' }, 'Couldn’t read that link — pan the map to the spot instead.'));
+        });
+        return;
+      }
       clearTimeout(jumpTimer);
-      if (jumpIn.value.trim().length < 3) { jumpRes.innerHTML = ''; return; }
+      if (v.length < 3) { jumpRes.innerHTML = ''; return; }
       jumpTimer = setTimeout(jump, 550);
     });
     async function jump() {
@@ -620,7 +668,7 @@
     sheet.append(h('div', { class: 'sy-field' }, h('label', {}, 'Date (optional)'), dateIn,
       h('label', { class: 'sy-chk', style: 'margin-top:9px' }, recurChk, ' 🎂 Repeats every year (birthday / anniversary)')));
 
-    const placeIn = h('input', { type: 'text', maxlength: '90', value: draft.place || '', placeholder: 'Hotel, café, park… or paste a maps link' });
+    const placeIn = h('input', { type: 'text', maxlength: '200', value: draft.place || '', placeholder: 'Search, or paste a Google Maps link' });
     const results = h('div', { class: 'sy-results' });
     const searchBtn = h('button', { class: 'btn btn-sm', onclick: () => doSearch(true) }, '🔍');
     const pinBtn = h('button', { class: 'btn btn-sm btn-block', style: 'margin-top:9px', onclick: () => {
@@ -634,33 +682,47 @@
     const pinNote = h('div', { class: 'sy-pinnote' });
     const setPinned = on => {
       pinNote.className = 'sy-pinnote' + (on ? ' on' : '');
-      pinNote.textContent = on ? '📍 Pinned — it’ll show on the map' : 'Can’t find it? Drop a pin — that works for any spot on earth. You can also paste a Google Maps link or coordinates.';
+      pinNote.textContent = on ? '📍 Pinned — it’ll show on the map' : 'Tip: share a place from Google Maps and paste the link here — it fills in the spot and its name automatically. Or drop a pin yourself.';
     };
     setPinned(draft.lat != null);
     sheet.append(h('div', { class: 'sy-field' }, h('label', {}, 'Place (optional)'),
       h('div', { class: 'sy-inline' }, placeIn, searchBtn), pinBtn, results, pinNote));
     // paste-a-link / paste-coords is instant; typing searches after a pause
-    let searchTimer = null;
+    let searchTimer = null, resolving = false;
+    // applies a resolved location: pin it, and name it from the link when the
+    // box is still holding the raw URL
+    function applyLocation(lat, lon, name) {
+      draft.lat = lat; draft.lon = lon;
+      const looksLikeUrl = /^https?:\/\//i.test(placeIn.value.trim()) || parseCoords(placeIn.value.trim());
+      if (name && looksLikeUrl) { placeIn.value = name; draft.place = name; }
+      results.innerHTML = ''; setPinned(true); Store.Sound.good();
+      if (!name && looksLikeUrl) reverseName(lat, lon).then(n => {
+        if (n && (/^https?:\/\//i.test(placeIn.value.trim()) || parseCoords(placeIn.value.trim()))) { placeIn.value = n; draft.place = n; }
+      });
+    }
     placeIn.addEventListener('input', () => {
       const v = placeIn.value.trim();
-      const c = parseCoords(v);
-      if (c) {
-        draft.lat = c.lat; draft.lon = c.lon; results.innerHTML = '';
-        setPinned(true);
-        reverseName(c.lat, c.lon).then(n => { if (n && parseCoords(placeIn.value.trim())) { placeIn.value = n; draft.place = n; } });
-        return;
-      }
+      const direct = parseMapsUrl(v) || (parseCoords(v) ? Object.assign({ name: null }, parseCoords(v)) : null);
+      if (direct) { applyLocation(direct.lat, direct.lon, direct.name); return; }
       if (isShortMapLink(v)) {
-        // A goo.gl link is a redirect Google won't let a web page follow
-        // (no CORS), and public proxies are unreliable + leak your locations.
-        // So: guide the two paths that always work, in one tap each.
+        // resolve the shared link automatically — no coordinate-copying needed
+        if (resolving) return;
+        resolving = true;
         results.innerHTML = '';
-        results.append(h('div', { class: 'sy-tip' },
-          h('b', { style: 'display:block;margin-bottom:6px' }, 'Short Google links can’t be read by a web page 🙈'),
-          h('div', {}, 'Easiest fix — in Google Maps, press and hold the exact spot until a red pin drops. The coordinates appear at the bottom; copy them and paste here.'),
-          h('div', { style: 'margin-top:7px' }, 'Or open the link and copy the long URL from the address bar:'),
-          h('a', { class: 'sy-openlink', href: v, target: '_blank', rel: 'noopener' }, '↗ Open this link'),
-          h('div', { style: 'margin-top:7px' }, 'Or skip all that — tap “Drop a pin on the map” above.')));
+        results.append(h('div', { class: 'sy-tip' }, '🔗 Opening your link to find the place…'));
+        expandShortLink(v).then(full => {
+          resolving = false;
+          if (placeIn.value.trim() !== v) return;                          // they typed on
+          const got = full && parseMapsUrl(full);
+          if (got) { applyLocation(got.lat, got.lon, got.name); return; }
+          results.innerHTML = '';
+          results.append(h('div', { class: 'sy-tip' },
+            h('b', { style: 'display:block;margin-bottom:6px' }, 'Couldn’t read that link 🙈'),
+            h('div', {}, 'In Google Maps, press and hold the exact spot until a red pin drops — the coordinates appear at the bottom. Copy and paste them here.'),
+            h('div', { style: 'margin-top:7px' }, 'Or open the link and copy the long URL from the address bar:'),
+            h('a', { class: 'sy-openlink', href: v, target: '_blank', rel: 'noopener' }, '↗ Open this link'),
+            h('div', { style: 'margin-top:7px' }, 'Or just tap “Drop a pin on the map” above.')));
+        });
         return;
       }
       clearTimeout(searchTimer);
@@ -719,5 +781,5 @@
     function close() { back.remove(); }
   }
 
-  window._storyTest = { cycleStats, nextAnniversary, tileXY, daysBetween, parseCoords, isShortMapLink, searchPlaces, worldPx, worldLatLon, openPinPicker };
+  window._storyTest = { cycleStats, nextAnniversary, tileXY, daysBetween, parseCoords, parseMapsUrl, isShortMapLink, expandShortLink, searchPlaces, worldPx, worldLatLon, openPinPicker };
 })();
