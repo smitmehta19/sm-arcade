@@ -125,7 +125,17 @@ assets/js/
                            ONE item type does both: {kind:'moment', emoji,title,date?,recur?,place?,lat?,lon?,note?}
                            — a date puts it in the list/chips, lat+lon puts it in the places strip, both = both.
                            Period logs are {kind:'period', start}. Static OSM tiles (2×2 grid offset so the pin
-                           centres) + Nominatim search on explicit tap only (≤1 req/s policy). NO Leaflet/API key.
+                           centres). NO Leaflet / API key anywhere.
+                           THREE ways to set a place (Nominatim alone missed real hotels — "leela ambience
+                           gurgaon" returned nothing): (1) live search via **Photon** (photon.komoot.io, fuzzy,
+                           CORS-enabled, debounced 500ms, min 3 chars) with Nominatim as fallback; (2) paste a
+                           Google/Apple maps link or raw "lat, lon" — `parseCoords` handles @lat,lon · !3d!4d ·
+                           ?q= · ?ll=; short goo.gl links CAN'T be resolved client-side so the UI explains that;
+                           (3) **drop-a-pin picker** — drag tiles under a fixed crosshair (pointer events +
+                           world-pixel projection), auto-names the spot by reverse geocoding. The picker is the
+                           universal escape hatch: it works for places no database knows.
+                           ⚠ Testing these from file:// FAILS (opaque origin blocks cross-origin fetch) — always
+                           test search over http (`python -m http.server` in the repo) or you'll chase ghosts.
                            ⚠ day maths uses Date.UTC(y,m,d) — local-noon timestamps drift ±1 across DST.
   app.js                   boot, chrome wiring, nav SVG icons, leave-guard, initNet + initCloud, router, SW reg
 ```

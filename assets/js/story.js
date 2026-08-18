@@ -126,6 +126,30 @@
   .sy-results button{ text-align:left; padding:10px 12px; border-radius:11px; background:var(--bg-2);
     border:1px solid var(--line); color:var(--ink); font-size:12.5px; line-height:1.4; }
   .sy-results button:active{ border-color:var(--violet); }
+  .sy-results button b{ display:block; font-size:13.5px; }
+  .sy-results button span{ display:block; color:var(--ink-faint); font-size:11.5px; margin-top:2px; }
+  .sy-tip{ font-size:12px; color:var(--ink-dim); line-height:1.5; padding:9px 11px; border-radius:11px;
+    background:rgba(255,214,107,.07); border:1px solid rgba(255,214,107,.25); }
+  .sy-pinnote{ font-size:11.5px; color:var(--ink-faint); line-height:1.5; margin-top:8px; }
+  .sy-pinnote.on{ color:var(--lime); }
+  /* drop-a-pin picker */
+  .pick-ov{ z-index:150; }
+  .sy-pick-hint{ font-size:12.5px; color:var(--ink-dim); text-align:center; margin:0 0 12px; line-height:1.5; }
+  .sy-pick{ position:relative; height:min(52vh,320px); border-radius:14px; overflow:hidden;
+    border:1px solid var(--glass-brd); background:#0b1020; touch-action:none; cursor:grab; user-select:none; }
+  .sy-pick:active{ cursor:grabbing; }
+  .sy-pick-layer{ position:absolute; inset:0; }
+  .sy-pick-layer img{ position:absolute; width:256px; height:256px; pointer-events:none;
+    filter:invert(1) hue-rotate(185deg) brightness(.74) saturate(.75) contrast(1.05); }
+  .sy-cross{ position:absolute; left:50%; top:50%; transform:translate(-50%,-88%); font-size:30px; z-index:4;
+    pointer-events:none; filter:drop-shadow(0 0 10px var(--magenta)); }
+  .sy-cross::after{ content:''; position:absolute; left:50%; bottom:-4px; transform:translateX(-50%);
+    width:7px; height:7px; border-radius:50%; background:var(--magenta); box-shadow:0 0 10px var(--magenta); }
+  .sy-zoom{ position:absolute; right:10px; top:10px; z-index:5; width:38px; height:38px; border-radius:11px;
+    background:rgba(10,12,24,.82); border:1px solid var(--glass-brd); color:var(--ink); font-size:19px; font-weight:700; }
+  .sy-zoom.out{ top:54px; } .sy-zoom:active{ transform:scale(.9); }
+  .sy-pick .att{ position:absolute; right:5px; bottom:3px; z-index:5; font-size:8px; color:rgba(255,255,255,.55); }
+  .sy-coord{ text-align:center; font-family:var(--font-num); font-size:11.5px; color:var(--ink-faint); margin-top:9px; }
   .sy-chk{ display:flex; align-items:center; gap:9px; font-size:13.5px; color:var(--ink-dim); padding:4px 0 2px; }
   .sy-actions{ display:flex; gap:9px; margin-top:16px; }
   .sy-actions .btn{ flex:1; }
@@ -185,6 +209,133 @@
   function tileXY(lat, lon, z) {
     const n = Math.pow(2, z), latR = lat * Math.PI / 180;
     return { x: (lon + 180) / 360 * n, y: (1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n };
+  }
+  // world-pixel projection (256px tiles) — used by the drag-to-pin picker
+  const worldPx = (lat, lon, z) => { const t = tileXY(lat, lon, z); return { x: t.x * 256, y: t.y * 256 }; };
+  function worldLatLon(x, y, z) {
+    const s = 256 * Math.pow(2, z);
+    return { lon: x / s * 360 - 180, lat: Math.atan(Math.sinh(Math.PI * (1 - 2 * y / s))) * 180 / Math.PI };
+  }
+
+  /* ---------- finding a place ----------
+     Nominatim alone missed real hotels ("leela ambience gurgaon" → nothing),
+     so search runs on Photon (same OSM data, fuzzy autocomplete-grade
+     matching) and falls back to Nominatim. Anything a database doesn't know
+     can still be pinned by hand with the map picker, or pasted as a maps
+     link / raw coordinates. */
+  function parseCoords(t) {
+    if (!t) return null;
+    const chk = (la, lo) => (isFinite(la) && isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180 && (la || lo)) ? { lat: la, lon: lo } : null;
+    let m = t.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);          // google place payload
+    if (m) return chk(+m[1], +m[2]);
+    m = t.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);                   // /maps/@lat,lon,17z
+    if (m) return chk(+m[1], +m[2]);
+    m = t.match(/[?&](?:q|ll|daddr|sll|mlat)=(-?\d+(?:\.\d+)?)[,&]?(?:mlon=)?(-?\d+(?:\.\d+)?)/); // ?q=lat,lon · apple ?ll=
+    if (m) return chk(+m[1], +m[2]);
+    m = t.match(/^\s*(-?\d{1,2}(?:\.\d+)?)\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)\s*$/); // pasted "18.92, 72.83"
+    if (m) return chk(+m[1], +m[2]);
+    return null;
+  }
+  const isShortMapLink = t => /(maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(t || '');
+
+  async function searchPlaces(q) {
+    const tidy = list => list.filter(r => r && isFinite(r.lat) && isFinite(r.lon)).slice(0, 6);
+    try {                                                                  // Photon: forgiving, partial names, typos
+      const r = await fetch('https://photon.komoot.io/api/?limit=8&q=' + encodeURIComponent(q));
+      const j = await r.json();
+      const out = (j.features || []).map(f => {
+        const p = f.properties || {}, c = (f.geometry || {}).coordinates || [];
+        const bits = [...new Set([p.street && p.street !== p.name ? p.street : '', p.district || '', p.city || p.county || '', p.state || '', p.country || ''].filter(Boolean))];
+        return { label: p.name || p.street || p.city || 'Unnamed place', sub: bits.join(', '), lat: +c[1], lon: +c[0] };
+      });
+      if (out.length) return tidy(out);
+    } catch (e) {}
+    try {                                                                  // Nominatim fallback (stronger on addresses)
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&q=' + encodeURIComponent(q));
+      const j = await r.json();
+      return tidy((j || []).map(p => {
+        const parts = (p.display_name || '').split(',');
+        return { label: parts[0].trim(), sub: parts.slice(1, 4).join(',').trim(), lat: +p.lat, lon: +p.lon };
+      }));
+    } catch (e) { return null; }                                           // null = search unreachable
+  }
+  async function reverseName(lat, lon) {
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&lat=${lat}&lon=${lon}`);
+      const j = await r.json();
+      if (j && j.display_name) return j.display_name.split(',').slice(0, 3).join(',').trim();
+    } catch (e) {}
+    return null;
+  }
+
+  /* ---------- drop-a-pin picker — drag the map under a fixed crosshair.
+     Works for ANY spot on earth (a hotel, a bench, a beach) with no search
+     at all. Plain tiles + pointer events; no Leaflet, no key. */
+  function openPinPicker(startLat, startLon, onPick) {
+    let lat = startLat != null ? startLat : 20.5937, lon = startLon != null ? startLon : 78.9629; // default: India
+    let z = startLat != null ? 16 : 4;
+    const back = h('div', { class: 'sy-ov pick-ov', onclick: e => { if (e.target === back) back.remove(); } });
+    const sheet = h('div', { class: 'sy-sheet' });
+    sheet.append(h('h3', {}, '📍 DROP A PIN'));
+    sheet.append(h('p', { class: 'sy-pick-hint' }, 'Drag the map so the crosshair sits exactly where the memory happened, then confirm.'));
+    const stage = h('div', { class: 'sy-pick' });
+    const layer = h('div', { class: 'sy-pick-layer' });
+    const cross = h('div', { class: 'sy-cross' }, '📍');
+    const zin = h('button', { class: 'sy-zoom', onclick: () => { z = Math.min(19, z + 1); paint(); } }, '＋');
+    const zout = h('button', { class: 'sy-zoom out', onclick: () => { z = Math.max(2, z - 1); paint(); } }, '−');
+    const att = h('span', { class: 'att' }, '© OpenStreetMap');
+    stage.append(layer, cross, zin, zout, att);
+    const coordLine = h('div', { class: 'sy-coord' });
+    sheet.append(stage, coordLine);
+    const useBtn = h('button', { class: 'btn btn-primary', onclick: confirm }, '📍 Use this spot');
+    sheet.append(h('div', { class: 'sy-actions' },
+      h('button', { class: 'btn btn-ghost', onclick: () => back.remove() }, 'Cancel'), useBtn));
+    back.append(sheet); document.body.append(back);
+
+    function paint() {
+      const W = stage.clientWidth || 320, H = stage.clientHeight || 260;
+      const c = worldPx(lat, lon, z);
+      const left = c.x - W / 2, top = c.y - H / 2;
+      const x0 = Math.floor(left / 256), y0 = Math.floor(top / 256);
+      const cols = Math.ceil(W / 256) + 1, rows = Math.ceil(H / 256) + 1;
+      const n = Math.pow(2, z);
+      layer.innerHTML = ''; layer.style.transform = '';
+      for (let i = 0; i <= cols; i++) for (let j = 0; j <= rows; j++) {
+        const tx = x0 + i, ty = y0 + j;
+        if (ty < 0 || ty >= n) continue;
+        const wrapX = ((tx % n) + n) % n;                                  // wrap the globe horizontally
+        const img = h('img', { alt: '', src: `https://tile.openstreetmap.org/${z}/${wrapX}/${ty}.png` });
+        img.style.left = (tx * 256 - left) + 'px'; img.style.top = (ty * 256 - top) + 'px';
+        img.draggable = false;
+        layer.append(img);
+      }
+      coordLine.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}  ·  zoom ${z}`;
+    }
+    // drag: move the layer live, commit the new centre on release
+    let dragging = false, sx = 0, sy = 0, dx = 0, dy = 0;
+    stage.addEventListener('pointerdown', e => { dragging = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; stage.setPointerCapture(e.pointerId); });
+    stage.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      dx = e.clientX - sx; dy = e.clientY - sy;
+      layer.style.transform = `translate(${dx}px, ${dy}px)`;
+    });
+    const end = () => {
+      if (!dragging) return; dragging = false;
+      const c = worldPx(lat, lon, z);
+      const p = worldLatLon(c.x - dx, c.y - dy, z);
+      lat = Math.max(-85, Math.min(85, p.lat)); lon = ((p.lon + 540) % 360) - 180;
+      paint();
+    };
+    stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
+    stage.addEventListener('dblclick', () => { z = Math.min(19, z + 1); paint(); });
+    setTimeout(paint, 30);
+
+    async function confirm() {
+      useBtn.disabled = true; useBtn.textContent = 'Naming it…';
+      const name = await reverseName(lat, lon);
+      back.remove();
+      onPick({ lat, lon, name });
+    }
   }
   function miniMap(lat, lon, z) {
     z = z || 14;
@@ -401,13 +552,45 @@
     sheet.append(h('div', { class: 'sy-field' }, h('label', {}, 'Date (optional)'), dateIn,
       h('label', { class: 'sy-chk', style: 'margin-top:9px' }, recurChk, ' 🎂 Repeats every year (birthday / anniversary)')));
 
-    const placeIn = h('input', { type: 'text', maxlength: '90', value: draft.place || '', placeholder: 'e.g. Phoenix Park, Dublin' });
+    const placeIn = h('input', { type: 'text', maxlength: '90', value: draft.place || '', placeholder: 'Hotel, café, park… or paste a maps link' });
     const results = h('div', { class: 'sy-results' });
-    const searchBtn = h('button', { class: 'btn btn-sm', onclick: doSearch }, '🔍 Find');
-    const pinNote = h('div', { style: 'font-size:11.5px;color:var(--lime);margin-top:7px' },
-      draft.lat != null ? '📍 pinned on the map' : '');
+    const searchBtn = h('button', { class: 'btn btn-sm', onclick: () => doSearch(true) }, '🔍');
+    const pinBtn = h('button', { class: 'btn btn-sm btn-block', style: 'margin-top:9px', onclick: () => {
+      openPinPicker(draft.lat, draft.lon, res => {
+        draft.lat = res.lat; draft.lon = res.lon;
+        if (!placeIn.value.trim() && res.name) placeIn.value = res.name;
+        draft.place = placeIn.value.trim();
+        results.innerHTML = ''; setPinned(true); Store.Sound.good();
+      });
+    } }, '📍 Drop a pin on the map');
+    const pinNote = h('div', { class: 'sy-pinnote' });
+    const setPinned = on => {
+      pinNote.className = 'sy-pinnote' + (on ? ' on' : '');
+      pinNote.textContent = on ? '📍 Pinned — it’ll show on the map' : 'Can’t find it? Drop a pin — that works for any spot on earth. You can also paste a Google Maps link or coordinates.';
+    };
+    setPinned(draft.lat != null);
     sheet.append(h('div', { class: 'sy-field' }, h('label', {}, 'Place (optional)'),
-      h('div', { class: 'sy-inline' }, placeIn, searchBtn), results, pinNote));
+      h('div', { class: 'sy-inline' }, placeIn, searchBtn), pinBtn, results, pinNote));
+    // paste-a-link / paste-coords is instant; typing searches after a pause
+    let searchTimer = null;
+    placeIn.addEventListener('input', () => {
+      const v = placeIn.value.trim();
+      const c = parseCoords(v);
+      if (c) {
+        draft.lat = c.lat; draft.lon = c.lon; results.innerHTML = '';
+        setPinned(true);
+        reverseName(c.lat, c.lon).then(n => { if (n && parseCoords(placeIn.value.trim())) { placeIn.value = n; draft.place = n; } });
+        return;
+      }
+      if (isShortMapLink(v)) {
+        results.innerHTML = '';
+        results.append(h('div', { class: 'sy-tip' }, 'Short Google links can’t be opened from here. Open it in Maps, then either copy the full link from the address bar — or just tap “Drop a pin” and place it yourself.'));
+        return;
+      }
+      clearTimeout(searchTimer);
+      if (v.length < 3) { results.innerHTML = ''; return; }
+      searchTimer = setTimeout(() => doSearch(false), 500);
+    });
 
     const noteIn = h('input', { type: 'text', maxlength: '80', value: draft.note || '', placeholder: '“you were late, I didn’t mind”' });
     sheet.append(h('div', { class: 'sy-field' }, h('label', {}, 'Little note (optional)'), noteIn));
@@ -423,26 +606,24 @@
     back.append(sheet); document.body.append(back); Store.Sound.tap();
     setTimeout(() => { (opts.focusPlace ? placeIn : titleIn).focus(); }, 80);
 
-    async function doSearch() {
+    async function doSearch(explicit) {
       const q = placeIn.value.trim();
-      if (!q) { placeIn.focus(); return; }
-      results.innerHTML = ''; searchBtn.textContent = '…';
-      try {
-        const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(q), { headers: { 'Accept': 'application/json' } });
-        const list = await r.json();
-        searchBtn.textContent = '🔍 Find';
-        if (!list.length) { results.append(h('div', { style: 'font-size:12px;color:var(--ink-faint)' }, 'Nothing found — try a simpler name (“Phoenix Park Dublin”).')); return; }
-        list.forEach(p => results.append(h('button', { onclick: () => {
-          draft.lat = +p.lat; draft.lon = +p.lon;
-          draft.place = p.display_name.split(',').slice(0, 3).join(',').trim();
-          placeIn.value = draft.place; results.innerHTML = '';
-          pinNote.textContent = '📍 pinned on the map';
-          Store.Sound.good();
-        } }, p.display_name)));
-      } catch (e) {
-        searchBtn.textContent = '🔍 Find';
-        results.append(h('div', { style: 'font-size:12px;color:var(--gold)' }, 'Search unavailable right now — you can still save the place name as text.'));
+      if (q.length < 3) { if (explicit) placeIn.focus(); return; }
+      if (parseCoords(q) || isShortMapLink(q)) return;
+      searchBtn.textContent = '…';
+      const list = await searchPlaces(q);
+      searchBtn.textContent = '🔍';
+      if (placeIn.value.trim() !== q) return;                 // typed on — this result is stale
+      results.innerHTML = '';
+      if (list === null) { results.append(h('div', { class: 'sy-tip' }, 'Search is unreachable right now — drop a pin instead, or just save the name as text.')); return; }
+      if (!list.length) {
+        results.append(h('div', { class: 'sy-tip' }, 'No match. Try fewer words (“leela gurgaon”), or tap “Drop a pin” and place it exactly — that always works.'));
+        return;
       }
+      list.forEach(p => results.append(h('button', { onclick: () => {
+        draft.lat = p.lat; draft.lon = p.lon; draft.place = p.label;
+        placeIn.value = p.label; results.innerHTML = ''; setPinned(true); Store.Sound.good();
+      } }, h('b', {}, p.label), p.sub ? h('span', {}, p.sub) : '')));
     }
     function save() {
       const item = {
@@ -462,5 +643,5 @@
     function close() { back.remove(); }
   }
 
-  window._storyTest = { cycleStats, nextAnniversary, tileXY, daysBetween };
+  window._storyTest = { cycleStats, nextAnniversary, tileXY, daysBetween, parseCoords, isShortMapLink, searchPlaces, worldPx, worldLatLon, openPinPicker };
 })();
