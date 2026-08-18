@@ -93,6 +93,8 @@
     padding:5px 9px; border-radius:99px; }
   .sy-hist span b{ color:var(--ink-faint); margin-left:5px; }
   .sy-note{ font-size:11px; color:var(--ink-faint); line-height:1.5; margin-top:10px; }
+  .sy-warn{ font-size:11.5px; color:var(--ink-dim); line-height:1.5; margin-bottom:11px; padding:9px 11px;
+    border-radius:11px; background:rgba(255,214,107,.08); border:1px solid rgba(255,214,107,.28); }
   /* empty state */
   .sy-empty{ text-align:center; padding:26px 18px; border-radius:var(--radius); background:var(--panel);
     border:1px dashed var(--glass-brd); }
@@ -130,6 +132,8 @@
   .sy-results button span{ display:block; color:var(--ink-faint); font-size:11.5px; margin-top:2px; }
   .sy-tip{ font-size:12px; color:var(--ink-dim); line-height:1.5; padding:9px 11px; border-radius:11px;
     background:rgba(255,214,107,.07); border:1px solid rgba(255,214,107,.25); }
+  .sy-openlink{ display:inline-block; margin-top:6px; padding:7px 12px; border-radius:9px; font-size:12px;
+    font-weight:700; color:#0a0714; background:var(--gold); text-decoration:none; }
   .sy-pinnote{ font-size:11.5px; color:var(--ink-faint); line-height:1.5; margin-top:8px; }
   .sy-pinnote.on{ color:var(--lime); }
   /* drop-a-pin picker */
@@ -180,27 +184,38 @@
   }
 
   /* ---------- cycle prediction ----------
-     avg of the last ≤6 cycles (calendar method, as period apps do);
-     ± window from the spread of those cycles. Needs 2 logs to predict. */
+     Calendar method: next = last start + average of recent cycles.
+     ⚠ A gap is only counted as a REAL cycle if it's 21–45 days. Clinically a
+     normal cycle is 21–35 days and anything over 35 is "infrequent", so a
+     56-day gap is far more likely to be a period that never got logged than a
+     genuine 56-day cycle — counting it once predicted Oct 13 from an Aug 18
+     start, which is nonsense. Out-of-range gaps are excluded from the average
+     and surfaced to the user so they can log the missing one.
+     Quality: good (≥2 measured cycles) · early (1) · estimate (0 → 28 days). */
+  const CYCLE_MIN = 21, CYCLE_MAX = 45;
   function cycleStats(startsRaw) {
-    const starts = (startsRaw || []).slice().sort();
+    const starts = [...new Set(startsRaw || [])].sort();
     if (!starts.length) return null;
     const last = starts[starts.length - 1];
-    const lens = [];
-    for (let i = 1; i < starts.length; i++) lens.push(dayNo(starts[i]) - dayNo(starts[i - 1]));
-    const clean = lens.filter(l => l >= 15 && l <= 60);        // ignore mis-logs
-    const recent = clean.slice(-6);
+    const gaps = [];
+    for (let i = 1; i < starts.length; i++) gaps.push({ from: starts[i - 1], to: starts[i], len: dayNo(starts[i]) - dayNo(starts[i - 1]) });
+    const valid = gaps.filter(g => g.len >= CYCLE_MIN && g.len <= CYCLE_MAX);
+    const skipped = gaps.filter(g => g.len > CYCLE_MAX);       // probably an unlogged period
+    const tooShort = gaps.filter(g => g.len < CYCLE_MIN);      // double-log or spotting
+    const recent = valid.slice(-6).map(g => g.len);
+    const quality = recent.length >= 2 ? 'good' : recent.length === 1 ? 'early' : 'estimate';
     const avg = recent.length ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) : 28;
     const spread = recent.length > 1 ? Math.max(...recent.map(l => Math.abs(l - avg))) : 0;
-    const window = Math.min(7, Math.max(2, Math.round(spread)));
-    const nextD = new Date(parse(last).getTime() + avg * 864e5);
-    const next = dstr(nextD);
+    const window = quality === 'good' ? Math.min(7, Math.max(2, Math.round(spread))) : (quality === 'early' ? 3 : 4);
+    const next = dstr(new Date(parse(last).getTime() + avg * 864e5));
     return {
-      last, avg, window, next,
-      day: daysBetween(last, todayStr()) + 1,                  // day 1 = first day of period
+      last, avg, window, next, quality,
+      day: daysBetween(last, todayStr()) + 1,                  // day 1 = first day of the period
       until: daysBetween(todayStr(), next),
       logged: starts.length,
-      confident: recent.length >= 2,                           // 2+ measured cycles → real average
+      cycles: recent.length,
+      skipped, tooShort,
+      confident: quality === 'good',
       starts,
     };
   }
@@ -238,26 +253,41 @@
   }
   const isShortMapLink = t => /(maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(t || '');
 
+  // Both engines run in PARALLEL and their results are interleaved — Photon is
+  // forgiving with partial/misspelled names, Nominatim is stronger on addresses,
+  // and asking both simply gives more to choose from. null = neither reachable.
   async function searchPlaces(q) {
-    const tidy = list => list.filter(r => r && isFinite(r.lat) && isFinite(r.lon)).slice(0, 6);
-    try {                                                                  // Photon: forgiving, partial names, typos
-      const r = await fetch('https://photon.komoot.io/api/?limit=8&q=' + encodeURIComponent(q));
+    const photon = async () => {
+      const r = await fetch('https://photon.komoot.io/api/?limit=10&q=' + encodeURIComponent(q));
       const j = await r.json();
-      const out = (j.features || []).map(f => {
+      return (j.features || []).map(f => {
         const p = f.properties || {}, c = (f.geometry || {}).coordinates || [];
         const bits = [...new Set([p.street && p.street !== p.name ? p.street : '', p.district || '', p.city || p.county || '', p.state || '', p.country || ''].filter(Boolean))];
         return { label: p.name || p.street || p.city || 'Unnamed place', sub: bits.join(', '), lat: +c[1], lon: +c[0] };
       });
-      if (out.length) return tidy(out);
-    } catch (e) {}
-    try {                                                                  // Nominatim fallback (stronger on addresses)
-      const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&q=' + encodeURIComponent(q));
+    };
+    const nominatim = async () => {
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=10&q=' + encodeURIComponent(q));
       const j = await r.json();
-      return tidy((j || []).map(p => {
+      return (j || []).map(p => {
         const parts = (p.display_name || '').split(',');
         return { label: parts[0].trim(), sub: parts.slice(1, 4).join(',').trim(), lat: +p.lat, lon: +p.lon };
-      }));
-    } catch (e) { return null; }                                           // null = search unreachable
+      });
+    };
+    const [a, b] = await Promise.allSettled([photon(), nominatim()]);
+    if (a.status !== 'fulfilled' && b.status !== 'fulfilled') return null;
+    const A = a.status === 'fulfilled' ? a.value : [], B = b.status === 'fulfilled' ? b.value : [];
+    const out = [], seen = new Set();
+    for (let i = 0; i < Math.max(A.length, B.length); i++) {               // interleave: best of each engine near the top
+      [A[i], B[i]].forEach(r => {
+        if (!r || !isFinite(r.lat) || !isFinite(r.lon)) return;
+        const key = r.lat.toFixed(3) + ',' + r.lon.toFixed(3);
+        const key2 = (r.label || '').toLowerCase() + '|' + key;
+        if (seen.has(key) || seen.has(key2)) return;
+        seen.add(key); seen.add(key2); out.push(r);
+      });
+    }
+    return out.slice(0, 10);
   }
   async function reverseName(lat, lon) {
     try {
@@ -277,7 +307,33 @@
     const back = h('div', { class: 'sy-ov pick-ov', onclick: e => { if (e.target === back) back.remove(); } });
     const sheet = h('div', { class: 'sy-sheet' });
     sheet.append(h('h3', {}, '📍 DROP A PIN'));
-    sheet.append(h('p', { class: 'sy-pick-hint' }, 'Drag the map so the crosshair sits exactly where the memory happened, then confirm.'));
+    sheet.append(h('p', { class: 'sy-pick-hint' }, 'Jump to a nearby landmark, then drag the map so the crosshair sits exactly where the memory happened.'));
+    // search INSIDE the picker: find the area, then fine-tune by hand. This is
+    // how you pin a place that no map database has ever heard of.
+    const jumpIn = h('input', { type: 'text', placeholder: 'Jump to an area, road or landmark…' });
+    const jumpRes = h('div', { class: 'sy-results' });
+    const jumpBtn = h('button', { class: 'btn btn-sm', onclick: jump }, '🔍');
+    sheet.append(h('div', { class: 'sy-inline', style: 'margin-bottom:9px' }, jumpIn, jumpBtn), jumpRes);
+    let jumpTimer = null;
+    jumpIn.addEventListener('input', () => {
+      const c = parseCoords(jumpIn.value.trim());
+      if (c) { lat = c.lat; lon = c.lon; z = 17; jumpRes.innerHTML = ''; paint(); return; }
+      clearTimeout(jumpTimer);
+      if (jumpIn.value.trim().length < 3) { jumpRes.innerHTML = ''; return; }
+      jumpTimer = setTimeout(jump, 550);
+    });
+    async function jump() {
+      const q = jumpIn.value.trim();
+      if (q.length < 3) return;
+      jumpBtn.textContent = '…';
+      const list = await searchPlaces(q);
+      jumpBtn.textContent = '🔍';
+      jumpRes.innerHTML = '';
+      if (!list || !list.length) { jumpRes.append(h('div', { class: 'sy-tip' }, 'No match — pan and zoom the map yourself, that always works.')); return; }
+      list.slice(0, 5).forEach(p => jumpRes.append(h('button', { onclick: () => {
+        lat = p.lat; lon = p.lon; z = 17; jumpRes.innerHTML = ''; jumpIn.value = ''; paint(); Store.Sound.tap();
+      } }, h('b', {}, p.label), p.sub ? h('span', {}, p.sub) : '')));
+    }
     const stage = h('div', { class: 'sy-pick' });
     const layer = h('div', { class: 'sy-pick-layer' });
     const cross = h('div', { class: 'sy-cross' }, '📍');
@@ -478,18 +534,30 @@
     if (cycOpen) {
       const body = h('div', { class: 'sy-cyc-body' });
       if (st) {
+        const lo = fmtShort(dstr(new Date(parse(st.next).getTime() - st.window * 864e5)));
+        const hi = fmtShort(dstr(new Date(parse(st.next).getTime() + st.window * 864e5)));
+        const timing = st.until >= 0 ? `in ${st.until} days` : `${Math.abs(st.until)} days late`;
+        const blurb = st.quality === 'good'
+          ? `likely ${lo} – ${hi} · ${timing}`
+          : st.quality === 'early'
+            ? `from your one measured cycle of ${st.avg} days · likely ${lo} – ${hi}`
+            : `estimated from a typical 28-day cycle · log the next period to make this personal`;
         body.append(h('div', { class: 'sy-cyc-pred' },
           h('div', { style: 'font-size:11.5px;color:var(--ink-dim)' }, 'Next period expected'),
           h('div', { class: 'd' }, fmtDate(st.next)),
-          h('div', { class: 'w' }, st.confident
-            ? `likely ${fmtShort(dstr(new Date(parse(st.next).getTime() - st.window * 864e5)))} – ${fmtShort(dstr(new Date(parse(st.next).getTime() + st.window * 864e5)))} · ${st.until >= 0 ? 'in ' + st.until + ' days' : Math.abs(st.until) + ' days late'}`
-            : 'estimate from a 28-day cycle — log one more period for a personalised prediction')));
+          h('div', { class: 'w' }, blurb)));
         body.append(h('div', { class: 'sy-bar' }, h('i', { style: `width:${Math.max(3, Math.min(100, Math.round(st.day / st.avg * 100)))}%` })));
         body.append(h('div', { class: 'sy-stats' },
-          h('span', {}, `avg ${st.avg} days`),
+          h('span', {}, st.quality === 'estimate' ? 'avg 28 days (assumed)' : `avg ${st.avg} days`),
           h('span', {}, `last: ${fmtShort(st.last)}`),
           h('span', {}, `${st.logged} logged`),
-          st.confident ? h('span', {}, `±${st.window} day window`) : ''));
+          st.cycles ? h('span', {}, `${st.cycles} cycle${st.cycles === 1 ? '' : 's'} measured`) : '',
+          st.quality === 'good' ? h('span', {}, `±${st.window} days`) : ''));
+        // a gap far longer than any real cycle almost always means a missed log
+        st.skipped.forEach(g => body.append(h('div', { class: 'sy-warn' },
+          `⚠️ The ${g.len}-day gap between ${fmtShort(g.from)} and ${fmtShort(g.to)} is longer than a normal cycle (21–35 days), so it wasn’t used for the average — it looks like a period in between wasn’t logged. Add it below and the prediction sharpens right away.`)));
+        st.tooShort.forEach(g => body.append(h('div', { class: 'sy-warn' },
+          `⚠️ ${fmtShort(g.from)} and ${fmtShort(g.to)} are only ${g.len} days apart — too close for two cycles, so that pair was skipped. Remove one if it was logged twice.`)));
       }
       const dinp = h('input', { type: 'date', value: todayStr(), max: todayStr() });
       body.append(h('div', { class: 'sy-log' },
@@ -583,8 +651,16 @@
         return;
       }
       if (isShortMapLink(v)) {
+        // A goo.gl link is a redirect Google won't let a web page follow
+        // (no CORS), and public proxies are unreliable + leak your locations.
+        // So: guide the two paths that always work, in one tap each.
         results.innerHTML = '';
-        results.append(h('div', { class: 'sy-tip' }, 'Short Google links can’t be opened from here. Open it in Maps, then either copy the full link from the address bar — or just tap “Drop a pin” and place it yourself.'));
+        results.append(h('div', { class: 'sy-tip' },
+          h('b', { style: 'display:block;margin-bottom:6px' }, 'Short Google links can’t be read by a web page 🙈'),
+          h('div', {}, 'Easiest fix — in Google Maps, press and hold the exact spot until a red pin drops. The coordinates appear at the bottom; copy them and paste here.'),
+          h('div', { style: 'margin-top:7px' }, 'Or open the link and copy the long URL from the address bar:'),
+          h('a', { class: 'sy-openlink', href: v, target: '_blank', rel: 'noopener' }, '↗ Open this link'),
+          h('div', { style: 'margin-top:7px' }, 'Or skip all that — tap “Drop a pin on the map” above.')));
         return;
       }
       clearTimeout(searchTimer);
