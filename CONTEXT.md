@@ -126,14 +126,23 @@ assets/js/
                            — a date puts it in the list/chips, lat+lon puts it in the places strip, both = both.
                            Period logs are {kind:'period', start}. Static OSM tiles (2×2 grid offset so the pin
                            centres). NO Leaflet / API key anywhere.
-                           THREE ways to set a place (Nominatim alone missed real hotels — "leela ambience
-                           gurgaon" returned nothing): (1) live search via **Photon** (photon.komoot.io, fuzzy,
-                           CORS-enabled, debounced 500ms, min 3 chars) with Nominatim as fallback; (2) paste a
-                           Google/Apple maps link or raw "lat, lon" — `parseCoords` handles @lat,lon · !3d!4d ·
-                           ?q= · ?ll=; short goo.gl links CAN'T be resolved client-side so the UI explains that;
+                           THREE ways to set a place, in order of least effort:
+                           (1) **paste a Google Maps link** — `parseMapsUrl` pulls BOTH coordinates (prefers the
+                               precise !3d/!4d place pin over the @lat,lon map centre) AND the place name from
+                               `/maps/place/<Name>/`. Short goo.gl links are a redirect no page may follow
+                               (Google sends no CORS); generic proxies ALL failed when tested (allorigins 500,
+                               corsproxy 403, codetabs 522, r.jina.ai) but **unshorten.me/json/<url> works and
+                               sends `Access-Control-Allow-Origin: *`** → `expandShortLink()`. Failure is
+                               non-fatal (falls back to manual guidance). Also handles Apple ?ll= and raw
+                               "lat, lon".
+                           (2) live search — **Photon** (photon.komoot.io, fuzzy) and Nominatim run in PARALLEL,
+                               interleaved + de-duped, up to 10 hits, debounced 500ms/3 chars.
                            (3) **drop-a-pin picker** — drag tiles under a fixed crosshair (pointer events +
-                           world-pixel projection), auto-names the spot by reverse geocoding. The picker is the
-                           universal escape hatch: it works for places no database knows.
+                               world-pixel projection), with its own search/link jump box; auto-names via
+                               reverse geocoding. The universal escape hatch — OSM genuinely lacks many
+                               businesses (e.g. Aureole Hotel, Mumbai), so search can NEVER be the only route.
+                           Google Places would fix search coverage but needs a billed API key — deliberately
+                           not used; link-pasting gets Google's data without the account.
                            ⚠ Testing these from file:// FAILS (opaque origin blocks cross-origin fetch) — always
                            test search over http (`python -m http.server` in the repo) or you'll chase ghosts.
                            ⚠ CYCLE MATHS: only gaps of **21–45 days** count as measured cycles. Normal is
