@@ -136,6 +136,12 @@ assets/js/
                            universal escape hatch: it works for places no database knows.
                            ⚠ Testing these from file:// FAILS (opaque origin blocks cross-origin fetch) — always
                            test search over http (`python -m http.server` in the repo) or you'll chase ghosts.
+                           ⚠ CYCLE MATHS: only gaps of **21–45 days** count as measured cycles. Normal is
+                           21–35 clinically and >35 is "infrequent", so a longer gap means a period wasn't
+                           logged — counting one (56d) once predicted a date two months out from a day-1 start.
+                           Longer gaps → excluded + shown as a warning; <21d → flagged as a double log.
+                           `quality`: good (≥2 measured) · early (1, ±3) · estimate (0 → labelled 28-day
+                           assumption). The card/stats/collapsed line must all quote the SAME avg.
                            ⚠ day maths uses Date.UTC(y,m,d) — local-noon timestamps drift ±1 across DST.
   app.js                   boot, chrome wiring, nav SVG icons, leave-guard, initNet + initCloud, router, SW reg
 ```
