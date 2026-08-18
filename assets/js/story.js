@@ -139,6 +139,7 @@
     background:rgba(255,214,107,.07); border:1px solid rgba(255,214,107,.25); }
   .sy-openlink{ display:inline-block; margin-top:6px; padding:7px 12px; border-radius:9px; font-size:12px;
     font-weight:700; color:#0a0714; background:var(--gold); text-decoration:none; }
+  .sy-quick{ display:flex; gap:8px; margin-top:9px; } .sy-quick .btn{ flex:1; }
   .sy-pinnote{ font-size:11.5px; color:var(--ink-faint); line-height:1.5; margin-top:8px; }
   .sy-pinnote.on{ color:var(--lime); }
   /* drop-a-pin picker */
@@ -257,6 +258,18 @@
     return null;
   }
   const isShortMapLink = t => /(maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(t || '');
+  // Sharing from Google Maps puts TEXT + link on the clipboard, e.g.
+  // "Aureole Hotel\nhttps://maps.app.goo.gl/xxx" — feeding that whole blob to
+  // the resolver returned "Not Found", which is why pasting appeared broken.
+  // Always pull the bare URL out first.
+  const extractUrl = t => { const m = (t || '').match(/https?:\/\/[^\s<>"']+/); return m ? m[0].replace(/[.,;)\]]+$/, '') : null; };
+  // …and the leading line is usually the place's own name — nicer than anything
+  // reverse geocoding would give us.
+  function sharedName(t) {
+    const first = String(t || '').split(/\r?\n/).map(s => s.trim()).filter(s => s && !/^https?:\/\//i.test(s))[0] || '';
+    const cleaned = first.replace(/^check out\s+/i, '').replace(/\s+on Google Maps.*$/i, '').replace(/[:\-–]\s*$/, '').trim();
+    return cleaned.length >= 2 && cleaned.length <= 90 ? cleaned : null;
+  }
   // A Google Maps URL carries the place NAME as well as its coordinates —
   // ".../maps/place/Aureole%2BHotel/@19.11,72.85/..." — so a pasted link can
   // fill in both and the user never has to type or copy coordinates.
@@ -352,13 +365,13 @@
     let jumpBusy = false;
     jumpIn.addEventListener('input', () => {
       const v = jumpIn.value.trim();
-      const c = parseCoords(v);
+      const c = parseCoords(extractUrl(v) || v);
       if (c) { lat = c.lat; lon = c.lon; z = 17; jumpRes.innerHTML = ''; paint(); return; }
       if (isShortMapLink(v)) {                                             // pasted a shared link → fly there
         if (jumpBusy) return;
         jumpBusy = true; jumpRes.innerHTML = '';
         jumpRes.append(h('div', { class: 'sy-tip' }, '🔗 Finding that link…'));
-        expandShortLink(v).then(full => {
+        expandShortLink(extractUrl(v) || v).then(full => {
           jumpBusy = false; jumpRes.innerHTML = '';
           const got = full && parseMapsUrl(full);
           if (got) { lat = got.lat; lon = got.lon; z = 18; jumpIn.value = ''; paint(); Store.Sound.good(); }
@@ -480,6 +493,12 @@
 
   window.renderStory = function renderStory() {
     const s = Store.get(); const root = $('#view'); root.innerHTML = '';
+    // arrived via "Share → S×M Arcade" from Google Maps: open the editor with
+    // the shared place already filled in (consumed once)
+    if (window.__sharedPlace) {
+      const shared = window.__sharedPlace; window.__sharedPlace = null;
+      setTimeout(() => openEditor(null, { shared }), 60);
+    }
     const items = Array.isArray(s.story) ? s.story : [];
     const moments = items.filter(i => i.kind === 'moment');
     const periods = items.filter(i => i.kind === 'period');
@@ -671,6 +690,31 @@
     const placeIn = h('input', { type: 'text', maxlength: '200', value: draft.place || '', placeholder: 'Search, or paste a Google Maps link' });
     const results = h('div', { class: 'sy-results' });
     const searchBtn = h('button', { class: 'btn btn-sm', onclick: () => doSearch(true) }, '🔍');
+    // one-tap helpers — the fiddly part on a phone is long-press-paste, so give
+    // it a button; and if you're standing at the place, GPS is the fastest of all
+    const pasteBtn = h('button', { class: 'btn btn-sm', onclick: async () => {
+      try {
+        const t = await navigator.clipboard.readText();
+        if (!t) return;
+        placeIn.value = t.trim(); placeIn.dispatchEvent(new Event('input')); Store.Sound.tap();
+      } catch (e) {
+        results.innerHTML = '';
+        results.append(h('div', { class: 'sy-tip' }, 'Your browser wouldn’t share the clipboard — long-press the box above and choose Paste.'));
+      }
+    } }, '📋 Paste');
+    const gpsBtn = h('button', { class: 'btn btn-sm', onclick: () => {
+      if (!navigator.geolocation) { results.innerHTML = ''; results.append(h('div', { class: 'sy-tip' }, 'This device can’t share its location.')); return; }
+      gpsBtn.textContent = 'Locating…';
+      navigator.geolocation.getCurrentPosition(p => {
+        gpsBtn.textContent = '📍 I’m here now';
+        applyLocation(p.coords.latitude, p.coords.longitude, null);
+        if (!placeIn.value.trim()) reverseName(p.coords.latitude, p.coords.longitude).then(n => { if (n && !placeIn.value.trim()) { placeIn.value = n; draft.place = n; } });
+      }, () => {
+        gpsBtn.textContent = '📍 I’m here now';
+        results.innerHTML = '';
+        results.append(h('div', { class: 'sy-tip' }, 'Location permission was declined — use the map picker instead.'));
+      }, { enableHighAccuracy: true, timeout: 10000 });
+    } }, '📍 I’m here now');
     const pinBtn = h('button', { class: 'btn btn-sm btn-block', style: 'margin-top:9px', onclick: () => {
       openPinPicker(draft.lat, draft.lon, res => {
         draft.lat = res.lat; draft.lon = res.lon;
@@ -686,35 +730,41 @@
     };
     setPinned(draft.lat != null);
     sheet.append(h('div', { class: 'sy-field' }, h('label', {}, 'Place (optional)'),
-      h('div', { class: 'sy-inline' }, placeIn, searchBtn), pinBtn, results, pinNote));
+      h('div', { class: 'sy-inline' }, placeIn, searchBtn),
+      h('div', { class: 'sy-quick' }, pasteBtn, gpsBtn), pinBtn, results, pinNote));
     // paste-a-link / paste-coords is instant; typing searches after a pause
     let searchTimer = null, resolving = false;
     // applies a resolved location: pin it, and name it from the link when the
     // box is still holding the raw URL
+    // true while the box still holds raw pasted junk (a link, a blob containing
+    // one, or coordinates) rather than a human-readable place name
+    const holdsRaw = () => { const t = placeIn.value.trim(); return !!extractUrl(t) || !!parseCoords(t); };
     function applyLocation(lat, lon, name) {
       draft.lat = lat; draft.lon = lon;
-      const looksLikeUrl = /^https?:\/\//i.test(placeIn.value.trim()) || parseCoords(placeIn.value.trim());
-      if (name && looksLikeUrl) { placeIn.value = name; draft.place = name; }
+      const raw = holdsRaw();
+      if (name && raw) { placeIn.value = name; draft.place = name; }
       results.innerHTML = ''; setPinned(true); Store.Sound.good();
-      if (!name && looksLikeUrl) reverseName(lat, lon).then(n => {
-        if (n && (/^https?:\/\//i.test(placeIn.value.trim()) || parseCoords(placeIn.value.trim()))) { placeIn.value = n; draft.place = n; }
+      if (!name && raw) reverseName(lat, lon).then(n => {
+        if (n && holdsRaw()) { placeIn.value = n; draft.place = n; }
       });
     }
     placeIn.addEventListener('input', () => {
       const v = placeIn.value.trim();
-      const direct = parseMapsUrl(v) || (parseCoords(v) ? Object.assign({ name: null }, parseCoords(v)) : null);
-      if (direct) { applyLocation(direct.lat, direct.lon, direct.name); return; }
-      if (isShortMapLink(v)) {
+      const url = extractUrl(v) || v;                                      // shared text may wrap the link
+      const pastedName = sharedName(v);
+      const direct = parseMapsUrl(url) || (parseCoords(url) ? Object.assign({ name: null }, parseCoords(url)) : null);
+      if (direct) { applyLocation(direct.lat, direct.lon, direct.name || pastedName); return; }
+      if (isShortMapLink(url)) {
         // resolve the shared link automatically — no coordinate-copying needed
         if (resolving) return;
         resolving = true;
         results.innerHTML = '';
         results.append(h('div', { class: 'sy-tip' }, '🔗 Opening your link to find the place…'));
-        expandShortLink(v).then(full => {
+        expandShortLink(url).then(full => {
           resolving = false;
           if (placeIn.value.trim() !== v) return;                          // they typed on
           const got = full && parseMapsUrl(full);
-          if (got) { applyLocation(got.lat, got.lon, got.name); return; }
+          if (got) { applyLocation(got.lat, got.lon, got.name || pastedName); return; }
           results.innerHTML = '';
           results.append(h('div', { class: 'sy-tip' },
             h('b', { style: 'display:block;margin-bottom:6px' }, 'Couldn’t read that link 🙈'),
@@ -742,7 +792,13 @@
     sheet.append(actions);
 
     back.append(sheet); document.body.append(back); Store.Sound.tap();
-    setTimeout(() => { (opts.focusPlace ? placeIn : titleIn).focus(); }, 80);
+    if (opts.shared) {                                   // shared in from another app
+      placeIn.value = opts.shared;
+      const nm = sharedName(opts.shared);
+      if (nm && !titleIn.value.trim()) titleIn.value = nm;
+      placeIn.dispatchEvent(new Event('input'));         // resolves + pins straight away
+      setTimeout(() => titleIn.focus(), 80);
+    } else setTimeout(() => { (opts.focusPlace ? placeIn : titleIn).focus(); }, 80);
 
     async function doSearch(explicit) {
       const q = placeIn.value.trim();
@@ -781,5 +837,5 @@
     function close() { back.remove(); }
   }
 
-  window._storyTest = { cycleStats, nextAnniversary, tileXY, daysBetween, parseCoords, parseMapsUrl, isShortMapLink, expandShortLink, searchPlaces, worldPx, worldLatLon, openPinPicker };
+  window._storyTest = { cycleStats, nextAnniversary, tileXY, daysBetween, parseCoords, parseMapsUrl, extractUrl, sharedName, isShortMapLink, expandShortLink, searchPlaces, worldPx, worldLatLon, openPinPicker };
 })();

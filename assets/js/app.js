@@ -53,6 +53,20 @@ Gate.ready(function boot() {
   const unlock = () => { Store.Sound.tap(); window.removeEventListener('pointerdown', unlock); };
   window.addEventListener('pointerdown', unlock, { once: true });
 
+  // Shared in from another app (manifest share_target) — e.g. Google Maps →
+  // Share → S×M Arcade. Stash the payload, tidy the URL, and land on Our Story
+  // with the place editor already open.
+  (function shareTarget() {
+    try {
+      const sp = new URLSearchParams(location.search);
+      const blob = [sp.get('url'), sp.get('text'), sp.get('title')].filter(Boolean).join('\n').trim();
+      if (!blob) return;
+      window.__sharedPlace = blob;
+      history.replaceState(null, '', location.pathname + '#/story');
+      location.hash = '#/story';
+    } catch (e) {}
+  })();
+
   window.addEventListener('hashchange', Router.go);
 
   // gyroscope parallax — the aurora drifts a few px as the phone tilts.

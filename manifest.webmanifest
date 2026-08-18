@@ -11,5 +11,10 @@
   "icons": [
     { "src": "assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "assets/icons/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
-  ]
+  ],
+  "share_target": {
+    "action": "./index.html",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
 }
