@@ -4,7 +4,7 @@
      every device immediately — no stale cached code).
    - When offline, fall back to the cached copy so the app still works.
    - Bump CACHE to force-drop old caches. */
-const CACHE = 'sm-arcade-v54';
+const CACHE = 'sm-arcade-v55';
 const ASSETS = [
   './',
   './index.html',
@@ -38,6 +38,7 @@ const ASSETS = [
   './assets/js/app.js',
   './assets/icons/icon.svg',
   './assets/icons/favicon.svg',
+  './assets/icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', e => {
