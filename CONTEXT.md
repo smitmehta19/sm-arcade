@@ -106,6 +106,17 @@ assets/js/
   games-word2.js           letterpress, codenames-duet  (codenames is co-op: coop:true)
   games-draw.js            draw-guess                   (coop)
   games-ultimate.js        ultimate-ttt
+  games-scrabble.js        scrabble - full 15x15 board, premium squares, 100-tile bag, blanks,
+                           cross-word validation, BINGO +50, swap/pass, end-game rack adjustment.
+                           Pure logic (evaluate/formedWords/wordAt) is exposed via `test` for the harness.
+                           DICTIONARY: words-scrabble.js = ENABLE list (168,551 words) front-coded to
+                           ~0.7MB and LAZY-LOADED by games-scrabble.js the first time a game opens, so
+                           the other 38 games never pay for it (SW caches it after that). Until it lands
+                           it falls back to the small common-word DICT + a 2-letter list, because DICT
+                           starts at 3 letters and Scrabble is unplayable without 2-letter words.
+                           A word the dictionary rejects can still be played with a confirm tap.
+                           CSS gotcha: the board needs grid-template-columns:repeat(15,minmax(0,1fr))
+                           AND width:100% - plain 1fr will not shrink below the TW/DL label text.
   games-chess.js           chess — full rules (castle/en-passant/promotion picker/50-move);
                            host = White, board flips for the other seat; test hooks exposed
   games-board3.js          dominoes (draw&block), sos (6×6, extra turn on score), gops (secret bids)

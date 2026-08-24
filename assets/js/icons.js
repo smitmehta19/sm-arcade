@@ -39,6 +39,7 @@ const Icons = (() => {
     'draw-guess': wrap('<path d="M3 21l1.2-4.2L14 7l3 3-9.8 9.8z"/><path d="M13 8l3 3"/><path d="M16.5 4.5l3 3a1.4 1.4 0 010 2L18 11l-3-3 1.5-1.5a1.4 1.4 0 012-2z" ' + fc + '/>'),
     'ultimate-ttt': wrap('<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M9 3.5v17M15 3.5v17M3.5 9h17M3.5 15h17" stroke-width="1.2"/><path d="M5 5.7h2.3M5.7 5v2.3" stroke-width="1.5"/><circle cx="18.8" cy="18.8" r="1.4" stroke-width="1.5"/>'),
     // ---- batch 3 (chess/dominoes/sos/gops/story + score duels) ----
+    'scrabble': wrap('<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M3.5 9h17M3.5 15h17M9 3.5v17M15 3.5v17" stroke-width="1.1" opacity=".55"/><path d="M5.6 7.4l1.2-2.6 1.2 2.6M5.9 6.7h1.8" stroke-width="1.3"/><circle cx="17.6" cy="17.4" r="1" ' + fc + '/>'),
     'chess': wrap('<path d="M9 6.5C9 5 10.3 3.5 12.2 3.5c2.6 0 4.3 2.2 4.3 4.6 0 2.6-1.6 4-3 5.4h-3c.5-1.4.3-2.4-.6-3.3L8.2 8.5l1.6-.6z"/><path d="M9 16.5h6.6l1 3.5H8z M10 13.5h5v3h-5z"/>'),
     'dominoes': wrap('<rect x="4" y="3.5" width="8.5" height="17" rx="1.8" transform="rotate(-14 8 12)"/><rect x="12" y="6" width="8.5" height="15" rx="1.8" transform="rotate(9 16 13)"/><circle cx="7" cy="8" r="1" ' + fc + '/><circle cx="16.5" cy="10.5" r="1" ' + fc + '/><circle cx="18" cy="16.5" r="1" ' + fc + '/>'),
     'sos': wrap('<path d="M8 5.5H5.5a1.8 1.8 0 000 3.6h-1a1.8 1.8 0 000 3.6H7"/><circle cx="12" cy="9.2" r="3.2"/><path d="M19.5 5.5H17a1.8 1.8 0 000 3.6h-1a1.8 1.8 0 000 3.6h2.5"/><path d="M5 19h14" stroke-dasharray="2.6 2.4"/>'),
