@@ -10,7 +10,15 @@
   .bs-cell{ aspect-ratio:1; border-radius:5px; background:rgba(0,0,0,.3); display:grid; place-items:center; font-size:13px; }
   .bs-grid.enemy.live .bs-cell{ cursor:pointer; } .bs-grid.enemy.live .bs-cell:hover{ box-shadow:inset 0 0 0 2px var(--violet); }
   .bs-cell.ship{ background:rgba(180,180,200,.5); } .bs-cell.hit{ background:var(--magenta); box-shadow:0 0 8px var(--magenta); } .bs-cell.miss{ background:rgba(255,255,255,.08); color:var(--ink-faint); }
-  .bs-fleet{ text-align:center; font-size:12px; color:var(--ink-dim); }
+  .bs-fleet{ display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--ink-dim);
+    padding:8px 10px; border-radius:11px; background:rgba(0,0,0,.22); border:1px solid var(--line); }
+  .bs-fl-row{ display:flex; align-items:center; gap:8px; }
+  .bs-fl-lab{ font-weight:700; }
+  .bs-fl-n{ font-family:var(--font-num); font-weight:900; color:var(--ink); }
+  .bs-fl-boats{ display:flex; gap:6px; margin-left:auto; }
+  .bs-boat{ display:flex; gap:1px; }
+  .bs-boat i{ width:6px; height:10px; border-radius:1.5px; background:rgba(190,205,240,.75); }
+  .bs-boat.sunk i{ background:rgba(255,77,109,.35); box-shadow:inset 0 0 0 1px rgba(255,77,109,.6); }
   /* manual fleet placement */
   .bs-grid.placing .bs-cell{ cursor:pointer; } .bs-grid.placing .bs-cell:hover{ box-shadow:inset 0 0 0 2px var(--violet); }
   .bs-place-ctrls{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:10px; }
@@ -43,6 +51,8 @@
   .key.wide{ font-size:11px; } .key.g{ background:#2ea043; color:#fff; } .key.y{ background:#d4a72c; color:#fff; } .key.x{ background:rgba(80,60,100,.6); color:#9a90b8; }
 
   .hm-figure{ font-size:46px; text-align:center; min-height:60px; } .hm-word{ text-align:center; font-family:var(--font-num); font-weight:900; font-size:30px; letter-spacing:8px; margin:10px 0; } .hm-life{ text-align:center; font-size:22px; margin-bottom:8px; }
+  .hm-peek{ opacity:.32; }
+  .hm-caption{ text-align:center; font-size:12px; color:var(--ink-dim); margin-top:6px; min-height:16px; }
   .hm-input{ width:100%; background:var(--bg-2); border:1px solid var(--line); border-radius:12px; padding:14px; color:var(--ink); font-size:18px; letter-spacing:3px; text-transform:uppercase; outline:none; }
 
   .rps-pick{ display:flex; gap:14px; justify-content:center; margin:20px 0; }
@@ -118,6 +128,7 @@
         function confirmFleet() {
           if (remaining.length) { ctx.sound.bad(); return; }
           const s = ctx.clone(st); s.boards[me].grid = workGrid;
+          s.boards[me].ships = placedShips.map(p => p.cells);   // exact ship shapes, for the afloat/sunk count
           if (me === s.host) s.turn = 1 - s.host;          // partner places next
           else { s.phase = 'play'; s.turn = s.host; }       // both ready → fire (host shoots first)
           ctx.sound.good(); ctx.commit(s);
@@ -166,19 +177,71 @@
         else if (mine.hits[r][c] === 2) cell.classList.add('miss');
         mg.append(cell);
       }
-      wrap.append(mg, ctx.h('div', { class: 'bs-fleet' }, `Enemy ships left: ${remaining(enemy)} · Yours: ${remaining(mine)}`));
+      wrap.append(mg, fleetPanel(ctx, enemy, mine));
       ctx.root.append(wrap);
-      ctx.isMyTurn ? ctx.msg('Your turn — take a shot 🎯', ctx.players[me].color) : waiting(ctx);
+      const sank = st.sank;
+      if (sank) {
+        const mine2 = sank.by === me;
+        ctx.msg(mine2 ? `💥 You sank a ${sank.size}-square ship!` : `🔥 ${ctx.seat(1 - me).name} sank your ${sank.size}-square ship!`,
+          mine2 ? 'var(--lime)' : 'var(--magenta)');
+      } else ctx.isMyTurn ? ctx.msg('Your turn — take a shot 🎯', ctx.players[me].color) : waiting(ctx);
       function fire(r, c) {
         if (enemy.hits[r][c]) return;
         const s = ctx.clone(ctx.state); const eb = s.boards[1 - me];
-        if (eb.grid[r][c]) { eb.hits[r][c] = 1; ctx.sound.good(); } else { eb.hits[r][c] = 2; ctx.sound.bad(); }
+        let sank = 0;
+        if (eb.grid[r][c]) {
+          eb.hits[r][c] = 1; ctx.sound.good();
+          const hitShip = shipsOf(eb).find(cells => cells.some(([rr, cc]) => rr === r && cc === c));
+          if (hitShip && isSunk(eb, hitShip)) sank = hitShip.length;
+        } else { eb.hits[r][c] = 2; ctx.sound.bad(); }
         if (remaining(eb) === 0) return ctx.commit(s, me);
+        s.sank = sank ? { size: sank, by: me } : null;
         s.turn = 1 - me; ctx.commit(s);
       }
     },
   });
   function remaining(b) { let n = 0; for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (b.grid[r][c] && b.hits[r][c] !== 1) n++; return n; }
+  // ships as [[r,c]...] lists. Older saved games have no `ships` field, so fall
+  // back to reading contiguous runs off the grid.
+  function shipsOf(b) {
+    if (Array.isArray(b.ships) && b.ships.length) return b.ships;
+    const seen = {}, out = [];
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+      if (!b.grid[r][c] || seen[r + ',' + c]) continue;
+      const horiz = c + 1 < 8 && b.grid[r][c + 1];
+      const cells = [];
+      let rr = r, cc = c;
+      while (rr < 8 && cc < 8 && b.grid[rr][cc] && !seen[rr + ',' + cc]) {
+        seen[rr + ',' + cc] = 1; cells.push([rr, cc]);
+        if (horiz) cc++; else rr++;
+      }
+      out.push(cells);
+    }
+    return out;
+  }
+  const isSunk = (b, cells) => cells.every(([r, c]) => b.hits[r][c] === 1);
+  // one row per ship: its cells, dimmed and struck through once sunk
+  function fleetRow(ctx, b, label, colour) {
+    const ships = shipsOf(b);
+    const afloat = ships.filter(cells => !isSunk(b, cells)).length;
+    const row = ctx.h('div', { class: 'bs-fl-row' },
+      ctx.h('span', { class: 'bs-fl-lab', style: colour ? `color:${colour}` : '' }, label),
+      ctx.h('span', { class: 'bs-fl-n' }, `${afloat}/${ships.length}`));
+    const boats = ctx.h('span', { class: 'bs-fl-boats' });
+    ships.slice().sort((a, b2) => b2.length - a.length).forEach(cells => {
+      const sunk = isSunk(b, cells);
+      const boat = ctx.h('span', { class: 'bs-boat' + (sunk ? ' sunk' : '') });
+      for (let k = 0; k < cells.length; k++) boat.append(ctx.h('i'));
+      boats.append(boat);
+    });
+    row.append(boats);
+    return row;
+  }
+  function fleetPanel(ctx, enemy, mine) {
+    return ctx.h('div', { class: 'bs-fleet' },
+      fleetRow(ctx, enemy, '🎯 Enemy fleet', 'var(--magenta)'),
+      fleetRow(ctx, mine, '🛡 Your fleet', 'var(--cyan)'));
+  }
 
   /* ---------- 10. MEMORY MATCH ---------- */
   Games.register({
@@ -320,10 +383,19 @@
       const word = st.word, guessed = st.guessed;
       const fig = ctx.h('div', { class: 'hm-figure' }, STAGES[st.wrong]);
       const life = ctx.h('div', { class: 'hm-life' }, '❤️'.repeat(6 - st.wrong) + '🖤'.repeat(st.wrong));
-      const masked = me === guesser ? [...word].map(ch => guessed.includes(ch) ? ch : '_').join(' ')
-                                    : [...word].map(ch => guessed.includes(ch) ? ch : '•').join(' '); // setter sees the word fully? show with guessed highlighted; show full to setter
-      const wordEl = ctx.h('div', { class: 'hm-word', style: `color:${ctx.players[guesser].color}` }, me === st.setter ? [...word].map(ch => guessed.includes(ch) ? ch : '_').join(' ') : masked);
-      ctx.root.append(ctx.h('div', { class: 'board-frame' }, fig, life, wordEl));
+      // You can always see a word YOU set (it is your own secret), and once the
+      // game is over the word is revealed to both so the guesser finds out.
+      const over = ctx.status === 'finished';
+      const showAll = (me === st.setter) || over;
+      const wordEl = ctx.h('div', { class: 'hm-word', style: `color:${ctx.players[guesser].color}` });
+      [...word].forEach(ch => {
+        const got = guessed.includes(ch);
+        wordEl.append(ctx.h('span', { class: got ? '' : (showAll ? 'hm-peek' : '') }, got || showAll ? ch : '_'));
+        wordEl.append(document.createTextNode(' '));
+      });
+      const caption = ctx.h('div', { class: 'hm-caption' },
+        over ? `The word was ${word}` : (me === st.setter ? `Your word — ${ctx.players[guesser].name} is guessing` : ''));
+      ctx.root.append(ctx.h('div', { class: 'board-frame' }, fig, life, wordEl, caption));
       if (me === guesser) {
         const kb = ctx.h('div', { class: 'kb' });
         ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'].forEach(line => { const row = ctx.h('div', { class: 'kb-row' }); [...line].forEach(ch => { const used = guessed.includes(ch); const k = ctx.h('button', { class: 'key' + (used ? (word.includes(ch) ? ' g' : ' x') : '') }, ch); if (used) k.disabled = true; else k.onclick = () => guess(ch); row.append(k); }); kb.append(row); });
@@ -378,9 +450,12 @@
   // Tagged question banks. Each item is a binary [A, B] this-or-that.
   // Host picks a "vibe" each round → fresh, varied, never monotonous.
   const CQ_BANKS = {
-    sweet: [['Beach holiday','Mountain trip'],['Coffee','Chai'],['Early bird','Night owl'],['Save it','Spend it'],['Cats','Dogs'],['Pizza','Biryani'],['Cozy movie night','Big party'],['Texting','Calling'],['Plan everything','Go with the flow'],['Window seat','Aisle seat'],['Sunrise','Sunset'],['Tea in bed','Breakfast out'],['Handwritten note','Long voice note'],['Slow dance','Roadtrip singalong'],['Forehead kiss','Bear hug'],['Stargazing','Rainy day in'],['Home-cooked dinner','Fancy restaurant'],['Surprise gift','Planned gift'],['Cuddle','Hold hands'],['Books','Movies'],['City lights','Countryside'],['Spontaneous trip','Planned vacation'],['Flowers','Chocolates'],['Sweet texts','Cute calls'],['Sleep in','Watch the sunrise']],
-    funny: [['Snort-laugh','Silent wheeze'],['Trip on flat ground','Walk into a glass door'],['Sing badly & loud','Dance with no rhythm'],['Steal the blanket','Hog the whole bed'],['Talk in your sleep','Snore like a truck'],['Reply in memes','Reply in voice notes'],['Burn the toast','Flood the kitchen'],['Cry at ads','Laugh at the wrong moment'],['Overthink everything','Forget everything'],['Always late','Annoyingly early'],['Lose the keys','Lose the phone'],['Ugliest cry','Loudest sneeze'],['Pet every stray dog','Chase the pigeons'],['Hopeless with directions','Hopeless with names'],['Eat the last slice','Blame the dog'],['Text the wrong person','Like an old photo by mistake'],['Hangry monster','Sleepy zombie'],['Dramatic sulk','Petty grudge'],['Worst dancer at the wedding','Loudest one at the movie'],['Fake laugh','Fake gasp'],['Loud chewer','Loud typer'],['Bad at lying','Bad at secrets']],
-    spicy: [['Lights on','Lights off'],['Tease','Please'],['Slow & gentle','Fast & wild'],['Take the lead','Be led'],['Neck kisses','Back scratches'],['Morning fun','Midnight fun'],['Dominant','Submissive'],['Make the first move','Be chased'],['Whisper naughty things','Show, don’t tell'],['Shower together','Bath together'],['Lace','Bare'],['Bite','Kiss'],['Truth or dare','Strip poker'],['Blindfold','Handcuffs'],['Quickie','Marathon'],['Public tease','Private show'],['Love bites','Long massage'],['Roleplay','Keep it real'],['Silk sheets','Skin on skin'],['Send a risky pic','Leave a risky note'],['Get teased in public','Tease back'],['Take control','Give control'],['Sweet talk','Dirty talk'],['Eye contact','Hands everywhere'],['Stay quiet','Be loud']],
+    sweet: [['Beach holiday','Mountain trip'],['Coffee','Chai'],['Early bird','Night owl'],['Save it','Spend it'],['Cats','Dogs'],['Pizza','Biryani'],['Cozy movie night','Big party'],['Texting','Calling'],['Plan everything','Go with the flow'],['Window seat','Aisle seat'],['Sunrise','Sunset'],['Tea in bed','Breakfast out'],['Handwritten note','Long voice note'],['Slow dance','Roadtrip singalong'],['Forehead kiss','Bear hug'],['Stargazing','Rainy day in'],['Home-cooked dinner','Fancy restaurant'],['Surprise gift','Planned gift'],['Cuddle','Hold hands'],['Books','Movies'],['City lights','Countryside'],['Spontaneous trip','Planned vacation'],['Flowers','Chocolates'],['Sweet texts','Cute calls'],['Sleep in','Watch the sunrise'],
+      ['Morning cuddles','Goodnight calls'],['Handwritten letter','Surprise voice note'],['Picnic in a park','Rooftop dinner'],['Matching outfits','Matching playlists'],['Breakfast in bed','Midnight snack run'],['Long drive','Long walk'],['Photo album','Video montage'],['Beach sunset','Mountain sunrise'],['Cooking together','Ordering in'],['Slow morning','Big adventure'],['Your hand held','Your hair played with'],['Being surprised','Planning it together'],['A song that is ours','A place that is ours'],['Rain on the window','Snow outside'],['Cosy blanket','Warm bath'],['Fresh flowers','A tiny plant'],['Old photos','New memories'],['A love letter','A long hug'],['Dancing in the kitchen','Singing in the car'],['Saying it first','Hearing it first']],
+    funny: [['Snort-laugh','Silent wheeze'],['Trip on flat ground','Walk into a glass door'],['Sing badly & loud','Dance with no rhythm'],['Steal the blanket','Hog the whole bed'],['Talk in your sleep','Snore like a truck'],['Reply in memes','Reply in voice notes'],['Burn the toast','Flood the kitchen'],['Cry at ads','Laugh at the wrong moment'],['Overthink everything','Forget everything'],['Always late','Annoyingly early'],['Lose the keys','Lose the phone'],['Ugliest cry','Loudest sneeze'],['Pet every stray dog','Chase the pigeons'],['Hopeless with directions','Hopeless with names'],['Eat the last slice','Blame the dog'],['Text the wrong person','Like an old photo by mistake'],['Hangry monster','Sleepy zombie'],['Dramatic sulk','Petty grudge'],['Worst dancer at the wedding','Loudest one at the movie'],['Fake laugh','Fake gasp'],['Loud chewer','Loud typer'],['Bad at lying','Bad at secrets'],
+      ['Snore louder','Steal more blanket'],['Terrible dancer','Terrible singer'],['Laugh at your own jokes','Never get the joke'],['Lose the TV remote','Lose your sunglasses on your head'],['Talk to the dog','Talk to the plants'],['Overpack wildly','Forget the essentials'],['Cry at a cartoon','Laugh at a funeral'],['Burn the rice','Explode the pressure cooker'],['Argue about directions','Argue about temperature'],['Snack thief','Blanket thief'],['Reply after 3 days','Double text instantly'],['Take 200 photos','Take zero photos'],['Fall asleep in the film','Talk through the film'],['Worst at karaoke','Worst at charades'],['Sing the wrong lyrics','Dance off the beat'],['Trip over nothing','Spill on a white shirt'],['Hoard receipts','Lose every receipt'],['Set 10 alarms','Ignore all 10'],['Panic pack the night before','Pack a week early'],['Cheat at cards','Sulk at losing']],
+    spicy: [['Lights on','Lights off'],['Tease','Please'],['Slow & gentle','Fast & wild'],['Take the lead','Be led'],['Neck kisses','Back scratches'],['Morning fun','Midnight fun'],['Dominant','Submissive'],['Make the first move','Be chased'],['Whisper naughty things','Show, don’t tell'],['Shower together','Bath together'],['Lace','Bare'],['Bite','Kiss'],['Truth or dare','Strip poker'],['Blindfold','Handcuffs'],['Quickie','Marathon'],['Public tease','Private show'],['Love bites','Long massage'],['Roleplay','Keep it real'],['Silk sheets','Skin on skin'],['Send a risky pic','Leave a risky note'],['Get teased in public','Tease back'],['Take control','Give control'],['Sweet talk','Dirty talk'],['Eye contact','Hands everywhere'],['Stay quiet','Be loud'],
+      ['Slow undress','Rip it off'],['Lights low','Mirror on'],['Neck','Collarbone'],['Silk','Lace'],['Hair pulled','Wrists held'],['On top','Underneath'],['Whispered','Wordless'],['Fast and hungry','Slow and torturous'],['Kitchen counter','Back seat'],['Morning','Midnight'],['Massage first','Straight to it'],['Blindfolded','Watching'],['Bite','Scratch'],['Teasing text','Surprise photo'],['Shower','Bathtub'],['Ice','Heat'],['Loud','Silent but obvious'],['Same room, no touching','Different rooms, camera on'],['You choose the outfit','I choose the outfit'],['Rewarded','Made to wait']],
   };
   function cqSample(vibe, n) {
     let pool;

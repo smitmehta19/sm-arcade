@@ -20,9 +20,40 @@
 
   // Single-token clean words split from a string; multi-word + adult prompts added after.
   // Guessing is space/punctuation-insensitive (see norm()), so "doggy style" / "69" all work.
-  const DG_CLEAN = ('cat dog fish bird snake lion tiger bear elephant monkey rabbit horse cow pig sheep duck frog owl fox wolf whale shark octopus crab butterfly bee spider snail turtle penguin apple banana pizza cake bread egg cheese burger fries donut icecream cookie carrot grapes lemon strawberry corn mushroom house car boat plane train bike rocket umbrella clock key book pencil scissors hammer ladder chair table lamp phone camera guitar drum bell crown ring glasses hat shoe sock shirt sun moon star cloud rain snow tree flower mountain river fire rainbow leaf cactus volcano island smile sleep dance swim read sing ghost robot alien skull heart anchor sword shield castle bridge tent kite balloon gift candle snowman lighthouse windmill ' +
-    // more easy-to-draw additions
-    'doughnut ladybug dolphin seahorse jellyfish flamingo peacock dinosaur unicorn dragon mermaid pumpkin pineapple watermelon cherry avocado pepper tomato icecube popsicle lollipop cupcake teapot mug spoon fork knife plate pan kettle toaster fridge bathtub toilet bed pillow couch clock window door stairs fence mailbox swing slide seesaw football basketball tennis bowling dice cards chess crayon brush paint magnet battery lightbulb plug compass map flag trophy medal balloon ribbon party hat sunglasses watch necklace earring lipstick comb mirror razor toothbrush soap bubble feather button zipper needle thread sock mitten scarf boot helmet crown wand broom cauldron coffin bat web spider cobweb').split(' ');
+  const DG_CLEAN = ('cat dog fish bird snake lion tiger bear elephant monkey rabbit horse cow pig sheep duck frog owl fox wolf whale shark ' +
+    'octopus crab butterfly bee spider snail turtle penguin apple banana pizza cake bread egg cheese burger fries donut ' +
+    'icecream cookie carrot grapes lemon strawberry corn mushroom house car boat plane train bike rocket umbrella clock key ' +
+    'book pencil scissors hammer ladder chair table lamp phone camera guitar drum bell crown ring glasses hat shoe sock ' +
+    'shirt sun moon star cloud rain snow tree flower mountain river fire rainbow leaf cactus volcano island smile sleep ' +
+    'dance swim read sing ghost robot alien skull heart anchor sword shield castle bridge tent kite balloon gift candle ' +
+    'snowman lighthouse windmill acorn airplane ambulance anvil apron arrow axe backpack bagpipes barn barrel basket ' +
+    'beehive bench binoculars birdcage blender boomerang bottle bowl bracelet bulldozer bus cabin calculator camel campfire ' +
+    'canoe cape caterpillar cauldron chain chainsaw chalk chimney church clam claw clipboard clover coconut coffin comb ' +
+    'compass cone cork cowboyhat cradle crane crayon crutch cupcake curtain dartboard deer diamond dice diploma dolphin ' +
+    'domino donkey door dragonfly drawer dress drill duckling dumbbell earmuffs easel envelope eraser eyeball fan feather ' +
+    'ferriswheel fireman fishbowl flashlight flute football fountain fridge frisbee funnel garlic gate giraffe globe glove ' +
+    'goat goggles gondola gorilla grasshopper hamburger hammock hamster handbag harmonica harp hedgehog helicopter hive ' +
+    'hoof hook hopscotch horseshoe hourglass hut igloo iron ironingboard jar jellybean jetski kangaroo kayak kennel kettle ' +
+    'keyboard koala ladle ladybird lantern lasso lawnmower lemonade lightning lily lizard llama lobster locker lollipop ' +
+    'luggage magnet mailbox mammoth mango map maracas marshmallow mask mattress maze medal megaphone microphone microscope ' +
+    'mitten moose mop mosquito motorbike mouse moustache muffin nail necklace nest newspaper noodle notebook nurse nut oven ' +
+    'paddle padlock paintbrush palmtree pancake panda paperclip parachute parrot passport peanut pear pelican peppermill ' +
+    'piano pickle picnic pier piggybank pillow pineapple pipe pirate plank plug plunger polarbear popcorn postcard pot ' +
+    'potato pretzel pumpkin puppy purse puzzle pyramid quilt racoon radio raft rake ramp raspberry rattle razor receipt ' +
+    'rhino ribbon rickshaw roadsign rockingchair rollerskate rope rose rowboat rug ruler saddle sailboat sandcastle ' +
+    'sandwich satellite saw saxophone scarecrow scarf scooter scoreboard screw screwdriver seagull seal seashell seesaw ' +
+    'sewingmachine shed shovel shower signpost sink skateboard skeleton ski sledge slide slippers snorkel snowflake ' +
+    'snowglobe sofa spaceship spade spaghetti sparkler spatula speaker sponge spoon sprinkler squirrel stamp stapler ' +
+    'starfish statue steamtrain stethoscope stool stopwatch stove streetlamp stroller submarine suitcase sunflower ' +
+    'sunglasses surfboard swan sweater swing syringe tablet taco tambourine tank tap teabag teddy telescope thermometer ' +
+    'thimble thorn thumb ticket tie toaster toboggan toilet tomato toolbox toothpaste torch tortoise tower tractor traffic ' +
+    'trampoline treasure treehouse triangle tricycle trombone trophy trowel truck trumpet tulip tunnel turkey turnip ' +
+    'typewriter ukulele unicycle vacuum vase vest violin waffle wagon wallet walrus wand wardrobe washingmachine watch ' +
+    'waterfall watermelon wave weathervane webcam well wetsuit wheelbarrow wheel whisk whistle wig windowbox wine wing ' +
+    'wizard wombat woodpecker worm wrench yacht yoyo zebra zipper doughnut ladybug seahorse jellyfish flamingo peacock ' +
+    'dinosaur unicorn dragon mermaid cherry avocado pepper icecube popsicle teapot mug fork knife plate pan bathtub bed ' +
+    'couch window stairs fence basketball tennis bowling cards chess brush paint battery lightbulb flag party earring ' +
+    'lipstick mirror toothbrush soap bubble button needle thread boot helmet broom bat web cobweb').split(' ');
   const DG_ADULT = [
     'dick', 'pussy', 'boobs', 'butt', 'nipple', 'balls', 'condom', 'banana', 'eggplant', 'peach',
     'cucumber', 'sausage', 'cherry', 'kiss', 'hug', 'bra', 'panties', 'thong', 'lingerie', 'handcuffs',

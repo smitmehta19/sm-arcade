@@ -60,7 +60,7 @@
 > cycle tracker — see the file map for the place-picking and cycle-maths gotchas.
 > **iOS:** PNG apple-touch-icon (iOS ignores SVG) + standalone meta tags; Web Share Target is
 > Chromium-only (MDN compat: safari_ios mirrors safari = false), so iPhone uses the paste flow.
-> **Service worker cache: `sm-arcade-v56`** (v42 fixed board wobble: explicit 1fr grid rows).
+> **Service worker cache: `sm-arcade-v57`** (v42 fixed board wobble: explicit 1fr grid rows).
 
 ---
 
@@ -102,6 +102,13 @@ assets/js/
   words.js                 dictionary (ghost/word-duel/hangman/letterpress validation)
   games-classic.js         tic-tac-toe, connect-four, dots-boxes, checkers, reversi, gomoku
   games-mind.js            battleship, memory, word-duel, hangman, rps, couple-quiz
+                           - hangman: the SETTER always sees their own word (unguessed letters dimmed via
+                             .hm-peek) and the word is revealed to BOTH when ctx.status === 'finished'.
+                           - battleship: boards store `ships` (cell lists) at confirmFleet, so the panel
+                             counts real SHIPS afloat, not unhit squares (the old label was misleading).
+                             shipsOf() falls back to reading contiguous runs for pre-v57 saves.
+                             `state.sank` drives the 'you sank a 3-square ship' message.
+                           - couple-quiz banks are 45/42/45 (sweet/funny/spicy).
   games-fun2.js            ghost, two-truths            (tug-of-war was REMOVED)
   games-strategy2.js       pentago, hex, nine-mens-morris, quoridor, quarto, code-breaker
   games-dice.js            yahtzee, liars-dice          (SVG pip dice + roll animation)
