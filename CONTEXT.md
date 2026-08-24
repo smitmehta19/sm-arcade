@@ -3,7 +3,7 @@
 > **Read this first when picking up this project.** It captures architecture, decisions, and the
 > gotchas/mistakes that aren't obvious from the code. Keep it current when you change things.
 >
-> **Current state (2026-07-02):** 37 playable games + a Tournament meta-game, a Date Night
+> **Current state (2026-08-24):** 39 playable games (incl. **Scrabble**) + a Tournament meta-game, a Date Night
 > Roulette section, per-turn timers, leave-consent, badges/banter/juice, full design polish,
 > a **generic per-move motion layer** (slides/flips/drops/capture-ghosts + last-move ring),
 > canvas confetti physics, haptic feedback, and touch-press board feel.
@@ -56,7 +56,11 @@
 > "Meera sees 11:30 PM – 3:30 AM (Thu)" line and the composer previews it live. Timezone is
 > per-DEVICE — switching identity on one phone does NOT change the zone (and briefly stamps
 > the wrong seat until the real phone next opens; self-corrects).
-> **Service worker cache: `sm-arcade-v47`** (v42 fixed board wobble: explicit 1fr grid rows).
+> **Our Story page** (`story.js`, ♥ topbar button): milestone dates + mapped places + a discreet
+> cycle tracker — see the file map for the place-picking and cycle-maths gotchas.
+> **iOS:** PNG apple-touch-icon (iOS ignores SVG) + standalone meta tags; Web Share Target is
+> Chromium-only (MDN compat: safari_ios mirrors safari = false), so iPhone uses the paste flow.
+> **Service worker cache: `sm-arcade-v56`** (v42 fixed board wobble: explicit 1fr grid rows).
 
 ---
 
