@@ -44,7 +44,9 @@
   .sy-chip.hot{ border-color:var(--magenta); box-shadow:0 0 14px -6px var(--magenta); }
   .sy-chip.add{ display:grid; place-items:center; min-width:46px; font-size:20px; color:var(--ink-faint); }
   /* places strip */
-  .sy-strip{ display:flex; gap:12px; overflow-x:auto; padding:6px 2px 14px; scrollbar-width:none; }
+  .sy-strip{ display:flex; gap:12px; overflow-x:auto; padding:6px 2px 14px; scrollbar-width:none;
+    scroll-snap-type:x proximity; scroll-padding-left:2px; -webkit-overflow-scrolling:touch; }
+  .sy-pol{ scroll-snap-align:start; }
   .sy-strip::-webkit-scrollbar{ display:none; }
   .sy-pol{ flex:0 0 205px; background:var(--panel-2); border:1px solid var(--glass-brd); border-radius:15px;
     padding:9px 9px 11px; box-shadow:var(--shadow-soft); transform:rotate(-1.3deg);
@@ -115,6 +117,7 @@
     background:var(--panel-2); backdrop-filter:var(--blur); border:1px solid var(--glass-brd);
     padding:18px 16px calc(20px + var(--safe-b)); animation:sheetUp .3s var(--ease) both; }
   @keyframes sheetUp{ from{ transform:translateY(60px); opacity:0; } to{ transform:none; opacity:1; } }
+  .sheet-grab{ width:38px; height:4px; border-radius:99px; background:rgba(170,190,255,.3); margin:-6px auto 12px; }
   .sy-sheet h3{ font-family:var(--font-display); font-size:13px; letter-spacing:1.5px; margin:0 0 14px; text-align:center; }
   .sy-presets{ display:flex; gap:7px; flex-wrap:wrap; margin-bottom:16px; }
   .sy-preset{ padding:9px 12px; border-radius:12px; background:var(--bg-2); border:1px solid var(--line);
@@ -411,6 +414,7 @@
     sheet.append(h('div', { class: 'sy-actions' },
       h('button', { class: 'btn btn-ghost', onclick: () => back.remove() }, 'Cancel'), useBtn));
     back.append(sheet); document.body.append(back);
+    dragSheet(sheet, () => back.remove());
 
     function paint() {
       const W = stage.clientWidth || 320, H = stage.clientHeight || 260;
@@ -805,6 +809,7 @@
     sheet.append(actions);
 
     back.append(sheet); document.body.append(back); Store.Sound.tap();
+    dragSheet(sheet, close);
     if (opts.shared) {                                   // shared in from another app
       placeIn.value = opts.shared;
       const nm = sharedName(opts.shared);

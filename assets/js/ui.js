@@ -19,6 +19,51 @@ function h(tag, attrs = {}, ...kids) {
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const clone = o => JSON.parse(JSON.stringify(o));
 
+/* ---------- physical touch: drag a bottom-sheet down to dismiss ----------
+   Adds a grab handle, and lets you flick or drag the sheet away. Only commits
+   to a drag on clear DOWNWARD intent from the top of the sheet, so internal
+   scrolling and the sheet's own controls keep working. Springs back if the
+   pull is short. Used by the Our Story editor + pin picker. */
+function dragSheet(sheet, onClose) {
+  if (!sheet || sheet._dragWired) return; sheet._dragWired = true;
+  const grab = document.createElement('div'); grab.className = 'sheet-grab';
+  sheet.prepend(grab);
+  let y0 = 0, dy = 0, t0 = 0, active = false, committed = false;
+  const reset = () => { sheet.style.transition = ''; sheet.style.transform = ''; active = false; committed = false; };
+  sheet.addEventListener('pointerdown', e => {
+    const fromGrab = e.target.closest('.sheet-grab');
+    if (!fromGrab && sheet.scrollTop > 2) return;                 // scrolling content, not dragging
+    if (!fromGrab && e.target.closest('input,textarea,select,button,a,canvas,.sy-map,.sy-pick,.sy-results')) return;
+    active = true; committed = false; y0 = e.clientY; dy = 0; t0 = e.timeStamp;
+  });
+  sheet.addEventListener('pointermove', e => {
+    if (!active) return;
+    const d = e.clientY - y0;
+    if (!committed) {
+      if (d > 6) { committed = true; sheet.style.transition = 'none'; try { sheet.setPointerCapture(e.pointerId); } catch (x) {} }
+      else if (d < -6) { active = false; return; }               // upward → hand back to native scroll
+      else return;
+    }
+    dy = Math.max(0, d);
+    sheet.style.transform = `translateY(${dy}px)`;
+    e.preventDefault();
+  }, { passive: false });
+  const end = e => {
+    if (!active) return;
+    if (!committed) { active = false; return; }
+    const vel = dy / Math.max(1, e.timeStamp - t0);
+    if (dy > sheet.offsetHeight * 0.24 || vel > 0.5) {           // far enough OR flicked → dismiss
+      sheet.style.transition = 'transform .2s var(--ease)';
+      sheet.style.transform = `translateY(${sheet.offsetHeight + 60}px)`;
+      try { Store.Sound.tap(); } catch (x) {}
+      setTimeout(() => { if (onClose) onClose(); }, 190);
+    } else { sheet.style.transition = 'transform .34s var(--spring)'; sheet.style.transform = ''; }
+    active = false; committed = false;
+  };
+  sheet.addEventListener('pointerup', end);
+  sheet.addEventListener('pointercancel', end);
+}
+
 /* ---------- game registry ---------- */
 const Games = (() => {
   const list = [];
