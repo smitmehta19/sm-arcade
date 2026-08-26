@@ -351,7 +351,10 @@
         s.first = false; s.passes = 0;
         s.last = { word: ev.detail.map(d => d.word).join('+'), score: ev.score, cells: pending.map(p => p.i), seat: me };
         s.turn = 1 - me;
-        ctx.sound.good();
+        if (ev.bingo) {                                   // all 7 tiles — its own signature moment
+          ctx.sound.win();
+          try { window.fxBanner && fxBanner('BINGO! +50', 'var(--gold)'); window.fxShockwave && fxShockwave('var(--gold)'); } catch (e) {}
+        } else ctx.sound.good();
         if (!finishIfDone(s, me)) ctx.commit(s);
       }
       function submit() {

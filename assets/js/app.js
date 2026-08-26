@@ -67,6 +67,10 @@ Gate.ready(function boot() {
     } catch (e) {}
   })();
 
+  // MOTION BUDGET (P6): pause the ambient decorative loops when the app is
+  // backgrounded — saves battery and stops motion the user can't even see.
+  document.addEventListener('visibilitychange', () => document.body.classList.toggle('paused', document.hidden));
+
   window.addEventListener('hashchange', Router.go);
 
   // gyroscope parallax — the aurora drifts a few px as the phone tilts.

@@ -759,6 +759,55 @@ body.light::after{ opacity:.025; }
   70%{ transform:translateX(-50%) rotate(-6deg) scale(.94); opacity:1; }
   100%{ transform:translateX(-50%) rotate(-6deg) scale(1); } }
 
+/* ============================================================
+   SIGNATURE MOMENTS (P5) — reserved for the wins that earn it
+   ============================================================ */
+/* a big word that punches in on a real occasion (BINGO, monthly crown) */
+.fx-banner{ position:fixed; left:50%; top:38%; transform:translate(-50%,-50%); z-index:130; pointer-events:none;
+  font-family:var(--font-display); font-weight:900; font-size:clamp(26px,8vw,46px); letter-spacing:1px; text-align:center;
+  color:var(--bn, var(--gold)); text-shadow:0 0 30px var(--bn, var(--gold)), 0 4px 18px rgba(0,0,0,.6);
+  animation:fxBanner 1.7s cubic-bezier(.22,.61,.36,1) forwards; max-width:88vw; }
+@keyframes fxBanner{ 0%{ opacity:0; transform:translate(-50%,-50%) scale(.4); }
+  14%{ opacity:1; transform:translate(-50%,-50%) scale(1.12); } 26%{ transform:translate(-50%,-50%) scale(1); }
+  76%{ opacity:1; } 100%{ opacity:0; transform:translate(-50%,-58%) scale(1.02); } }
+/* a shockwave ring pulsing out from centre on every real win */
+.fx-shock{ position:fixed; left:50%; top:44%; width:40px; height:40px; margin:-20px 0 0 -20px; z-index:117;
+  border-radius:50%; pointer-events:none; border:3px solid var(--sw, var(--gold));
+  animation:fxShock .8s cubic-bezier(.16,.84,.3,1) forwards; }
+@keyframes fxShock{ 0%{ transform:scale(.2); opacity:.85; } 100%{ transform:scale(14); opacity:0; } }
+/* streak stamp catches fire — warmer gradient + rising embers */
+.fx-stamp.fire{ background:linear-gradient(135deg,#ffb347,#ff5e3a); box-shadow:0 6px 22px -4px rgba(255,94,58,.85);
+  animation:fxStamp .55s .25s var(--ease-back) both, fireFlicker 1.6s ease-in-out .8s infinite; }
+@keyframes fireFlicker{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.18) saturate(1.15); } }
+.fx-stamp .ember{ position:absolute; bottom:2px; width:4px; height:4px; border-radius:50%;
+  background:radial-gradient(circle,#ffd76b,#ff5e3a); animation:ember 1.4s ease-out infinite; }
+@keyframes ember{ 0%{ transform:translateY(0) scale(1); opacity:0; } 20%{ opacity:1; }
+  100%{ transform:translateY(-26px) scale(.2); opacity:0; } }
+/* the newest trophy gets crowned once */
+.sn-trophy{ position:relative; }
+.sn-trophy.crowning{ animation:crownPop .6s var(--ease-back) both; }
+@keyframes crownPop{ 0%{ transform:scale(1); } 40%{ transform:scale(1.14) translateY(-2px); } 100%{ transform:scale(1); } }
+.sn-crown{ position:absolute; top:-13px; left:50%; transform:translateX(-50%); font-size:15px;
+  animation:crownDrop .5s var(--ease-back) both; }
+@keyframes crownDrop{ 0%{ transform:translate(-50%,-16px) rotate(-18deg); opacity:0; }
+  60%{ transform:translate(-50%,1px) rotate(6deg); opacity:1; } 100%{ transform:translate(-50%,0) rotate(0); } }
+
+@media (prefers-reduced-motion: reduce){
+  .fx-banner, .fx-shock, .fx-stamp.fire, .fx-stamp .ember, .sn-trophy.crowning, .sn-crown{ animation:none !important; }
+  .fx-banner, .fx-shock, .ember{ display:none !important; }
+}
+
+/* ============================================================
+   MOTION BUDGET (P6) — quiet the ambient loops when unfocused,
+   and honour reduced-motion for the perpetual background too
+   ============================================================ */
+body.paused .bg-glow, body.paused .hero h1, body.paused .hero::after, body.paused .btn-primary,
+body.paused .tour-cta::after, body.paused .badge.got::after, body.paused .meter .fill::after,
+body.paused .mini-tally, body.paused .fx-stamp.fire{ animation-play-state:paused !important; }
+@media (prefers-reduced-motion: reduce){
+  .bg-glow, .mini-tally, .btn-primary, .meter .fill::after, .badge.got::after{ animation:none !important; }
+}
+
 /* turn hand-off — a glow orb glides across the turn bar to the new player */
 .turnbar{ position:relative; }
 .fx-handoff{ position:absolute; top:50%; width:14px; height:14px; margin-top:-7px; border-radius:50%;

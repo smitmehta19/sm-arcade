@@ -325,6 +325,27 @@ function rollNum(el, key, val) {
 }
 
 /* ---------- result overlay ---------- */
+/* ---------- signature-moment FX (shared, global) ----------
+   Big one-shot celebrations that a couple of moments earn: a word banner
+   (Scrabble BINGO), an expanding shockwave ring (every real win). All
+   compositor-only and reduced-motion aware. */
+const fxReduced = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+function fxBanner(text, color) {
+  if (fxReduced()) return;
+  const el = h('div', { class: 'fx-banner' }, text);
+  if (color) el.style.setProperty('--bn', color);
+  document.body.append(el);
+  setTimeout(() => el.remove(), 1700);
+}
+function fxShockwave(color) {
+  if (fxReduced()) return;
+  const w = h('div', { class: 'fx-shock' });
+  if (color) w.style.setProperty('--sw', color);
+  document.body.append(w);
+  setTimeout(() => w.remove(), 820);
+}
+window.fxBanner = fxBanner; window.fxShockwave = fxShockwave;
+
 const Overlay = (() => {
   let confettiRaf = null;
   // full-screen canvas burst — two corner cannons, gravity + drag + spin.
@@ -391,11 +412,21 @@ const Overlay = (() => {
       card.style.borderColor = color ? color : '';
       card.style.boxShadow = color ? `inset 0 1px 0 rgba(255,255,255,.08), 0 0 44px -8px ${color}, var(--shadow)` : '';
       const oldStamp = card.querySelector('.fx-stamp'); if (oldStamp) oldStamp.remove();
-      if (stamp) card.prepend(h('div', { class: 'fx-stamp' }, stamp));
+      if (stamp) {
+        const onFire = /IN A ROW|ON FIRE|🔥/i.test(stamp);
+        const st = h('div', { class: 'fx-stamp' + (onFire ? ' fire' : '') }, stamp);
+        card.prepend(st);
+        if (onFire && !fxReduced()) for (let i = 0; i < 9; i++) {   // embers rising off the stamp
+          const e = h('i', { class: 'ember' });
+          e.style.left = (8 + i * 10) + '%'; e.style.animationDelay = (i * 0.11).toFixed(2) + 's';
+          st.append(e);
+        }
+      }
     }
-    if (color && party && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    if (color && party && !fxReduced()) {
       const edge = h('div', { class: 'fx-edge' }); edge.style.setProperty('--edge-c', color);
       document.body.append(edge); setTimeout(() => edge.remove(), 1000);
+      fxShockwave(color);                                          // a ring that pulses out on every real win
     }
     const acts = $('#resultActions'); acts.innerHTML = '';
     (buttons || []).forEach(b => acts.append(h('button', { class: 'btn ' + (b.primary ? 'btn-primary' : 'btn-ghost'), onclick: () => b.onClick && b.onClick() }, b.label)));
@@ -1358,12 +1389,31 @@ function renderScores() {
                  : h('b', { style: `color:${s.players[lw].color}` }, `${esc(s.players[lw].name)} took it ${lm.p1}–${lm.p2} 🏆`)));
     const t0 = past.filter(e => champ(e) === 0).length, t1 = past.filter(e => champ(e) === 1).length;
     const cab = h('div', { class: 'sn-cab' });
+    const trophies = [];
     past.forEach(e => {
       const w = champ(e);
-      cab.append(h('div', { class: 'sn-trophy' + (w == null ? ' tie' : ' w' + w) },
+      const t = h('div', { class: 'sn-trophy' + (w == null ? ' tie' : ' w' + w) },
         h('span', {}, w == null ? '🤝' : '🏆 ' + s.players[w].emoji),
-        h('b', {}, mShort(e.ym)), h('span', { class: 'ts' }, `${e.p1}–${e.p2}`)));
+        h('b', {}, mShort(e.ym)), h('span', { class: 'ts' }, `${e.p1}–${e.p2}`));
+      trophies.push(t); cab.append(t);
     });
+    // crown the newest champion ONCE per device — a signature "you won the month" moment
+    (function crown() {
+      const newest = past[0], w = champ(newest);
+      if (w == null) return;
+      const key = 'sm_crown_' + newest.ym;
+      let done = false; try { done = !!localStorage.getItem(key); } catch (e) {}
+      if (done || fxReduced()) return;
+      const t = trophies[0]; if (!t) return;
+      setTimeout(() => {
+        t.classList.add('crowning');
+        t.append(h('span', { class: 'sn-crown' }, '👑'));
+        try { Store.Sound.win(); } catch (e) {}
+        try { fxShockwave(s.players[w].color); } catch (e) {}
+        fxBanner(`${s.players[w].name} — ${mLong(newest.ym)} Champion! 👑`, s.players[w].color);
+        try { localStorage.setItem(key, '1'); } catch (e) {}
+      }, 400);
+    })();
     card.append(cab,
       h('div', { class: 'sn-tally' }, `Trophy cabinet: ${s.players[0].emoji} ${esc(s.players[0].name)} ×${t0} · ${s.players[1].emoji} ${esc(s.players[1].name)} ×${t1}${past.length - t0 - t1 ? ' · shared ×' + (past.length - t0 - t1) : ''}`));
   } else {

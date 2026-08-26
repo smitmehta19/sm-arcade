@@ -100,7 +100,8 @@ assets/js/
                            versioning), per-device identity, Net API (presence/match/nudge/react), WebAudio Sound,
                            dateNight lists (Store.dateToggle)
   icons.js                 custom inline SVG line-icons — Icons.game(id) / Icons.ui(name)
-  ui.js                    Games registry, helpers (h/$/esc/clone), Overlay, Router, identity gate, lobby,
+  ui.js                    Games registry, helpers (h/$/esc/clone), dragSheet (drag-to-dismiss),
+                           fxBanner/fxShockwave (signature-moment FX), Overlay, Router, identity gate, lobby,
                            match lifecycle, networked stage, TIMER system, tournament engine, banter/juice,
                            Scores+badges+score-adjuster, Settings, rules, smModal/trollMeera
   words.js                 dictionary (ghost/word-duel/hangman/letterpress validation)
