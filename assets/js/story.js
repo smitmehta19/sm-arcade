@@ -78,7 +78,10 @@
   .sy-row .cd small{ display:block; color:var(--ink-faint); font-weight:400; font-size:10px; font-family:var(--font-body); }
   .sy-row .cd.soon{ color:var(--magenta); }
   /* cycle */
-  .sy-cyc{ margin-top:14px; border-radius:14px; background:var(--panel); border:1px solid var(--line); overflow:hidden; }
+  .sy-cyc-label{ margin-top:24px; }
+  .sy-cyc-phase{ font-size:12.5px; color:var(--ink-dim); line-height:1.5; margin-bottom:11px; }
+  .sy-cyc-phase b{ color:var(--ink); }
+  .sy-cyc{ margin-top:0; border-radius:14px; background:var(--panel); border:1px solid var(--line); overflow:hidden; }
   .sy-cyc-line{ display:flex; align-items:center; gap:10px; padding:13px 15px; width:100%; text-align:left;
     color:var(--ink-dim); font-size:13.5px; background:none; border:none; }
   .sy-cyc-line b{ color:var(--ink); } .sy-cyc-line .ex{ margin-left:auto; color:var(--ink-faint); font-size:12px; }
@@ -588,14 +591,20 @@
       });
     }
 
-    // ---- cycle (discreet, expands on tap) ----
+    // ---- cycle — its OWN section (kept out of Big Dates), discreet by default ----
     const st = cycleStats(periods.map(p => p.start));
+    const PERIOD_LEN = 5;                                   // typical bleeding days; we only log starts
+    const onPeriod = st && st.day <= PERIOD_LEN;
+    wrap.append(h('div', { class: 'sec-label sy-cyc-label' }, '🌙 CYCLE'));
     const cyc = h('div', { class: 'sy-cyc' });
     const line = h('button', { class: 'sy-cyc-line', onclick: () => { cycOpen = !cycOpen; Store.Sound.tap(); renderStory(); } },
-      '🌙 ',
-      st ? h('span', {}, h('b', {}, `Day ${st.day}`), ' of cycle') : h('span', {}, 'Cycle tracker'),
+      onPeriod ? '🩸 ' : '🌙 ',
+      st ? h('span', {}, onPeriod
+            ? [h('b', {}, `Period · day ${st.day}`)]
+            : [h('b', {}, `Cycle day ${st.day}`), ' · between periods'])
+         : h('span', {}, 'Cycle tracker'),
       h('span', { class: 'ex' }, st
-        ? (st.until >= 0 ? `next expected in ~${st.until} days ${cycOpen ? '▾' : '▸'}` : `${Math.abs(st.until)} days late ${cycOpen ? '▾' : '▸'}`)
+        ? (st.until >= 0 ? `next in ~${st.until}d ${cycOpen ? '▾' : '▸'}` : `${Math.abs(st.until)}d late ${cycOpen ? '▾' : '▸'}`)
         : `tap to start ${cycOpen ? '▾' : '▸'}`));
     cyc.append(line);
     if (cycOpen) {
@@ -609,6 +618,10 @@
           : st.quality === 'early'
             ? `from your one measured cycle of ${st.avg} days · likely ${lo} – ${hi}`
             : `estimated from a typical 28-day cycle · log the next period to make this personal`;
+        const phaseTxt = onPeriod
+          ? `You’re on <b>day ${st.day}</b> of your period (bleeding is usually days 1–${PERIOD_LEN}).`
+          : `<b>Day ${st.day}</b> of your cycle — ${st.day - 1} day${st.day - 1 === 1 ? '' : 's'} since your last period started. Day 1 is the first day of bleeding, so you’re between periods now.`;
+        body.append(h('div', { class: 'sy-cyc-phase', html: phaseTxt }));
         body.append(h('div', { class: 'sy-cyc-pred' },
           h('div', { style: 'font-size:11.5px;color:var(--ink-dim)' }, 'Next period expected'),
           h('div', { class: 'd' }, fmtDate(st.next)),
