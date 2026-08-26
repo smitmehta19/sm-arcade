@@ -88,7 +88,11 @@ sw.js                      service worker — NETWORK-FIRST. Bump CACHE + add ne
 manifest.webmanifest       PWA manifest
 database.rules.json        Firebase rules (rooms + matches + presence; auth required) — already published
 CONTEXT.md / README.md     this file / user readme
-assets/css/styles.css      "Refined Neon glass" theme: tokens, animation lib, ALL shared component styles
+assets/css/styles.css      "Refined Neon glass" theme: DESIGN TOKENS in :root — radius ladder
+                           (--r-1..4,--r-pill; --radius/--radius-sm alias these), spacing (--sp-1..6, 4pt),
+                           type scale (--fs-1..7), motion (--dur-1..4 + --ease/--ease-back/--spring). Author
+                           new UI from these, not hardcoded px. Shared chrome (buttons/chips/inputs/icon-btns/
+                           mini-score) is swept onto them; presses use --spring to bounce back. Then tokens: tokens, animation lib, ALL shared component styles
                            + design-polish layer + CLEAN GRID override (bottom of file)
 assets/js/
   config.js                PLAYERS_DEFAULT + window.CLOUD (Firebase keys, ENABLED, ROOM)
