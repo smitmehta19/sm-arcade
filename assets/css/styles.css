@@ -383,6 +383,10 @@ body.light .bg-glow{ opacity:.6; } body.light .vignette{ box-shadow:inset 0 0 16
 .switch.on{ background:linear-gradient(135deg, var(--cyan), var(--violet)); } .switch i{ position:absolute; top:2px; left:2px; width:23px; height:23px; border-radius:50%; background:#fff; transition:left .25s var(--ease-back); }
 .switch.on i{ left:25px; }
 .hint{ font-size:12px; color:var(--ink-faint); line-height:1.5; margin-top:6px; }
+.diag{ display:flex; flex-direction:column; gap:2px; margin-bottom:10px; }
+.diag-row{ display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:13.5px; color:var(--ink-dim); }
+.diag-row:last-child{ border-bottom:none; }
+.diag-row b{ font-family:var(--font-num); font-weight:800; color:var(--ink); letter-spacing:.3px; }
 .love-note{ text-align:center; color:var(--ink-dim); font-style:italic; font-size:14px; max-width:480px; margin:24px auto 0; line-height:1.6; }
 .love-note b{ color:var(--magenta); }
 .center{ text-align:center; } .mt{ margin-top:16px; } .mb{ margin-bottom:16px; } .hidden{ display:none !important; }

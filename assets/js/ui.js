@@ -1595,9 +1595,50 @@ function renderUs() {
   set.append(h('p', { class: 'hint' }, `Get a pop-up when ${esc(s.players[partnerSeat(me)].name)} nudges you to come play (fires while the app is open).`));
   set.append(h('p', { class: 'hint' }, Store.isCloud() ? '☁ Cloud connected — you can play live with your partner across phones.' : '📱 Offline / not connected — online play needs Firebase + internet.'));
 
+  // ---- Sync & version diagnostic — compare the two phones at a glance ----
+  const diag = h('div', { class: 'card' }, h('h3', {}, 'SYNC & VERSION'));
+  const dv = h('div', { class: 'diag' });
+  const room = (window.CLOUD && window.CLOUD.ROOM) || null;
+  const roomTag = room ? '…' + String(room).slice(-6) : '—';
+  const plansN = Array.isArray(s.plans) ? s.plans.length : 0;
+  const storyN = Array.isArray(s.story) ? s.story.length : 0;
+  const verRow = h('div', { class: 'diag-row' }, h('span', {}, '🔢 App version'), h('b', { id: 'diagVer' }, '…'));
+  dv.append(
+    verRow,
+    h('div', { class: 'diag-row' }, h('span', {}, '☁ Cloud'), h('b', {}, Store.isCloud() ? 'connected' : 'offline / local')),
+    h('div', { class: 'diag-row' }, h('span', {}, '🏠 Room'), h('b', {}, roomTag)),
+    h('div', { class: 'diag-row' }, h('span', {}, '📅 Plans'), h('b', {}, String(plansN))),
+    h('div', { class: 'diag-row' }, h('span', {}, '💞 Memories'), h('b', {}, String(storyN))));
+  diag.append(dv,
+    h('p', { class: 'hint' }, 'Compare both phones: the App version AND Room must match. If they differ, tap Force update on the older one.'),
+    h('button', { class: 'btn btn-ghost btn-sm', onclick: forceUpdate }, '🔄 Force update this phone'));
+  // read the ACTUAL served version from the service-worker cache (what this phone runs)
+  (function fillVer() {
+    const el = $('#diagVer'); if (!el) return;
+    try {
+      if (window.caches && caches.keys) caches.keys().then(keys => {
+        const v = (keys.find(k => /sm-arcade-v\d+/.test(k)) || '').match(/v\d+/);
+        el.textContent = v ? v[0] : (navigator.serviceWorker && navigator.serviceWorker.controller ? 'active' : 'no SW');
+      }).catch(() => { el.textContent = '?'; });
+      else el.textContent = 'no cache API';
+    } catch (e) { el.textContent = '?'; }
+  })();
+  function forceUpdate() {
+    Store.Sound.tap();
+    const done = () => location.reload(true);
+    try {
+      const jobs = [];
+      if (window.caches && caches.keys) jobs.push(caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))));
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
+        jobs.push(navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister()))));
+      Promise.all(jobs).then(done, done);
+      setTimeout(done, 2500);                                   // safety: reload even if the above hangs
+    } catch (e) { done(); }
+  }
+
   view.append(h('div', { class: 'sec-label' }, '📱 IDENTITY'), idCard,
     h('div', { class: 'sec-label' }, '👤 PLAYERS'), profileCard(0), profileCard(1),
-    h('div', { class: 'sec-label' }, '⚙ APP'), set,
+    h('div', { class: 'sec-label' }, '⚙ APP'), set, diag,
     h('div', { class: 'card' }, h('h3', {}, 'MAKE IT AN APP'), h('p', { class: 'hint' }, 'On your phone: browser menu → “Add to Home Screen” to launch full-screen and offline. 📲')),
     h('div', { class: 'love-note', html: `Built with neon and love for <b>${esc(s.players[0].name)}</b> &amp; <b>${esc(s.players[1].name)}</b>. Miles apart, still playing. 💞` }));
 }
