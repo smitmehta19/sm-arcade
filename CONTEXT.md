@@ -3,7 +3,7 @@
 > **Read this first when picking up this project.** It captures architecture, decisions, and the
 > gotchas/mistakes that aren't obvious from the code. Keep it current when you change things.
 >
-> **Current state (2026-08-24):** 39 playable games (incl. **Scrabble**) + a Tournament meta-game, a Date Night
+> **Current state (2026-08-24):** 40 playable games (incl. **Scrabble**, **Fleabag vs Mutt**) + a Tournament meta-game, a Date Night
 > Roulette section, per-turn timers, leave-consent, badges/banter/juice, full design polish,
 > a **generic per-move motion layer** (slides/flips/drops/capture-ghosts + last-move ring),
 > canvas confetti physics, haptic feedback, and touch-press board feel.
@@ -137,6 +137,10 @@ assets/js/
                            host = White, board flips for the other seat; test hooks exposed
   games-board3.js          dominoes (draw&block), sos (6×6, extra turn on score), gops (secret bids)
   games-story.js           story-builder (coop: alternate sentences, "The End" at 6+, auto at 14)
+  games-fleabag.js         Fleabag vs Mutt — turn-based lobbing duel on a <canvas>. Flight is a PURE
+                           function of (seat,angle,power,wind) so both phones replay the same arc from
+                           4 numbers in `last`; slingshot drag to aim, preview shows only the opening
+                           slice. Wind re-rolls each turn (doubled by a Stink Bomb).
   games-duels.js           SCORE DUELS: reaction-duel, speed-math, snake-duel, 2048-race.
                            Async local runs — no `turn`; state = {seed, results:[null,null]};
                            both play the SAME seeded run locally in a body-mounted fullscreen
@@ -343,3 +347,11 @@ Active match at Firebase `matches/<ROOM>/active`:
 - Optional: a "surprise spin" Date Night shortcut on the home screen; result/rules overlays could get the same
   accent-glow polish; profile photos.
 - Haptics (`navigator.vibrate`) ride the sound toggle (Android only; iOS Safari ignores it).
+
+## Gotcha — COMMIT BEFORE YOU ANIMATE
+Fleabag originally committed the throw inside the flight-animation callback. That
+stalls forever if the phone is locked mid-flight (`requestAnimationFrame` does not
+fire on a hidden page) — the move is lost and the turn strands BOTH players. Commit
+the state first and treat animation as decoration replayed on the next repaint from
+the committed state (same cross-render pattern as Memory's `memPrev`). This is also
+why headless tests saw 0 commits: headless pages are hidden, so RAF never runs.
