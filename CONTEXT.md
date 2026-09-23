@@ -355,3 +355,13 @@ fire on a hidden page) — the move is lost and the turn strands BOTH players. C
 the state first and treat animation as decoration replayed on the next repaint from
 the committed state (same cross-render pattern as Memory's `memPrev`). This is also
 why headless tests saw 0 commits: headless pages are hidden, so RAF never runs.
+
+## Gotcha — HIDDEN PAGES DO NOT ANIMATE (test harnesses must shim RAF)
+`requestAnimationFrame` never fires on a hidden page, and BOTH test environments here
+are hidden: headless Chrome, and the desktop Browser pane when collapsed. So any
+animation path is effectively UNTESTED unless the harness shims it:
+`window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 16)`
+in the TEST page only. This is how Fleabag shipped with its own-throw arc invisible:
+the 30-check suite passed because it only ever exercised pure logic and single renders.
+Also: a repaint mid-animation detaches the canvas, so anything replayed across renders
+must keep progress at MODULE level and only mark the event 'seen' when it COMPLETES.

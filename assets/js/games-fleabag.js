@@ -90,7 +90,8 @@
   }
 
   const freshPowers = () => ({ pt: true, da: true, sb: true, pu: true });
-  let seenShot = 0;          // last shot id THIS device has animated (survives re-renders)
+  let seenShot = 0;          // last shot FULLY played on this device
+  let inFlight = null;       // { id, i } mid-arc progress — module level so a repaint can resume it
 
   Games.register({
     id: 'fleabag', name: 'Fleabag vs Mutt', emoji: '🐱', category: 'Duel', accent: '#ffd66b',
@@ -108,7 +109,7 @@
     render(ctx) {
       const st = ctx.state, me = ctx.me, foe = 1 - me;
       const mine = CHARS[me], theirs = CHARS[foe];
-      if (!st.last) seenShot = 0;                         // new match → allow replays again
+      if (!st.last) { seenShot = 0; inFlight = null; }    // new match → allow replays again
 
       const wrap = ctx.h('div', { class: 'fb-wrap' });
       ctx.root.append(ctx.turnBar({ scores: [st.hp[0], st.hp[1]] }), wrap);
@@ -200,15 +201,20 @@
       }
 
       /* ---------------- flight replay ---------------- */
-      function fly(shot, done) {
+      function fly(shot, from, done) {
         busy = true;
-        flying = { pts: simulate(shot.seat, shot.ang, shot.pow, shot.wind).pts, i: 0, seat: shot.seat };
+        const pts = simulate(shot.seat, shot.ang, shot.pow, shot.wind).pts;
+        flying = { pts, i: from || 0, seat: shot.seat };
+        inFlight = { id: shot.id, i: flying.i };        // module level → outlives this render
         (function step() {
+          // A repaint mid-arc detaches THIS canvas. Bail and let the new render resume
+          // from inFlight. (This was the bug behind your own throw being invisible: the
+          // commit's repaint killed the arc, and the shot was already marked seen.)
           if (!flying || !cv.isConnected) { busy = false; return; }
-          flying.i += 4;
+          flying.i += 4; inFlight.i = flying.i;
           draw();
-          if (flying.i < flying.pts.length - 1) requestAnimationFrame(step);
-          else { flying = null; busy = false; draw(); if (done) done(); }
+          if (flying.i < pts.length - 1) requestAnimationFrame(step);
+          else { flying = null; inFlight = null; busy = false; seenShot = shot.id; draw(); if (done) done(); }
         })();
       }
 
@@ -300,9 +306,10 @@
       // Replay the latest shot once per device — for BOTH players, so the
       // thrower watches their own arc on the post-commit repaint.
       if (st.last && st.last.id > seenShot) {
-        const sh = st.last; seenShot = sh.id;
+        const sh = st.last;
+        const resume = (inFlight && inFlight.id === sh.id) ? inFlight.i : 0;   // carry on mid-arc
         const ours = sh.seat === me;
-        fly(sh, () => {
+        fly(sh, resume, () => {
           ctx.msg(
             sh.outcome === 'hit' ? (ours ? `💥 Direct hit! −${sh.dmg}` : `💥 ${ctx.players[sh.seat].name} got you for ${sh.dmg}`)
             : sh.outcome === 'graze' ? `😬 Glancing blow · −${sh.dmg}`

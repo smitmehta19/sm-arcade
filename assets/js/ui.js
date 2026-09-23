@@ -912,11 +912,14 @@ function requestEndGame() {
   if (!currentMatch) { location.hash = '#/'; return; }
   if (currentMatch.status !== 'active' || !isOnline(partner)) { exitMatch(); return; } // nothing live, or partner away → just leave
   Store.Sound.tap();
-  optimistic({ endReq: me });
+  optimistic({ endReq: me, t: Date.now() });
   Store.Net.updateMatch({ endReq: me, t: Date.now() });
 }
 function cancelEndGame() { Store.Sound.tap(); optimistic({ endReq: null }); Store.Net.updateMatch({ endReq: null, t: Date.now() }); }
+const END_ESCAPE_MS = 6000;   // how long you wait before 'Leave anyway' appears
 function agreeEndGame() { Store.Sound.good(); exitMatch(); }
+// unilateral bail-out — only offered after the partner has had a fair chance to answer
+function forceEndGame() { Store.Sound.tap(); exitMatch(); }
 
 /* ============================================================
    NETWORKED GAME STAGE
@@ -1083,8 +1086,20 @@ function renderStage(gameId) {
   function showEndOverlay(m, mode) {
     const partner = partnerSeat(me);
     if (mode === 'endWait') {
-      Overlay.show({ emoji: '🤝', title: 'Leave the game?', sub: `Waiting for ${esc(s.players[partner].name)} to agree…`, party: false },
-        [{ label: 'Keep playing', primary: true, onClick: cancelEndGame }]);
+      // Consent is the polite default, but NEVER trap someone in a game: if the
+      // partner hasn't answered (asleep, phone down, stale presence), offer a way
+      // out. Previously the only button here was "Keep playing" — a dead end.
+      const waited = Date.now() - (m.t || Date.now());
+      const btns = [{ label: 'Keep playing', primary: true, onClick: cancelEndGame }];
+      if (waited >= END_ESCAPE_MS) btns.push({ label: 'Leave anyway', onClick: forceEndGame });
+      else setTimeout(() => {
+        if (overlayMode === 'endWait' && currentMatch && currentMatch.endReq === me) showEndOverlay(currentMatch, 'endWait');
+      }, END_ESCAPE_MS - waited + 150);
+      Overlay.show({ emoji: '🤝', title: 'Leave the game?',
+        sub: waited >= END_ESCAPE_MS
+          ? `${esc(s.players[partner].name)} hasn’t answered — you can leave without them.`
+          : `Waiting for ${esc(s.players[partner].name)} to agree…`,
+        party: false }, btns);
     } else { // endAsk
       Store.Sound.bad();
       Overlay.show({ emoji: '🚪', title: `${esc(s.players[m.endReq].name)} wants to leave the game`, sub: 'Agree to end it and return to the lobby?', party: false },
