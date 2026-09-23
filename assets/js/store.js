@@ -19,7 +19,7 @@ const Store = (() => {
     dateNight: { done: [], removed: [], faved: [] }, // shared date-roulette lists
     plans: [], // shared calendar entries (see planAdd) — timed entries store UTC ms, so each viewer sees their own local time
     plansDeleted: [], // tombstones [{id,t}] so deletions survive the per-entry plan merge
-    story: [],        // Our Story: {kind:'moment', emoji,title,date?,recur?,place?,lat?,lon?,note?} + {kind:'period', start}
+    story: [],        // Our Story: {kind:'moment', emoji,title,date?,recur?,place?,lat?,lon?,note?}
     storyDeleted: [], // tombstones for story (same merge protection as plans)
     meet: { nextAt: null, lastMetAt: null }, // shared reunion countdown: ms timestamps (synced)
     settings: { sound: true, theme: 'dark' },
@@ -277,9 +277,11 @@ const Store = (() => {
     if (e && e.kind === 'us' && e.seat !== seat) { e.confirmed = true; save(); }
   }
 
-  /* ---- Our Story: milestone moments + period logs (same merge safety as plans) ----
+  /* ---- Our Story: milestone moments (same merge safety as plans) ----
      moment = {id, kind:'moment', emoji, title, date?'YYYY-MM-DD', recur?, place?, lat?, lon?, note?}
-     period = {id, kind:'period', start:'YYYY-MM-DD'} */
+     NOTE: cycle/period tracking was removed by request (v65). Old {kind:'period'}
+     rows may still exist in synced stores; nothing reads or renders them, and the
+     Big Dates list filters on kind==='moment', so they stay invisible. */
   function storyArr() { if (!Array.isArray(state.story)) state.story = []; return state.story; }
   function storySave(item) {
     storyArr();

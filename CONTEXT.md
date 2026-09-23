@@ -56,8 +56,8 @@
 > "Meera sees 11:30 PM – 3:30 AM (Thu)" line and the composer previews it live. Timezone is
 > per-DEVICE — switching identity on one phone does NOT change the zone (and briefly stamps
 > the wrong seat until the real phone next opens; self-corrects).
-> **Our Story page** (`story.js`, ♥ topbar button): milestone dates + mapped places + a discreet
-> cycle tracker — see the file map for the place-picking and cycle-maths gotchas.
+> **Our Story page** (`story.js`, ♥ topbar button): milestone dates + mapped places — see the
+> file map for the place-picking gotchas. (Cycle/period tracking was REMOVED in v65 by request.)
 > **iOS:** PNG apple-touch-icon (iOS ignores SVG) + standalone meta tags; Web Share Target is
 > Chromium-only (MDN compat: safari_ios mirrors safari = false), so iPhone uses the paste flow.
 > **Service worker cache: `sm-arcade-v57`** (v42 fixed board wobble: explicit 1fr grid rows).
@@ -152,7 +152,7 @@ assets/js/
   datenight.js             window.renderDateNight — slot-machine UI + its own injected CSS
   plans.js                 window.renderPlans — shared calendar (#/plans tab)
   story.js                 window.renderStory — "Our Story" (#/story, ♥ topbar button): hero day-count,
-                           countdown chips, OSM place polaroids, big dates, discreet cycle tracker.
+                           countdown chips, OSM place polaroids, big dates.
                            ONE item type does both: {kind:'moment', emoji,title,date?,recur?,place?,lat?,lon?,note?}
                            — a date puts it in the list/chips, lat+lon puts it in the places strip, both = both.
                            Period logs are {kind:'period', start}. Static OSM tiles (2×2 grid offset so the pin
@@ -176,12 +176,6 @@ assets/js/
                            not used; link-pasting gets Google's data without the account.
                            ⚠ Testing these from file:// FAILS (opaque origin blocks cross-origin fetch) — always
                            test search over http (`python -m http.server` in the repo) or you'll chase ghosts.
-                           ⚠ CYCLE MATHS: only gaps of **21–45 days** count as measured cycles. Normal is
-                           21–35 clinically and >35 is "infrequent", so a longer gap means a period wasn't
-                           logged — counting one (56d) once predicted a date two months out from a day-1 start.
-                           Longer gaps → excluded + shown as a warning; <21d → flagged as a double log.
-                           `quality`: good (≥2 measured) · early (1, ±3) · estimate (0 → labelled 28-day
-                           assumption). The card/stats/collapsed line must all quote the SAME avg.
                            ⚠ day maths uses Date.UTC(y,m,d) — local-noon timestamps drift ±1 across DST.
   app.js                   boot, chrome wiring, nav SVG icons, leave-guard, initNet + initCloud, router, SW reg
 ```

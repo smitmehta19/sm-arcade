@@ -1,7 +1,7 @@
 /* ============================================================
    OUR STORY (route #/story, ♥ button in the topbar)
    "Days of Us" layout: hero day-count → countdown chips →
-   swipeable place polaroids → the big dates → discreet cycle.
+   swipeable place polaroids → the big dates.
 
    One memory can carry BOTH a date and a place, because that's how
    memories actually work ("where we met" is a day AND a spot):
@@ -16,9 +16,6 @@
      2. type a name → Photon + Nominatim searched in parallel;
      3. drop a pin by dragging the map — works for places no database
         knows (e.g. a small hotel that simply isn't in OpenStreetMap).
-   Cycle: prediction = last start + rolling average of recent cycles,
-   counting only 21–45 day gaps (longer = an unlogged period, see
-   cycleStats) with a ± window from real variability.
    ============================================================ */
 (function () {
   const css = `
@@ -79,18 +76,6 @@
   .sy-row .cd{ flex:0 0 auto; font-family:var(--font-num); font-weight:800; color:var(--p1); font-size:13px; text-align:right; }
   .sy-row .cd small{ display:block; color:var(--ink-faint); font-weight:400; font-size:10px; font-family:var(--font-body); }
   .sy-row .cd.soon{ color:var(--magenta); }
-  /* cycle */
-  .sy-cyc-label{ margin-top:24px; }
-  .sy-cyc-phase{ font-size:12.5px; color:var(--ink-dim); line-height:1.5; margin-bottom:11px; }
-  .sy-cyc-phase b{ color:var(--ink); }
-  .sy-cyc{ margin-top:0; border-radius:14px; background:var(--panel); border:1px solid var(--line); overflow:hidden; }
-  .sy-cyc-line{ display:flex; align-items:center; gap:10px; padding:13px 15px; width:100%; text-align:left;
-    color:var(--ink-dim); font-size:13.5px; background:none; border:none; }
-  .sy-cyc-line b{ color:var(--ink); } .sy-cyc-line .ex{ margin-left:auto; color:var(--ink-faint); font-size:12px; }
-  .sy-cyc-body{ padding:0 15px 15px; }
-  .sy-cyc-pred{ text-align:center; padding:12px; border-radius:12px; background:var(--bg-2); margin-bottom:12px; }
-  .sy-cyc-pred .d{ font-family:var(--font-num); font-weight:900; font-size:22px; color:var(--gold); }
-  .sy-cyc-pred .w{ font-size:11.5px; color:var(--ink-faint); margin-top:3px; }
   .sy-bar{ height:9px; border-radius:99px; background:var(--bg-2); overflow:hidden; margin-bottom:10px; }
   .sy-bar i{ display:block; height:100%; background:linear-gradient(90deg, var(--violet), var(--magenta)); transition:width .5s var(--ease); }
   .sy-stats{ display:flex; gap:7px; flex-wrap:wrap; font-size:11px; color:var(--ink-faint); margin-bottom:12px; }
@@ -193,43 +178,6 @@
     let next = new Date(y, d.getMonth(), d.getDate(), 12);
     if (daysBetween(todayStr(), dstr(next)) < 0) next = new Date(y + 1, d.getMonth(), d.getDate(), 12);
     return { date: dstr(next), days: daysBetween(todayStr(), dstr(next)), years: next.getFullYear() - d.getFullYear() };
-  }
-
-  /* ---------- cycle prediction ----------
-     Calendar method: next = last start + average of recent cycles.
-     ⚠ A gap is only counted as a REAL cycle if it's 21–45 days. Clinically a
-     normal cycle is 21–35 days and anything over 35 is "infrequent", so a
-     56-day gap is far more likely to be a period that never got logged than a
-     genuine 56-day cycle — counting it once predicted Oct 13 from an Aug 18
-     start, which is nonsense. Out-of-range gaps are excluded from the average
-     and surfaced to the user so they can log the missing one.
-     Quality: good (≥2 measured cycles) · early (1) · estimate (0 → 28 days). */
-  const CYCLE_MIN = 21, CYCLE_MAX = 45;
-  function cycleStats(startsRaw) {
-    const starts = [...new Set(startsRaw || [])].sort();
-    if (!starts.length) return null;
-    const last = starts[starts.length - 1];
-    const gaps = [];
-    for (let i = 1; i < starts.length; i++) gaps.push({ from: starts[i - 1], to: starts[i], len: dayNo(starts[i]) - dayNo(starts[i - 1]) });
-    const valid = gaps.filter(g => g.len >= CYCLE_MIN && g.len <= CYCLE_MAX);
-    const skipped = gaps.filter(g => g.len > CYCLE_MAX);       // probably an unlogged period
-    const tooShort = gaps.filter(g => g.len < CYCLE_MIN);      // double-log or spotting
-    const recent = valid.slice(-6).map(g => g.len);
-    const quality = recent.length >= 2 ? 'good' : recent.length === 1 ? 'early' : 'estimate';
-    const avg = recent.length ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) : 28;
-    const spread = recent.length > 1 ? Math.max(...recent.map(l => Math.abs(l - avg))) : 0;
-    const window = quality === 'good' ? Math.min(7, Math.max(2, Math.round(spread))) : (quality === 'early' ? 3 : 4);
-    const next = dstr(new Date(parse(last).getTime() + avg * 864e5));
-    return {
-      last, avg, window, next, quality,
-      day: daysBetween(last, todayStr()) + 1,                  // day 1 = first day of the period
-      until: daysBetween(todayStr(), next),
-      logged: starts.length,
-      cycles: recent.length,
-      skipped, tooShort,
-      confident: quality === 'good',
-      starts,
-    };
   }
 
   /* ---------- static OSM mini-map (no library, no key) ---------- */
@@ -496,7 +444,6 @@
     ];
   }
 
-  let cycOpen = false;   // discreet by default on every visit
 
   window.renderStory = function renderStory() {
     const s = Store.get(); const root = $('#view'); root.innerHTML = '';
@@ -508,7 +455,6 @@
     }
     const items = Array.isArray(s.story) ? s.story : [];
     const moments = items.filter(i => i.kind === 'moment');
-    const periods = items.filter(i => i.kind === 'period');
 
     root.append(h('div', { class: 'sy-head' },
       h('h2', {}, '💞 OUR STORY'),
@@ -595,78 +541,6 @@
       });
     }
 
-    // ---- cycle — its OWN section (kept out of Big Dates), discreet by default ----
-    const st = cycleStats(periods.map(p => p.start));
-    const PERIOD_LEN = 5;                                   // typical bleeding days; we only log starts
-    const onPeriod = st && st.day <= PERIOD_LEN;
-    wrap.append(h('div', { class: 'sec-label sy-cyc-label' }, '🌙 CYCLE'));
-    const cyc = h('div', { class: 'sy-cyc' });
-    const line = h('button', { class: 'sy-cyc-line', onclick: () => { cycOpen = !cycOpen; Store.Sound.tap(); renderStory(); } },
-      onPeriod ? '🩸 ' : '🌙 ',
-      st ? h('span', {}, onPeriod
-            ? [h('b', {}, `Period · day ${st.day}`)]
-            : [h('b', {}, `Cycle day ${st.day}`), ' · between periods'])
-         : h('span', {}, 'Cycle tracker'),
-      h('span', { class: 'ex' }, st
-        ? (st.until >= 0 ? `next in ~${st.until}d ${cycOpen ? '▾' : '▸'}` : `${Math.abs(st.until)}d late ${cycOpen ? '▾' : '▸'}`)
-        : `tap to start ${cycOpen ? '▾' : '▸'}`));
-    cyc.append(line);
-    if (cycOpen) {
-      const body = h('div', { class: 'sy-cyc-body' });
-      if (st) {
-        const lo = fmtShort(dstr(new Date(parse(st.next).getTime() - st.window * 864e5)));
-        const hi = fmtShort(dstr(new Date(parse(st.next).getTime() + st.window * 864e5)));
-        const timing = st.until >= 0 ? `in ${st.until} days` : `${Math.abs(st.until)} days late`;
-        const blurb = st.quality === 'good'
-          ? `likely ${lo} – ${hi} · ${timing}`
-          : st.quality === 'early'
-            ? `from your one measured cycle of ${st.avg} days · likely ${lo} – ${hi}`
-            : `estimated from a typical 28-day cycle · log the next period to make this personal`;
-        const phaseTxt = onPeriod
-          ? `You’re on <b>day ${st.day}</b> of your period (bleeding is usually days 1–${PERIOD_LEN}).`
-          : `<b>Day ${st.day}</b> of your cycle — ${st.day - 1} day${st.day - 1 === 1 ? '' : 's'} since your last period started. Day 1 is the first day of bleeding, so you’re between periods now.`;
-        body.append(h('div', { class: 'sy-cyc-phase', html: phaseTxt }));
-        body.append(h('div', { class: 'sy-cyc-pred' },
-          h('div', { style: 'font-size:11.5px;color:var(--ink-dim)' }, 'Next period expected'),
-          h('div', { class: 'd' }, fmtDate(st.next)),
-          h('div', { class: 'w' }, blurb)));
-        body.append(h('div', { class: 'sy-bar' }, h('i', { style: `width:${Math.max(3, Math.min(100, Math.round(st.day / st.avg * 100)))}%` })));
-        body.append(h('div', { class: 'sy-stats' },
-          h('span', {}, st.quality === 'estimate' ? 'avg 28 days (assumed)' : `avg ${st.avg} days`),
-          h('span', {}, `last: ${fmtShort(st.last)}`),
-          h('span', {}, `${st.logged} logged`),
-          st.cycles ? h('span', {}, `${st.cycles} cycle${st.cycles === 1 ? '' : 's'} measured`) : '',
-          st.quality === 'good' ? h('span', {}, `±${st.window} days`) : ''));
-        // a gap far longer than any real cycle almost always means a missed log
-        st.skipped.forEach(g => body.append(h('div', { class: 'sy-warn' },
-          `⚠️ The ${g.len}-day gap between ${fmtShort(g.from)} and ${fmtShort(g.to)} is longer than a normal cycle (21–35 days), so it wasn’t used for the average — it looks like a period in between wasn’t logged. Add it below and the prediction sharpens right away.`)));
-        st.tooShort.forEach(g => body.append(h('div', { class: 'sy-warn' },
-          `⚠️ ${fmtShort(g.from)} and ${fmtShort(g.to)} are only ${g.len} days apart — too close for two cycles, so that pair was skipped. Remove one if it was logged twice.`)));
-      }
-      const dinp = h('input', { type: 'date', value: todayStr(), max: todayStr() });
-      body.append(h('div', { class: 'sy-log' },
-        h('button', { class: 'btn btn-sm btn-primary', onclick: () => logPeriod(todayStr()) }, '🌙 Started today'),
-        dinp,
-        h('button', { class: 'btn btn-sm', onclick: () => logPeriod(dinp.value) }, 'Log this date')));
-      if (st && st.starts.length) {
-        const hist = h('div', { class: 'sy-hist' });
-        st.starts.slice().reverse().slice(0, 12).forEach(d => {
-          const item = periods.find(p => p.start === d);
-          hist.append(h('span', {}, fmtShort(d), h('b', { onclick: () => { if (item) { Store.storyRemove(item.id); Store.Sound.bad(); renderStory(); } } }, '✕')));
-        });
-        body.append(hist);
-      }
-      body.append(h('div', { class: 'sy-note' }, 'Prediction uses the average of your last cycles — a guide, not a guarantee. Stress, travel and illness can shift things. 💛'));
-      cyc.append(body);
-    }
-    wrap.append(cyc);
-
-    function logPeriod(date) {
-      if (!date) return;
-      if (periods.some(p => p.start === date)) { Store.Sound.bad(); return; }
-      Store.storySave({ kind: 'period', start: date });
-      Store.Sound.good(); cycOpen = true; renderStory();
-    }
   };
 
   /* ---------- add / edit sheet ---------- */
@@ -855,5 +729,5 @@
     function close() { back.remove(); }
   }
 
-  window._storyTest = { cycleStats, nextAnniversary, tileXY, daysBetween, parseCoords, parseMapsUrl, extractUrl, sharedName, isShortMapLink, expandShortLink, searchPlaces, worldPx, worldLatLon, openPinPicker };
+  window._storyTest = { nextAnniversary, tileXY, daysBetween, parseCoords, parseMapsUrl, extractUrl, sharedName, isShortMapLink, expandShortLink, searchPlaces, worldPx, worldLatLon, openPinPicker };
 })();
