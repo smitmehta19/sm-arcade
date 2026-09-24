@@ -3,7 +3,7 @@
 > **Read this first when picking up this project.** It captures architecture, decisions, and the
 > gotchas/mistakes that aren't obvious from the code. Keep it current when you change things.
 >
-> **Current state (2026-08-24):** 40 playable games (incl. **Scrabble**, **Fleabag vs Mutt**) + a Tournament meta-game, a Date Night
+> **Current state (2026-08-24):** 41 playable games (incl. **Scrabble**, **Fleabag vs Mutt**, **Pocket Tanks**) + a Tournament meta-game, a Date Night
 > Roulette section, per-turn timers, leave-consent, badges/banter/juice, full design polish,
 > a **generic per-move motion layer** (slides/flips/drops/capture-ghosts + last-move ring),
 > canvas confetti physics, haptic feedback, and touch-press board feel.
@@ -141,6 +141,12 @@ assets/js/
                            function of (seat,angle,power,wind) so both phones replay the same arc from
                            4 numbers in `last`; slingshot drag to aim, preview shows only the opening
                            slice. Wind re-rolls each turn (doubled by a Stink Bomb).
+  games-tanks.js           Pocket Tanks — points-based artillery: same 6-weapon arsenal each, fire every weapon
+                           once, most damage wins. Seeded terrain generated ONCE by the host and stored in state
+                           (never regenerated — engine trig can differ). resolveShot() is pure; the thrower commits
+                           terrain+scores, the partner replays from last.prev and snaps to the committed terrain.
+                           PERSISTENT module-level <canvas> + loop (scene S) re-attached on every repaint, so
+                           animations can't be killed by a repaint at all. Own-goal points go to the partner.
   games-duels.js           SCORE DUELS: reaction-duel, speed-math, snake-duel, 2048-race.
                            Async local runs — no `turn`; state = {seed, results:[null,null]};
                            both play the SAME seeded run locally in a body-mounted fullscreen
@@ -359,3 +365,20 @@ in the TEST page only. This is how Fleabag shipped with its own-throw arc invisi
 the 30-check suite passed because it only ever exercised pure logic and single renders.
 Also: a repaint mid-animation detaches the canvas, so anything replayed across renders
 must keep progress at MODULE level and only mark the event 'seen' when it COMPLETES.
+
+## Gotcha — resizing a canvas WIPES it (redraw in fit)
+Setting canvas.width/height clears the bitmap. If the loop is paused (hidden page, or a frozen
+test harness) the canvas stays blank until the next frame. Pocket Tanks' fit() redraws right
+after resizing, which also removes the blank flash when the phone is rotated.
+
+## Pattern — result card waits for the final animation (def.resultDelay)
+A game can export `resultDelay()` → ms still needed to finish animating its last move. The stage
+adds it (capped 5s, via resultHold) before showing the game-over / tournament cards. Fleabag and
+Pocket Tanks use it so the knockout shot is actually seen instead of hidden behind the win card.
+
+## Landscape mode (opt-in, Fleabag + Pocket Tanks only)
+`Landscape` in ui.js: the toggle adds body.land. Android: requestFullscreen + orientation.lock
+rotates the screen for you. iPhone Safari cannot lock orientation, so body.land only switches on
+a landscape LAYOUT that applies once the phone is turned (a pill says so while upright). CSS is
+scoped with :has(.pt-cv, .fb-cv) so no other game changes. Leaving the game, or swiping out of
+fullscreen, turns it off. Manifest stays orientation:portrait for the rest of the app.

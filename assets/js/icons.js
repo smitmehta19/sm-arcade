@@ -38,6 +38,9 @@ const Icons = (() => {
     'codenames-duet': wrap('<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M3.5 9.5h17M8 5.5v13M16 5.5v13"/><circle cx="12" cy="14" r="1.4" ' + fc + '/>'),
     'draw-guess': wrap('<path d="M3 21l1.2-4.2L14 7l3 3-9.8 9.8z"/><path d="M13 8l3 3"/><path d="M16.5 4.5l3 3a1.4 1.4 0 010 2L18 11l-3-3 1.5-1.5a1.4 1.4 0 012-2z" ' + fc + '/>'),
     'ultimate-ttt': wrap('<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M9 3.5v17M15 3.5v17M3.5 9h17M3.5 15h17" stroke-width="1.2"/><path d="M5 5.7h2.3M5.7 5v2.3" stroke-width="1.5"/><circle cx="18.8" cy="18.8" r="1.4" stroke-width="1.5"/>'),
+    // ---- artillery duels ----
+    'fleabag': wrap('<path d="M5.5 11V4.8l3.8 3.1a7.6 7.6 0 015.4 0l3.8-3.1V11"/><path d="M5.5 11a6.5 6.2 0 0013 0"/><circle cx="9.6" cy="12.2" r=".95" ' + fc + '/><circle cx="14.4" cy="12.2" r=".95" ' + fc + '/><path d="M11.1 14.7h1.8l-.9.9z"/><path d="M3 13.2l2.6.4M3.2 16l2.6-.7M21 13.2l-2.6.4M20.8 16l-2.6-.7" stroke-width="1.2"/>'),
+    'pocket-tanks': wrap('<rect x="3.5" y="14" width="17" height="4.8" rx="2.4"/><circle cx="7.2" cy="16.4" r=".9" ' + fc + '/><circle cx="12" cy="16.4" r=".9" ' + fc + '/><circle cx="16.8" cy="16.4" r=".9" ' + fc + '/><path d="M6.2 14l1.7-3.5h8.2l1.7 3.5"/><path d="M13.6 10.5l5.6-4.2"/><path d="M20.6 3.4l.4 1.3 1.3.4-1.3.4-.4 1.3-.4-1.3-1.3-.4 1.3-.4z" ' + fc + '/>'),
     // ---- batch 3 (chess/dominoes/sos/gops/story + score duels) ----
     'scrabble': wrap('<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M3.5 9h17M3.5 15h17M9 3.5v17M15 3.5v17" stroke-width="1.1" opacity=".55"/><path d="M5.6 7.4l1.2-2.6 1.2 2.6M5.9 6.7h1.8" stroke-width="1.3"/><circle cx="17.6" cy="17.4" r="1" ' + fc + '/>'),
     'chess': wrap('<path d="M9 6.5C9 5 10.3 3.5 12.2 3.5c2.6 0 4.3 2.2 4.3 4.6 0 2.6-1.6 4-3 5.4h-3c.5-1.4.3-2.4-.6-3.3L8.2 8.5l1.6-.6z"/><path d="M9 16.5h6.6l1 3.5H8z M10 13.5h5v3h-5z"/>'),

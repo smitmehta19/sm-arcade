@@ -831,3 +831,44 @@ body.paused .mini-tally, body.paused .fx-stamp.fire{ animation-play-state:paused
   .fx-ripple, .fx-edge, .fx-stamp, .fx-handoff{ animation:none !important; opacity:0 !important; }
   ::view-transition-old(root), ::view-transition-new(root){ animation:none !important; }
 }
+
+/* ============================================================
+   LANDSCAPE MODE — opt-in, artillery games only (Fleabag, Pocket Tanks)
+   The canvas pins to the left at the biggest size the screen allows;
+   scores, controls, messages and End game scroll in a column on the
+   right. Scoped with :has() so no other game is ever affected.
+   ============================================================ */
+.land-btn{ display:block; margin:2px auto 0; padding:8px 18px; border-radius:var(--r-pill); font-size:12px; font-weight:700;
+  letter-spacing:.3px; background:var(--panel-2); border:1px solid var(--glass-brd); color:var(--ink-dim);
+  transition:transform var(--dur-1) var(--spring), color var(--dur-2), border-color var(--dur-2); }
+.land-btn:active{ transform:scale(.95); }
+.land-btn[aria-pressed="true"]{ color:var(--ink); border-color:var(--gold); }
+.land-hint{ display:none; }
+@media (orientation: portrait){
+  body.land .land-hint{ display:flex; align-items:center; gap:10px; position:fixed; left:50%; transform:translateX(-50%);
+    top:calc(12px + var(--safe-t)); z-index:70; padding:7px 7px 7px 16px; border-radius:var(--r-pill);
+    background:rgba(5,7,15,.92); border:1px solid var(--glass-brd); color:var(--ink); font-size:12.5px; font-weight:600;
+    white-space:nowrap; box-shadow:var(--shadow-soft); }
+  body.land .land-hint button{ padding:5px 11px; border-radius:var(--r-pill); background:var(--bg-2);
+    border:1px solid var(--line); color:var(--ink-dim); font-size:11.5px; font-weight:700; }
+}
+@media (orientation: landscape){
+  body.land{ --land-w:min(66vw, calc((100vh - 16px) * 1.6667)); }
+  @supports (height: 100dvh){ body.land{ --land-w:min(66vw, calc((100dvh - 16px) * 1.6667)); } }
+  body.land .topbar, body.land .bottomnav, body.land .sync-pill,
+  body.land .stage:has(.pt-cv, .fb-cv) .stage-head{ display:none !important; }
+  body.land .view:has(.pt-cv, .fb-cv){ max-width:none; margin:0; padding:8px calc(10px + env(safe-area-inset-right, 0px)) 16px 0; }
+  body.land .stage:has(.pt-cv, .fb-cv){ padding-left:calc(var(--land-w) + 20px + env(safe-area-inset-left, 0px)); }
+  body.land .pt-cv, body.land .fb-cv{ position:fixed; z-index:5; top:8px; left:calc(8px + env(safe-area-inset-left, 0px));
+    width:var(--land-w) !important; }
+  body.land .stage:has(.pt-cv, .fb-cv) .game-msg{ margin:8px 0 2px; font-size:13px; }
+  body.land .stage:has(.pt-cv, .fb-cv) .end-btn{ margin:10px auto 4px; }
+  body.land .stage:has(.pt-cv, .fb-cv){ padding-bottom:64px; }            /* scroll clear of the chat bubble */
+  body.land .stage:has(.pt-cv, .fb-cv) .turnbar{ gap:6px; margin-bottom:8px; }
+  body.land .stage:has(.pt-cv, .fb-cv) .turnchip{ min-width:0; flex:1 1 0; padding:7px 8px; font-size:13px; }
+  body.land .stage:has(.pt-cv, .fb-cv) .turnchip .you-tag{ display:none; }
+  /* the way out sits on the battlefield's corner, so it never scrolls out of reach */
+  body.land .stage:has(.pt-cv, .fb-cv) .land-btn{ position:fixed; z-index:6; margin:0; top:14px;
+    left:calc(14px + env(safe-area-inset-left, 0px)); padding:6px 12px; font-size:11px;
+    background:rgba(5,7,15,.62); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
+}

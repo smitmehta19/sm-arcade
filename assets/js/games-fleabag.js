@@ -91,12 +91,17 @@
 
   const freshPowers = () => ({ pt: true, da: true, sb: true, pu: true });
   let seenShot = 0;          // last shot FULLY played on this device
-  let inFlight = null;       // { id, i } mid-arc progress — module level so a repaint can resume it
+  let inFlight = null;       // { id, i, n, hitDone, tail } — module level so a repaint can resume it
+  // impact aftermath (particles, flinch, shake, the draining health bar) — also module level
+  const fx = { parts: [], floats: [], shake: 0, flinch: [0, 0], hp: null };
+  const TAIL = 55;           // frames of aftermath once the projectile lands
 
-  Games.register({
+  const DEF = {
     id: 'fleabag', name: 'Fleabag vs Mutt', emoji: '🐱', category: 'Duel', accent: '#ffd66b',
     tagline: 'Lob junk over the fence · mind the wind.',
-    test: { simulate, throwFrom, torsoOf, VW, VH, GROUND, FENCE_X, FENCE_TOP, MAX_POW },
+    // the knockout shot is still in the air when the match finishes — hold the result card
+    resultDelay: () => inFlight ? Math.round((Math.max(0, (inFlight.n - inFlight.i) / 4) + Math.max(0, TAIL - inFlight.tail)) * 16.7) + 250 : 0,
+    test: { simulate, throwFrom, torsoOf, VW, VH, GROUND, FENCE_X, FENCE_TOP, MAX_POW, fx, replay: () => ({ inFlight, seenShot }) },
     init: host => ({
       hp: [100, 100], turn: host, wind: rollWind(),
       powers: [freshPowers(), freshPowers()],
@@ -109,15 +114,18 @@
     render(ctx) {
       const st = ctx.state, me = ctx.me, foe = 1 - me;
       const mine = CHARS[me], theirs = CHARS[foe];
-      if (!st.last) { seenShot = 0; inFlight = null; }    // new match → allow replays again
+      if (!st.last) { seenShot = 0; inFlight = null; fx.parts = []; fx.floats = []; fx.hp = null; }   // new match
 
       const wrap = ctx.h('div', { class: 'fb-wrap' });
-      ctx.root.append(ctx.turnBar({ scores: [st.hp[0], st.hp[1]] }), wrap);
+      // don't spoil the shot: until it lands, the bar shows health from BEFORE it
+      const pending = !!(st.last && st.last.prevHp && st.last.id > seenShot);
+      ctx.root.append(ctx.turnBar({ scores: pending ? st.last.prevHp.slice() : [st.hp[0], st.hp[1]] }), wrap);
 
       const cv = ctx.h('canvas', { class: 'fb-cv' });
       const hint = ctx.h('div', { class: 'fb-hint' });
       const powRow = ctx.h('div', { class: 'fb-powers' });
       wrap.append(cv, hint, powRow);
+      if (window.Landscape) wrap.append(Landscape.button());
 
       const g = cv.getContext('2d');
       let scale = 1, aim = null, flying = null, busy = false;
@@ -133,13 +141,16 @@
 
       /* ---------------- scene ---------------- */
       function draw() {
-        g.clearRect(0, 0, VW, VH);
+        g.clearRect(-24, -24, VW + 48, VH + 48);
+        if (!busy || !fx.hp) fx.hp = [hpNow(0), hpNow(1)];
+        g.save();
+        if (fx.shake) g.translate((Math.random() - .5) * fx.shake * 2, (Math.random() - .5) * fx.shake * 2);
         const sky = g.createLinearGradient(0, 0, 0, GROUND);
         sky.addColorStop(0, '#0a1030'); sky.addColorStop(1, '#161d3f');
-        g.fillStyle = sky; g.fillRect(0, 0, VW, GROUND);
+        g.fillStyle = sky; g.fillRect(-24, -24, VW + 48, GROUND + 24);
         g.fillStyle = 'rgba(255,214,107,.85)'; g.beginPath(); g.arc(860, 86, 30, 0, 7); g.fill();
 
-        g.fillStyle = '#0d1226'; g.fillRect(0, GROUND, VW, VH - GROUND);
+        g.fillStyle = '#0d1226'; g.fillRect(-24, GROUND, VW + 48, VH - GROUND + 24);
         g.strokeStyle = 'rgba(170,190,255,.22)'; g.lineWidth = 3;
         g.beginPath(); g.moveTo(0, GROUND); g.lineTo(VW, GROUND); g.stroke();
 
@@ -152,15 +163,19 @@
         [0, 1].forEach(drawFighter);
         drawWind();
         if (aim) drawAim();
-        if (flying) {
+        if (flying && !(inFlight && inFlight.hitDone)) {
           const p = flying.pts[Math.min(flying.i, flying.pts.length - 1)];
           g.font = '30px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
           g.fillText(CHARS[flying.seat].ammo, p[0], p[1]);
         }
+        drawFx();
+        g.restore();
       }
 
       function drawFighter(seat) {
-        const c = CHARS[seat], col = ctx.players[seat].color, x = FEET[seat], hp = Math.max(0, st.hp[seat]);
+        const c = CHARS[seat], col = ctx.players[seat].color, x = FEET[seat], hp = Math.max(0, Math.round(fx.hp ? fx.hp[seat] : st.hp[seat]));
+        const fl = fx.flinch[seat], ox = fl ? Math.sin(fl * 1.7) * fl * .45 : 0;
+        if (fl) { g.save(); g.globalAlpha = fl / 26 * .55; g.fillStyle = '#ff3355'; g.beginPath(); g.arc(x, GROUND - 42, 48, 0, 7); g.fill(); g.restore(); }
         g.save();
         g.shadowColor = col; g.shadowBlur = 26;
         g.fillStyle = 'rgba(255,255,255,.05)';
@@ -168,7 +183,7 @@
         g.restore();
         g.font = '62px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
         g.globalAlpha = hp > 0 ? 1 : .35;
-        g.fillText(c.face, x, GROUND - 42);
+        g.fillText(c.face, x + ox, GROUND - 42);
         g.globalAlpha = 1;
 
         const bw = 120, bx = x - bw / 2, by = GROUND - 132;   // health bar
@@ -204,18 +219,91 @@
       function fly(shot, from, done) {
         busy = true;
         const pts = simulate(shot.seat, shot.ang, shot.pow, shot.wind).pts;
-        flying = { pts, i: from || 0, seat: shot.seat };
-        inFlight = { id: shot.id, i: flying.i };        // module level → outlives this render
+        flying = { pts, i: Math.min(from || 0, pts.length - 1), seat: shot.seat };
+        if (!inFlight || inFlight.id !== shot.id) inFlight = { id: shot.id, i: flying.i, n: pts.length, hitDone: false, tail: 0 };
         (function step() {
-          // A repaint mid-arc detaches THIS canvas. Bail and let the new render resume
-          // from inFlight. (This was the bug behind your own throw being invisible: the
-          // commit's repaint killed the arc, and the shot was already marked seen.)
+          // A repaint mid-animation detaches THIS canvas. Bail and let the new render
+          // resume from inFlight (arc position, whether it has landed, aftermath frames).
           if (!flying || !cv.isConnected) { busy = false; return; }
-          flying.i += 4; inFlight.i = flying.i;
-          draw();
-          if (flying.i < pts.length - 1) requestAnimationFrame(step);
+          if (!inFlight.hitDone) {
+            flying.i = Math.min(pts.length - 1, flying.i + 4); inFlight.i = flying.i;
+            if (flying.i >= pts.length - 1) { inFlight.hitDone = true; impact(shot, pts[pts.length - 1]); }
+          } else inFlight.tail++;
+          stepFx(); draw();
+          if (inFlight.tail < TAIL) requestAnimationFrame(step);
           else { flying = null; inFlight = null; busy = false; seenShot = shot.id; draw(); if (done) done(); }
         })();
+      }
+
+      // health to show right now: the pre-shot value until the projectile actually lands
+      function hpNow(seat) {
+        const L = st.last;
+        const waiting = L && L.prevHp && L.id > seenShot && !(inFlight && inFlight.id === L.id && inFlight.hitDone);
+        return waiting ? L.prevHp[seat] : st.hp[seat];
+      }
+
+      /* ---------------- impact ---------------- */
+      function impact(shot, p) {
+        const victim = 1 - shot.seat, landed = shot.outcome === 'hit' || shot.outcome === 'graze';
+        if (landed) {
+          const n = shot.outcome === 'hit' ? 28 : 14;
+          const cols = ['#ffd66b', '#ff4d6d', '#ffffff', ctx.players[shot.seat].color];
+          for (let i = 0; i < n; i++) {
+            const a = Math.random() * Math.PI * 2, v = 120 + Math.random() * 420;
+            fx.parts.push({ k: 'bit', x: p[0], y: p[1], vx: Math.cos(a) * v, vy: Math.sin(a) * v - 160, life: 40 + Math.random() * 25, max: 65, s: 2 + Math.random() * 3.5, c: cols[i % 4] });
+          }
+          fx.parts.push({ k: 'flash', x: p[0], y: p[1], r: shot.outcome === 'hit' ? 95 : 60, life: 14, max: 14 });
+          fx.parts.push({ k: 'ring', x: p[0], y: p[1], r0: 20, r1: shot.outcome === 'hit' ? 160 : 100, life: 22, max: 22 });
+          fx.floats.push({ text: '\u2212' + shot.dmg, x: FEET[victim], y: GROUND - 160, c: '#ff5a7a', life: 75, max: 75 });
+          fx.flinch[victim] = 26; fx.shake = shot.outcome === 'hit' ? 10 : 5;
+          if (victim === me) { try { if (navigator.vibrate) navigator.vibrate([40, 30, 70]); } catch (e) {} }
+        } else {
+          const wood = shot.outcome === 'fence', y = Math.min(p[1], GROUND);
+          for (let i = 0; i < 16; i++) fx.parts.push({ k: 'bit', x: p[0], y, vx: (Math.random() - .5) * 320, vy: -80 - Math.random() * 300, life: 35 + Math.random() * 20, max: 55, s: 2 + Math.random() * 2.5, c: wood ? '#8a6a45' : '#56608f' });
+          fx.parts.push({ k: 'puff', x: p[0], y: y - 10, r: 22, life: 40, max: 40 });
+          fx.shake = wood ? 4 : 2;
+        }
+      }
+      function stepFx() {
+        const dt = 1 / 60;
+        fx.parts = fx.parts.filter(q => {
+          q.life--;
+          if (q.k === 'bit') { q.vy += 900 * dt; q.x += q.vx * dt; q.y += q.vy * dt; if (q.y > GROUND) { q.y = GROUND; q.vy *= -.3; q.vx *= .6; } }
+          else if (q.k === 'puff') q.r += .9;
+          return q.life > 0;
+        });
+        fx.floats = fx.floats.filter(f => (f.y -= .8, --f.life > 0));
+        fx.shake *= .85; if (fx.shake < .3) fx.shake = 0;
+        fx.flinch = fx.flinch.map(v => Math.max(0, v - 1));
+        if (!fx.hp) fx.hp = [hpNow(0), hpNow(1)];
+        for (let k = 0; k < 2; k++) fx.hp[k] += (hpNow(k) - fx.hp[k]) * .12;    // bar drains, not snaps
+      }
+      function drawFx() {
+        fx.parts.forEach(q => {
+          const a = q.life / q.max;
+          if (q.k === 'bit') { g.globalAlpha = Math.min(1, a * 1.5); g.fillStyle = q.c; g.fillRect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s); g.globalAlpha = 1; }
+          else if (q.k === 'puff') { g.fillStyle = `rgba(150,160,200,${a * .35})`; g.beginPath(); g.arc(q.x, q.y, q.r, 0, 7); g.fill(); }
+        });
+        g.save(); g.globalCompositeOperation = 'lighter';
+        fx.parts.forEach(q => {
+          const a = q.life / q.max;
+          if (q.k === 'flash') {
+            const gr = g.createRadialGradient(q.x, q.y, 0, q.x, q.y, q.r);
+            gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(.35, `rgba(255,214,107,${a * .8})`); gr.addColorStop(1, 'rgba(255,80,110,0)');
+            g.fillStyle = gr; g.beginPath(); g.arc(q.x, q.y, q.r, 0, 7); g.fill();
+          } else if (q.k === 'ring') {
+            g.strokeStyle = `rgba(255,220,170,${a * .8})`; g.lineWidth = 4 * a + .5;
+            g.beginPath(); g.arc(q.x, q.y, q.r1 - (q.r1 - q.r0) * a, 0, 7); g.stroke();
+          }
+        });
+        g.restore();
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        fx.floats.forEach(f => {
+          const a = Math.min(1, f.life / 25), sc = 1 + (1 - f.life / f.max) * .3;
+          g.font = `900 ${Math.round(40 * sc)}px Orbitron, system-ui, sans-serif`; g.globalAlpha = a;
+          g.lineWidth = 6; g.strokeStyle = 'rgba(5,7,15,.85)'; g.strokeText(f.text, f.x, f.y);
+          g.fillStyle = f.c; g.fillText(f.text, f.x, f.y); g.globalAlpha = 1;
+        });
       }
 
       /* ---------------- aiming ---------------- */
@@ -251,7 +339,7 @@
         s.armed[me] = null;
         s.hp[foe] = Math.max(0, s.hp[foe] - dmg);
         s.n = (s.n || 0) + 1;
-        s.last = { seat: me, ang, pow, wind: s.wind, outcome: sim.outcome, dmg, id: s.n };
+        s.last = { seat: me, ang, pow, wind: s.wind, outcome: sim.outcome, dmg, id: s.n, prevHp: st.hp.slice() };
         s.note = '';
         const won = s.hp[foe] <= 0;
         if (!won) {
@@ -316,8 +404,10 @@
             : sh.outcome === 'fence' ? '🪵 Straight into the fence.'
             : '💨 Miss — the wind had other ideas.');
           ctx.sound[sh.dmg ? (ours ? 'good' : 'bad') : 'bad']();
+          if (ctx.root && ctx.root.isConnected) { ctx.root.innerHTML = ''; DEF.render(ctx); }
         });
       }
     },
-  });
+  };
+  Games.register(DEF);
 })();

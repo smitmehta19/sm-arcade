@@ -106,6 +106,8 @@ const GAME_RULES = {
   'codenames-duet': ['<b>Co-op!</b> Find all <b>9 secret agents</b> together before you run out of turns — and never tap an <b>assassin ☠️</b>.', 'On your turn you secretly see the key — give your partner a <b>one-word clue + a number</b> pointing at agent words.', 'They tap words: a green agent = keep going, a bystander ends the turn, the assassin = instant loss. You win or lose <b>together</b> — no scoreboard points, just pure teamwork. 💞'],
   'draw-guess': ['One of you gets a <b>secret word</b> and sketches it on the canvas — your partner watches it appear in real time.', 'Tap <b>“Done”</b> to hand it over, then your partner types guesses. A correct guess scores a point.', 'You swap who draws each round — most points after 6 rounds wins! 🎨'],
   'ultimate-ttt': ['It’s <b>9 tic-tac-toe boards</b> in a 3×3 grid. Win a small board by getting 3-in-a-row inside it.', 'The twist: the <b>cell</b> you play decides <b>which board your opponent must play next</b> — top-left cell sends them to the top-left board.', 'Sent to a board that’s already won or full? Then you may play <b>anywhere</b>. Win <b>three small boards in a row</b> to win it all. 🧠'],
+  'fleabag': ['Take turns lobbing junk over the fence \u2014 <b>Fleabag the cat</b> throws cans, <b>Mutt the dog</b> throws bones.', '<b>Drag back</b> from your fighter like a slingshot and let go to throw. The dotted line shows your angle, not where it lands.', 'The <b>wind</b> changes every turn \u2014 watch the arrow. A clean hit does up to 30 damage; a near miss still grazes for 7.', 'Four one-use powers: \u26a1 <b>Power Throw</b> (double damage), \u270c\ufe0f <b>Double Attack</b> (throw twice), \ud83d\udca8 <b>Stink Bomb</b> (wrecks their next wind), \u2764\ufe0f <b>Power Up</b> (+25 health). Using one doesn\u2019t use up your turn.', 'First to empty the other\u2019s health bar wins.'],
+  'pocket-tanks': ['You each get the same <b>six weapons</b> and fire every one once. Score points for the damage you deal \u2014 <b>most points after 12 shots wins</b>.', '<b>Drag on the battlefield</b> to aim, fine-tune <b>angle</b> and <b>power</b> with the \u2212/+ buttons (hold to repeat), then hit <b>FIRE</b>. Nothing fires by accident.', 'The ground is <b>destructible</b>: craters collapse and tanks drop into them. The <b>wind</b> changes every turn \u2014 except for the Sniper, which ignores it.', '<b>Big Bertha</b> is huge, <b>Triple Shot</b> fans out, <b>Cluster</b> bursts into five bomblets, <b>Dirt Wall</b> deals no damage but heaps a hill to hide behind. Hit yourself and the points go to your partner.', 'You get <b>3 tank moves</b> per match (\u25c0 \u25b6) \u2014 moving doesn\u2019t cost your turn. Tap \u2922 for landscape.'],
   'scrabble': ['Each of you holds <b>7 tiles</b>. Make a word on the board — the first one must cross the <b>\u2605 centre</b>, and every word after that has to touch a tile already down.', 'Tap a tile, then tap a square. Tiles you\u2019ve placed glow green \u2014 tap one again to take it back. The running score shows under the board before you commit.', 'Coloured squares multiply: <b>DL/TL</b> double or triple that letter, <b>DW/TW</b> double or triple the whole word (only on the turn you cover them). Use all 7 tiles in one go for a <b>50-point BINGO</b>.', 'Blank tiles (?) can be any letter but score 0. Stuck? <b>Swap</b> tiles back into the bag or <b>Pass</b>. When the bag is empty and someone plays their last tile the game ends \u2014 they gain the value of what\u2019s left in the other rack, and their partner loses it.'],
   'chess': ['The full royal game — the host plays <b>White</b> and moves first; the board flips so you each see your side at the bottom.', 'Tap a piece to see its legal moves: green dot = move, pink ring = capture. Castling, en passant and promotion (you pick the piece!) all work.', 'Trap the enemy king so it can’t escape — <b>checkmate</b> — to win. Stalemate, dead positions and the 50-move rule are automatic draws.'],
   'dominoes': ['You each get <b>7 bones</b>; the rest are the boneyard. Take turns adding a bone whose number <b>matches an open end</b> of the line.', 'Can’t play? <b>Draw</b> from the boneyard until you can. Boneyard empty too? You pass.', 'First to play their <b>last bone</b> wins. If you’re both stuck, the <b>lowest total pips</b> in hand wins.'],
@@ -346,6 +348,56 @@ function fxShockwave(color) {
 }
 window.fxBanner = fxBanner; window.fxShockwave = fxShockwave;
 
+/* ---------- opt-in landscape for the artillery games (Fleabag, Pocket Tanks) ----------
+   Android: fullscreen + screen.orientation.lock('landscape') turns the screen for you.
+   iPhone: Safari cannot lock orientation, so `body.land` switches on a landscape LAYOUT that
+   takes over as soon as the phone is turned sideways, with a pill asking you to until then.
+   Leaving the game (or swiping out of fullscreen on Android) switches it off again. */
+const Landscape = (() => {
+  let viaFs = false;
+  const btns = new Set();
+  const on = () => document.body.classList.contains('land');
+  function paint(b) {
+    b.textContent = on() ? '✕ Exit landscape' : '⤢ Landscape';
+    b.setAttribute('aria-pressed', on() ? 'true' : 'false');
+  }
+  // buttons from old renders are detached for good — drop them, relabel the live ones
+  function sync() { btns.forEach(b => { if (b.isConnected) paint(b); else btns.delete(b); }); }
+  async function enter() {
+    document.body.classList.add('land'); viaFs = false; sync();
+    try {
+      const el = document.documentElement;
+      if (el.requestFullscreen && !document.fullscreenElement) { await el.requestFullscreen({ navigationUI: 'hide' }); viaFs = true; }
+    } catch (e) {}
+    try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) {}
+  }
+  async function exit() {
+    document.body.classList.remove('land'); sync();
+    try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {}
+    try { if (viaFs && document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen(); } catch (e) {}
+    viaFs = false;
+  }
+  function button() {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'land-btn';
+    b.addEventListener('click', () => { try { Store.Sound.tap(); } catch (e) {} on() ? exit() : enter(); });
+    paint(b); btns.add(b);                 // label it NOW — it isn't attached yet
+    return b;
+  }
+  function mountHint() {
+    const pill = document.createElement('div');
+    pill.className = 'land-hint';
+    pill.innerHTML = '↻ Turn your phone sideways <button type="button">Cancel</button>';
+    pill.querySelector('button').addEventListener('click', () => exit());
+    document.body.append(pill);
+  }
+  if (document.body) mountHint(); else document.addEventListener('DOMContentLoaded', mountHint);
+  window.addEventListener('hashchange', () => { if (on() && !/^#\/play\//.test(location.hash || '')) exit(); });
+  document.addEventListener('fullscreenchange', () => { if (viaFs && !document.fullscreenElement && on()) exit(); });
+  return { on, enter, exit, button };
+})();
+window.Landscape = Landscape;
+
 const Overlay = (() => {
   let confettiRaf = null;
   // full-screen canvas burst — two corner cannons, gravity + drag + spin.
@@ -469,7 +521,11 @@ const TIMER_GAMES = {
   'ghost': { skip: false }, 'word-duel': { skip: false }, 'hangman': { skip: false }, 'letterpress': { skip: false },
   'code-breaker': { skip: false }, 'liars-dice': { skip: false }, 'yahtzee': { skip: false },
   'chess': { skip: false }, 'scrabble': { skip: true }, 'dominoes': { skip: false }, 'sos': { skip: true },
+  'fleabag': { skip: true }, 'pocket-tanks': { skip: true },
 };
+// A game still animating its final move (e.g. the knockout shot in flight) can ask the
+// result card to wait for it via def.resultDelay() → ms. Capped so nothing can stall it.
+const resultHold = def => { try { return Math.max(0, Math.min(5000, (def && def.resultDelay && def.resultDelay()) | 0)); } catch (e) { return 0; } };
 const timerCap = gameId => TIMER_GAMES[gameId] || (Games.byId(gameId) && Games.byId(gameId).isTournament ? { skip: true, tour: true } : null);
 // next turn's deadline (synced server ms) when the current match has a live timer
 const freshDeadline = () => (currentMatch && currentMatch.timer && currentMatch.timer.on) ? (Store.Net.serverNow() + currentMatch.timer.secs * 1000) : null;
@@ -1128,7 +1184,7 @@ function renderStage(gameId) {
         { label: `Play ${nxtG.name} →`, onClick: () => { Overlay.hide(); startMatch(nxt); } },
         { label: '↻ Play again', primary: true, onClick: () => advanceRound(gameId) },
       ]);
-    }, 450);
+    }, 450 + resultHold(game));
   }
 
   // ----- tournament engine (orchestrates sub-games inside one match) -----
@@ -1185,7 +1241,7 @@ function renderStage(gameId) {
         { label: 'End tournament', onClick: requestEndGame },
         { label: 'Next game →', primary: true, onClick: advanceTournament },
       ]);
-    }, 450);
+    }, 450 + resultHold(Games.byId((t.lastResult || {}).game)));
   }
   function showTourEnd(t) {
     setTimeout(() => {
@@ -1199,7 +1255,7 @@ function renderStage(gameId) {
         { label: 'Lobby', onClick: exitMatch },
         { label: '🏆 New tournament', primary: true, onClick: () => { Overlay.hide(); startMatch('tournament'); } },
       ]);
-    }, 450);
+    }, 450 + resultHold(Games.byId((t.lastResult || {}).game)));
   }
 
   function commitMove(gid, nextState, winner) {
