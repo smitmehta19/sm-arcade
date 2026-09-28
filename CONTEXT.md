@@ -470,4 +470,6 @@ r5/test_duels + test_games (old code fails 33/16 → new all pass).
 - assets/js/fx-battleship.js → window.BattleshipScene (loaded BEFORE games-mind.js): night ocean, 2.5D hulls,
   tilted sonar grid, lock-on + FIRE, shell replay from `st.last {by,r,c,result,size,id}` + `n`. Un-sunk enemy
   hulls are never drawn. skipTurn during placement deploys a random legal fleet (an empty fleet used to hand
-  the partner a free win). Known: a full app reload replays the last shot once.
+  the partner a free win). Watched shots persist per phone in localStorage `sm_bs_seen` = {k: match `mid`
+  (new in init; 'legacy:'+host for old saves), id} so a reload never replays a shot; an UNSEEN shot (fired while
+  this phone was closed) still plays once on open.

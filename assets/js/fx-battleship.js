@@ -355,9 +355,19 @@
     return masked(b, L);
   }
   function resetShots() { S.anim = null; S.doneId = 0; S.parts = []; S.aim = null; S.slow = false; }
+  // Shots already WATCHED survive a reload: S.doneId lives in memory, so after a reload the last shot
+  // used to play again. Remember (match, last shot id) per phone. A shot fired while this phone was
+  // closed still plays once when it opens — only replays are suppressed.
+  const SEEN_KEY = 'sm_bs_seen';
+  const matchKey = st => st.mid || ('legacy:' + st.host);
+  function readSeen(st) {
+    try { const v = JSON.parse(localStorage.getItem(SEEN_KEY) || 'null'); return v && v.k === matchKey(st) ? (v.id | 0) : 0; } catch (e) { return 0; }
+  }
+  function writeSeen(st, id) { try { localStorage.setItem(SEEN_KEY, JSON.stringify({ k: matchKey(st), id })); } catch (e) {} }
   function maybeReplay(st) {
     const L = st.last; if (!L || st.phase !== 'play') return;
     if (L.id < S.doneId) S.doneId = L.id - 1;                    // ids restarted → a different match
+    if (L.id > S.doneId && !S.anim && readSeen(st) >= L.id) S.doneId = L.id;   // watched before a reload
     if (L.id <= S.doneId || (S.anim && S.anim.id === L.id)) return;
     if (S.anim) finishAnim(true);                                  // a newer shot arrived: settle the old one
     startAnim(L, st);
@@ -395,6 +405,7 @@
   function finishAnim(quiet) {
     const A = S.anim; if (!A) return;
     S.anim = null; S.doneId = Math.max(S.doneId, A.id); S.slow = false;
+    if (S.ctx && S.ctx.state) writeSeen(S.ctx.state, A.id);
     if (quiet) return;
     rerender();
   }

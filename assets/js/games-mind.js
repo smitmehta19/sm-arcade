@@ -164,7 +164,8 @@
     id: 'battleship', name: 'Battleship', emoji: '🚢', category: 'Strategy', accent: '#00f0ff',
     tagline: 'Place your fleet, then hunt.',
     // turn-based setup: host arranges fleet first, then partner; then firing begins.
-    init: host => ({ phase: 'place', boards: [emptyBoard(), emptyBoard()], turn: host, host }),
+    // `mid` identifies THIS match, so a phone can remember which shots it has already watched (see fx-battleship)
+    init: host => ({ phase: 'place', boards: [emptyBoard(), emptyBoard()], turn: host, host, mid: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) }),
     // the final sinking is still playing when the match finishes — hold the result card for it
     resultDelay: () => (window.BattleshipScene && BattleshipScene.resultDelay) ? BattleshipScene.resultDelay() : 0,
     // timer ran out: while PLACING, deploy a random legal fleet for them (a plain turn flip used to
