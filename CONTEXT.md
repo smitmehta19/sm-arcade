@@ -502,3 +502,10 @@ everyone replays and snaps. Played resolutions persist (`LS+'done'`) so a reload
 each round; 8-round cap. Tests: scratchpad/knockout (1,921 checks incl. an 84-run Ready-race matrix).
 Also v75 (ui.js): ordinary moves no longer send `status:'active'` — a move landing AFTER the finishing commit
 (e.g. a timer skip racing it) used to reopen a finished match and could record the result twice.
+
+## Cup Pong (v76) — assets/js/games-cuppong.js (game 44)
+10 cups each, 2 throws a turn, balls back, bounce = 2 cups, one re-rack, "on fire" after 3 in a row, rebuttal
+(clear them back = draw). Thrower simulates + commits input AND outcome first; partners replay from their own
+end of the table and snap to the committed cup. Watched throws persist (`sm_cp_seen` {k: match `mid`, id}) →
+no replay on reload. `clk` bumps on balls-back and each rebuttal throw → fresh turn clock. Fixed 60 Hz step,
+single guarded loop. Tests: scratchpad/cuppong (106 @60 Hz reduced-motion, 111 @120 Hz).
