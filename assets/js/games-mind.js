@@ -88,17 +88,104 @@
   const memFace = id => { const [col, d] = MEM[id]; return `<svg viewBox="0 0 24 24" fill="${col}" class="icn" style="filter:drop-shadow(0 0 6px ${col})"><path d="${d}"/></svg>`; };
 
   /* ---------- 9. BATTLESHIP ---------- */
+  // The RULES live here. The cinematic night-ocean scene (canvas, shells, sinking wrecks) is
+  // fx-battleship.js → window.BattleshipScene; if that file isn't loaded, the original flat
+  // grids further down still play the exact same game from the same state.
+  // State: { phase:'place'|'play', boards:[{grid, hits, ships}], turn, host, sank,
+  //          n (shot counter), last:{by, r, c, result:'hit'|'miss'|'sunk', size, id} }
   const BS_FLEET = [4, 3, 3, 2, 2]; // ship lengths each player places
   const emptyBoard = () => ({ grid: Array.from({ length: 8 }, () => Array(8).fill(0)), hits: Array.from({ length: 8 }, () => Array(8).fill(0)) });
+  const bsCells = (sz, r, c, o) => Array.from({ length: sz }, (_, k) => [r + (o === 'v' ? k : 0), c + (o === 'h' ? k : 0)]);
+  // A fleet is legal when it is exactly BS_FLEET, every square is on the board and no two ships
+  // overlap. Returns { grid, cells } or null. Used by BOTH placement UIs and by the timer skip.
+  function bsFleetGrid(ships) {
+    if (!Array.isArray(ships) || ships.length !== BS_FLEET.length) return null;
+    if (ships.map(s => s && s.size).sort().join() !== BS_FLEET.slice().sort().join()) return null;
+    const grid = emptyBoard().grid, cells = [];
+    for (const s of ships) {
+      if ((s.o !== 'h' && s.o !== 'v') || !Number.isInteger(s.r) || !Number.isInteger(s.c)) return null;
+      const cs = bsCells(s.size, s.r, s.c, s.o);
+      for (const [r, c] of cs) { if (r < 0 || r > 7 || c < 0 || c > 7 || grid[r][c]) return null; grid[r][c] = 1; }
+      cells.push(cs);
+    }
+    return { grid, cells };
+  }
+  function bsRandomFleet() {
+    for (let tries = 0; tries < 50; tries++) {
+      const ships = [], grid = emptyBoard().grid;
+      for (const sz of BS_FLEET) {
+        let ok = false;
+        for (let t = 0; t < 600 && !ok; t++) {
+          const o = Math.random() < 0.5 ? 'h' : 'v', r = rint(8), c = rint(8), cs = bsCells(sz, r, c, o);
+          if (cs.every(([a, b]) => a < 8 && b < 8 && !grid[a][b])) { cs.forEach(([a, b]) => grid[a][b] = 1); ships.push({ size: sz, r, c, o }); ok = true; }
+        }
+      }
+      if (ships.length === BS_FLEET.length) return ships;
+    }
+    return null;
+  }
+  // host arranges first, then the partner; once both are set, the host shoots first
+  function bsAdvancePlace(s, who) { if (who === s.host) s.turn = 1 - s.host; else { s.phase = 'play'; s.turn = s.host; } }
+  function bsConfirm(ctx, ships) {
+    const st = ctx.state, me = ctx.me;
+    if (st.phase !== 'place' || !ctx.isMyTurn || ctx.status === 'finished') return false;
+    const f = bsFleetGrid(ships); if (!f) return false;           // illegal fleets are refused here, whatever the UI did
+    const s = ctx.clone(st);
+    s.boards[me].grid = f.grid;
+    s.boards[me].ships = f.cells;                                  // exact ship shapes, for the afloat/sunk count
+    bsAdvancePlace(s, me);
+    ctx.sound.good(); ctx.commit(s);
+    return true;
+  }
+  // ONE shot. The result is committed FIRST (with `last`, a fresh id); every phone then replays
+  // the shell from state — an animation can never hold a move hostage (CONTEXT: commit before animate).
+  function bsFire(ctx, r, c) {
+    const st = ctx.state, me = ctx.me;
+    if (st.phase !== 'play' || !ctx.isMyTurn || ctx.status === 'finished') return false;
+    if (!(r >= 0 && r < 8 && c >= 0 && c < 8)) return false;
+    if (st.boards[1 - me].hits[r][c]) return false;
+    const s = ctx.clone(st), eb = s.boards[1 - me];
+    let result = 'miss', size = 0;
+    if (eb.grid[r][c]) {
+      eb.hits[r][c] = 1; result = 'hit';
+      const hitShip = shipsOf(eb).find(cells => cells.some(([rr, cc]) => rr === r && cc === c));
+      if (hitShip && isSunk(eb, hitShip)) { result = 'sunk'; size = hitShip.length; }
+    } else eb.hits[r][c] = 2;
+    s.n = (s.n || 0) + 1;
+    s.last = { by: me, r, c, result, size, id: s.n };
+    s.sank = size ? { size, by: me } : null;
+    if (remaining(eb) === 0) { ctx.commit(s, me); return true; }
+    s.turn = 1 - me; ctx.commit(s);
+    return true;
+  }
+  const BS_RULES = { get FLEET() { return BS_FLEET; }, shipsOf: b => shipsOf(b), isSunk: (b, c) => isSunk(b, c), remaining: b => remaining(b),
+    fleetPanel: (ctx, e, m) => fleetPanel(ctx, e, m), fire: bsFire, confirm: bsConfirm, randomFleet: bsRandomFleet };
   Games.register({
     id: 'battleship', name: 'Battleship', emoji: '🚢', category: 'Strategy', accent: '#00f0ff',
     tagline: 'Place your fleet, then hunt.',
     // turn-based setup: host arranges fleet first, then partner; then firing begins.
     init: host => ({ phase: 'place', boards: [emptyBoard(), emptyBoard()], turn: host, host }),
+    // the final sinking is still playing when the match finishes — hold the result card for it
+    resultDelay: () => (window.BattleshipScene && BattleshipScene.resultDelay) ? BattleshipScene.resultDelay() : 0,
+    // timer ran out: while PLACING, deploy a random legal fleet for them (a plain turn flip used to
+    // start the battle with an empty board = a free win); while firing, the shot is simply lost.
+    skipTurn: (st, opp) => {
+      const s = JSON.parse(JSON.stringify(st));
+      if (s.phase === 'place') {
+        const who = s.turn, b = s.boards[who];
+        if (!(b.ships && b.ships.length)) { const f = bsFleetGrid(bsRandomFleet()); b.grid = f.grid; b.ships = f.cells; }
+        bsAdvancePlace(s, who);
+        return s;
+      }
+      s.turn = opp; s.sank = null;
+      return s;
+    },
+    test: { FLEET: BS_FLEET, fleetGrid: bsFleetGrid, randomFleet: bsRandomFleet, fire: bsFire, confirm: bsConfirm, shipsOf: b => shipsOf(b), isSunk: (b, c) => isSunk(b, c), remaining: b => remaining(b) },
     render(ctx) {
+      if (window.BattleshipScene) return BattleshipScene.render(ctx, BS_RULES);
       const st = ctx.state, me = ctx.me;
 
-      /* ---- PLACEMENT PHASE ---- */
+      /* ---- PLACEMENT PHASE (flat fallback) ---- */
       if (st.phase === 'place') {
         if (!ctx.isMyTurn) {
           ctx.root.append(waitFrame(ctx, `${ctx.players[st.turn].name} is placing their fleet…`));
@@ -108,10 +195,10 @@
         const pane = ctx.h('div', {}); ctx.root.append(pane);
         let workGrid = ctx.state.boards[me].grid.map(row => row.slice());
         let remaining = BS_FLEET.slice();
-        let placedShips = []; // { size, cells:[[r,c]...] }
+        let placedShips = []; // { size, r, c, o, cells:[[r,c]...] }
         let orient = 'h', selIdx = 0;
         const fits = (sz, r, c, o) => { for (let k = 0; k < sz; k++) { const rr = r + (o === 'v' ? k : 0), cc = c + (o === 'h' ? k : 0); if (rr >= 8 || cc >= 8 || workGrid[rr][cc]) return false; } return true; };
-        function placeShip(sz, r, c, o) { const cells = []; for (let k = 0; k < sz; k++) { const rr = r + (o === 'v' ? k : 0), cc = c + (o === 'h' ? k : 0); workGrid[rr][cc] = 1; cells.push([rr, cc]); } placedShips.push({ size: sz, cells }); }
+        function placeShip(sz, r, c, o) { const cells = bsCells(sz, r, c, o); cells.forEach(([rr, cc]) => workGrid[rr][cc] = 1); placedShips.push({ size: sz, r, c, o, cells }); }
         function onCell(r, c) {
           if (workGrid[r][c]) { const idx = placedShips.findIndex(s => s.cells.some(([a, b]) => a === r && b === c)); if (idx >= 0) { placedShips[idx].cells.forEach(([a, b]) => workGrid[a][b] = 0); remaining.push(placedShips[idx].size); placedShips.splice(idx, 1); ctx.sound.tap(); draw(); } return; }
           if (!remaining.length) return;
@@ -121,24 +208,19 @@
           ctx.sound.place(); draw();
         }
         function randomFill() {
-          workGrid = ctx.state.boards[me].grid.map(row => row.slice()); placedShips = []; remaining = [];
-          for (const sz of BS_FLEET) { let ok = false, t = 0; while (!ok && t++ < 600) { const o = Math.random() < 0.5 ? 'h' : 'v', r = rint(8), c = rint(8); if (fits(sz, r, c, o)) { placeShip(sz, r, c, o); ok = true; } } }
+          workGrid = emptyBoard().grid; placedShips = []; remaining = [];
+          (bsRandomFleet() || []).forEach(s => placeShip(s.size, s.r, s.c, s.o));
           selIdx = 0; ctx.sound.place(); draw();
         }
         function confirmFleet() {
-          if (remaining.length) { ctx.sound.bad(); return; }
-          const s = ctx.clone(st); s.boards[me].grid = workGrid;
-          s.boards[me].ships = placedShips.map(p => p.cells);   // exact ship shapes, for the afloat/sunk count
-          if (me === s.host) s.turn = 1 - s.host;          // partner places next
-          else { s.phase = 'play'; s.turn = s.host; }       // both ready → fire (host shoots first)
-          ctx.sound.good(); ctx.commit(s);
+          if (remaining.length || !bsConfirm(ctx, placedShips.map(p => ({ size: p.size, r: p.r, c: p.c, o: p.o })))) ctx.sound.bad();
         }
         function draw() {
           pane.innerHTML = '';
           pane.append(ctx.h('div', { class: 'bs-place-ctrls' },
             ctx.h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { orient = orient === 'h' ? 'v' : 'h'; ctx.sound.tap(); draw(); } }, orient === 'h' ? '↔ Horizontal' : '↕ Vertical'),
             ctx.h('button', { class: 'btn btn-ghost btn-sm', onclick: randomFill }, '🎲 Random'),
-            ctx.h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { workGrid = ctx.state.boards[me].grid.map(row => row.slice()); placedShips = []; remaining = BS_FLEET.slice(); selIdx = 0; ctx.sound.tap(); draw(); } }, '↺ Reset')));
+            ctx.h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { workGrid = emptyBoard().grid; placedShips = []; remaining = BS_FLEET.slice(); selIdx = 0; ctx.sound.tap(); draw(); } }, '↺ Reset')));
           if (remaining.length) {
             const tray = ctx.h('div', { class: 'bs-tray' });
             remaining.forEach((sz, i) => { const ship = ctx.h('button', { class: 'bs-ship' + (i === selIdx ? ' sel' : ''), onclick: () => { selIdx = i; ctx.sound.tap(); draw(); } }); for (let k = 0; k < sz; k++) ship.append(ctx.h('span', { class: 'bs-seg' })); tray.append(ship); });
@@ -155,7 +237,7 @@
         return;
       }
 
-      /* ---- FIRING PHASE ---- */
+      /* ---- FIRING PHASE (flat fallback) ---- */
       const enemy = ctx.state.boards[1 - me], mine = ctx.state.boards[me];
       ctx.root.append(ctx.turnBar({ scores: [remaining(ctx.state.boards[0]), remaining(ctx.state.boards[1])] }));
       const wrap = ctx.h('div', { class: 'board-frame bs-wrap' });
@@ -165,7 +247,7 @@
         const cell = ctx.h('div', { class: 'bs-cell' });
         if (enemy.hits[r][c] === 1) cell.classList.add('hit');
         else if (enemy.hits[r][c] === 2) cell.classList.add('miss');
-        else if (ctx.isMyTurn) cell.onclick = () => fire(r, c);
+        else if (ctx.isMyTurn) cell.onclick = () => { const hit = !!enemy.grid[r][c]; if (bsFire(ctx, r, c)) ctx.sound[hit ? 'good' : 'bad'](); };
         eg.append(cell);
       }
       wrap.append(eg, ctx.h('div', { class: 'bs-label' }, 'YOUR FLEET'));
@@ -185,19 +267,6 @@
         ctx.msg(mine2 ? `💥 You sank a ${sank.size}-square ship!` : `🔥 ${ctx.seat(1 - me).name} sank your ${sank.size}-square ship!`,
           mine2 ? 'var(--lime)' : 'var(--magenta)');
       } else ctx.isMyTurn ? ctx.msg('Your turn — take a shot 🎯', ctx.players[me].color) : waiting(ctx);
-      function fire(r, c) {
-        if (enemy.hits[r][c]) return;
-        const s = ctx.clone(ctx.state); const eb = s.boards[1 - me];
-        let sank = 0;
-        if (eb.grid[r][c]) {
-          eb.hits[r][c] = 1; ctx.sound.good();
-          const hitShip = shipsOf(eb).find(cells => cells.some(([rr, cc]) => rr === r && cc === c));
-          if (hitShip && isSunk(eb, hitShip)) sank = hitShip.length;
-        } else { eb.hits[r][c] = 2; ctx.sound.bad(); }
-        if (remaining(eb) === 0) return ctx.commit(s, me);
-        s.sank = sank ? { size: sank, by: me } : null;
-        s.turn = 1 - me; ctx.commit(s);
-      }
     },
   });
   function remaining(b) { let n = 0; for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (b.grid[r][c] && b.hits[r][c] !== 1) n++; return n; }
@@ -219,7 +288,7 @@
     }
     return out;
   }
-  const isSunk = (b, cells) => cells.every(([r, c]) => b.hits[r][c] === 1);
+  function isSunk(b, cells) { return cells.every(([r, c]) => b.hits[r][c] === 1); }
   // one row per ship: its cells, dimmed and struck through once sunk
   function fleetRow(ctx, b, label, colour) {
     const ships = shipsOf(b);

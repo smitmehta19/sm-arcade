@@ -460,3 +460,14 @@ all 41 games then found ~30 more holes. The bar now: every game enforces its REA
 Tests (scratchpad): tmp-smoke.html (all 40 games × both seats × both starters), tmp-words (20),
 tmp-match (8), tmp-race (7, fake RTDB with transactions), test.js (92), strat/ (55+50),
 r5/test_duels + test_games (old code fails 33/16 → new all pass).
+
+## Cinematic dice + Battleship (v71)
+- assets/js/dice3d.js → window.Dice3D: real-3D rounded dice on a felt table (Canvas 2D + perspective), seeded
+  physics (+ − × ÷ sqrt only → bit-identical on both phones), final pose eased so the COMMITTED value is on top.
+  Cups (shake/lift), held tray, tap hit-testing, gold highlight, shatter. Idles its RAF loop when still.
+  Yahtzee adds `rollId` (per roll); Liar's Dice adds `round`. The partner's Liar's-Dice values are never even
+  handed to the scene during bidding. Without dice3d.js loaded the games fall back to flat dice.
+- assets/js/fx-battleship.js → window.BattleshipScene (loaded BEFORE games-mind.js): night ocean, 2.5D hulls,
+  tilted sonar grid, lock-on + FIRE, shell replay from `st.last {by,r,c,result,size,id}` + `n`. Un-sunk enemy
+  hulls are never drawn. skipTurn during placement deploys a random legal fleet (an empty fleet used to hand
+  the partner a free win). Known: a full app reload replays the last shot once.
