@@ -28,6 +28,11 @@ const Store = (() => {
 
   let state = load();
   let db = null, cloud = false, ref = null, serverOffset = 0;
+  // HYDRATION GATE — a device must READ the room before it may WRITE to it. A phone that had
+  // been closed for weeks used to boot, re-stamp its July scores as 'just saved' (the monthly
+  // race rollover called save()), win the newest-save-wins merge and overwrite everyone.
+  // Local-only mode has nothing to wait for, so it starts hydrated.
+  let synced = !(window.CLOUD && window.CLOUD.ENABLED);
   const subs = new Set();
 
   function load() {
@@ -51,15 +56,15 @@ const Store = (() => {
     });
   }
   async function initCloud() {
-    if (!window.CLOUD || !window.CLOUD.ENABLED) { setPill('local'); return; }
+    if (!window.CLOUD || !window.CLOUD.ENABLED) { synced = true; setPill('local'); return; }
     try {
       if (typeof firebase === 'undefined') {
         await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
         await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js');
         await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js');
       }
-    } catch (e) { console.warn('Firebase scripts failed to load — local mode.', e); setPill('local'); return; }
-    if (typeof firebase === 'undefined' || !firebase.initializeApp) { setPill('local'); return; }
+    } catch (e) { console.warn('Firebase scripts failed to load — local mode.', e); synced = true; setPill('local'); return; }
+    if (typeof firebase === 'undefined' || !firebase.initializeApp) { synced = true; setPill('local'); return; }
     try {
       firebase.initializeApp(window.CLOUD.config);
       db = firebase.database();
@@ -73,7 +78,7 @@ const Store = (() => {
       connectRoom();
     } catch (e) {
       console.warn('Cloud sync unavailable, using local only.', e);
-      cloud = false; setPill('local');
+      cloud = false; synced = true; setPill('local');
     }
   }
   function connectRoom() {
@@ -112,9 +117,9 @@ const Store = (() => {
   function listenRoom() {
     ref.on('value', snap => {
       const remote = snap.val();
-      if (!remote) { pushCloud(); return; }   // first write seeds the room
+      if (!remote) { synced = true; pushCloud(); return; }   // empty room: this device seeds it
       mergeRemote(remote);
-    }, err => { console.warn('Cloud read denied — check your Security Rules. Falling back to local.', err); cloud = false; setPill('local'); });
+    }, err => { console.warn('Cloud read denied — check your Security Rules. Falling back to local.', err); cloud = false; synced = true; setPill('local'); });
   }
 
   // Merge an incoming room snapshot. The bulk state is newest-wins (as before),
@@ -139,8 +144,39 @@ const Store = (() => {
     (deleted || []).forEach(d => m.delete(d.id));
     return [...m.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   }
+  // ---- the scoreboard merges by PROGRESS, not by who saved last ----
+  // Everything else is newest-save-wins, which is fine for a theme or a name. It is NOT fine
+  // for scores: any unrelated save from a device holding an older copy (a theme toggle, a
+  // season rollover) used to overwrite the real totals. The score block now travels as one
+  // unit, ranked by (reset epoch, results played, last score change):
+  //   - a Reset bumps the epoch, so it beats any pre-reset copy however many games it had;
+  //   - otherwise the copy with MORE recorded results wins — results only accumulate;
+  //   - a manual adjustment (same results, later change) wins the tie.
+  // A stale device can therefore never roll the scoreboard back, and a device that still
+  // holds the real scores restores them just by being opened.
+  const SCORE_FIELDS = ['totals', 'perGame', 'streak', 'seasons', 'history', 'tourWins', 'scoreV'];
+  function scoreKey(s) {
+    const v = (s && s.scoreV) || {}, pg = (s && s.perGame) || {};
+    let n = 0; for (const k in pg) n += (pg[k] && pg[k].plays) || 0;
+    return [v.e || 0, n, v.t || 0];
+  }
+  function cmpKey(a, b) { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i] ? 1 : -1; return 0; }
+  function scoreBlock(src) {
+    const def = blankState(), out = {};
+    SCORE_FIELDS.forEach(k => { out[k] = src && src[k] !== undefined ? JSON.parse(JSON.stringify(src[k])) : def[k]; });
+    return out;
+  }
+  function stampScore(reset) {
+    const t = Date.now() + serverOffset, v = state.scoreV || {};
+    state.scoreV = { e: reset ? t : (v.e || 0), t };
+  }
   function mergeRemote(remote) {
-    const remoteNewer = (remote.updated || 0) >= (state.updated || 0);
+    const first = !synced; synced = true;
+    // First read after boot: the ROOM is the truth for the shared bulk, whatever timestamp
+    // this device's copy carries — nothing it did before hydrating may beat the room.
+    const remoteNewer = first || (remote.updated || 0) >= (state.updated || 0);
+    const scoreCmp = cmpKey(scoreKey(state), scoreKey(remote));
+    const localScores = scoreCmp > 0 ? scoreBlock(state) : null;
     const arr = (o, k) => Array.isArray(o[k]) ? o[k] : [];
     // per-entry merged collections (plans = calendar, story = Our Story memories/period logs)
     const merged = {};
@@ -162,13 +198,15 @@ const Store = (() => {
       if (!remote.settings) state.settings = localPrefs;
     }
     Object.assign(state, merged);
+    if (scoreCmp > 0) { Object.assign(state, localScores); roomLacks = true; }        // we hold more progress — keep & publish it
+    else if (scoreCmp < 0 && !remoteNewer) Object.assign(state, scoreBlock(remote));   // room holds more — take it even if our bulk won
     if (tz0 && state.players[0]) state.players[0].tz = tz0;
     if (tz1 && state.players[1]) state.players[1].tz = tz1;
     persistLocal();
     emit();
     if (roomLacks || !remoteNewer) save();  // publish the merged truth; idempotent echo stops the loop
   }
-  function pushCloud() { if (cloud && ref) ref.set(state).catch(() => {}); }
+  function pushCloud() { if (cloud && ref && synced) ref.set(state).catch(() => {}); }   // never before the first read
 
   function setPill(kind) {
     const el = document.getElementById('syncPill');
@@ -202,7 +240,9 @@ const Store = (() => {
     return true;
   }
   // called by the Scores page so a fresh month shows 0–0 even before a game is played
-  function seasonsTick() { if (rollSeasons()) save(); return state.seasons; }
+  // ⚠ runs on every Play/Scores render — including at BOOT, before the cloud merge. Saving here
+  // re-stamped a stale device's old scores as newest (the Sept-2026 'scores jumped back' bug).
+  function seasonsTick() { if (rollSeasons() && synced) save(); return state.seasons; }
 
   /* ---- mutations ---- */
   function recordResult(gameId, winner /* 'p1' | 'p2' | 'draw' */) {
@@ -219,16 +259,18 @@ const Store = (() => {
     }
     state.history.unshift({ g: gameId, w: winner, t: Date.now() });
     state.history = state.history.slice(0, 40);
+    stampScore(false);
     save();
   }
   function adjustScore(field, delta) { // field: 'p1' | 'p2' | 'draws' — manual correction (Smit only, gated in UI)
     if (!['p1', 'p2', 'draws'].includes(field)) return;
     state.totals[field] = Math.max(0, (state.totals[field] || 0) + delta);
+    stampScore(false);
     save();
   }
   function recordTournament(winnerSeat) {
     if (!Array.isArray(state.tourWins)) state.tourWins = [0, 0];
-    if (winnerSeat === 0 || winnerSeat === 1) { state.tourWins[winnerSeat]++; save(); }
+    if (winnerSeat === 0 || winnerSeat === 1) { state.tourWins[winnerSeat]++; stampScore(false); save(); }
   }
   function toggleFav(gameId) {
     const i = state.favorites.indexOf(gameId);
@@ -310,6 +352,7 @@ const Store = (() => {
     state.totals = { p1: 0, p2: 0, draws: 0 };
     state.perGame = {}; state.streak = { who: null, n: 0 }; state.history = []; state.tourWins = [0, 0];
     state.seasons = { cur: { ym: curYM(), p1: 0, p2: 0, draws: 0 }, past: [] };
+    stampScore(true);             // new epoch: beats every pre-reset copy
     save();
   }
 
@@ -417,7 +460,7 @@ const Store = (() => {
     seasonsTick, _rollSeasons: rollSeasons, curYM,
     planAdd, planRemove, planConfirm, stampTz, _mergeRemote: mergeRemote,
     storySave, storyRemove,
-    Sound, isCloud: () => cloud,
+    Sound, isCloud: () => cloud, isSynced: () => synced, _scoreKey: s => scoreKey(s || state),
     getIdentity, setIdentity, onCloud, Net,
   };
 })();

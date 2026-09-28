@@ -382,3 +382,23 @@ rotates the screen for you. iPhone Safari cannot lock orientation, so body.land 
 a landscape LAYOUT that applies once the phone is turned (a pill says so while upright). CSS is
 scoped with :has(.pt-cv, .fb-cv) so no other game changes. Leaving the game, or swiping out of
 fullscreen, turns it off. Manifest stays orientation:portrait for the rest of the app.
+
+## Gotcha — NEVER WRITE BEFORE THE FIRST READ (the Sept-2026 "scores jumped back" incident)
+Bulk sync is newest-save-wins on `updated`, and save() stamps "now" on ANY write. A device that
+had been closed for months (Meera's old device, holding July's 30–12) logged in; renderHome's
+seasonsTick() rolled July→September and called save() BEFORE the cloud merge — stamping its stale
+copy as newest — so the merge kept it and pushed it, and every phone dropped from 57–23 to 30–12.
+This was the SAME class as the v47 stampTz calendar bug; that fix only patched one call site.
+Class-level fix (store.js, v67):
+  - `synced` hydration gate: pushCloud() is a no-op until the room has been read once; the first
+    merge adopts the room's bulk regardless of timestamps. seasonsTick only saves once synced.
+  - The SCORE BLOCK (totals, perGame, streak, seasons, history, tourWins, scoreV) no longer rides
+    newest-wins. It is ranked by scoreKey = (reset epoch, Σ perGame.plays, last score change):
+    reset → new epoch beats any older copy; else more results wins; adjust wins the tie. So an
+    unrelated save (theme toggle) from a stale-in-memory device can't erase a win either — that
+    race was ALSO reproduced on v66 — and a device still holding the real scores restores them.
+  - Every score mutation calls stampScore(); resetScores stamps a new epoch.
+Proof harness: scratchpad tmp-sync.html + tmp-dev.html — a fake RTDB (with null/empty stripping
+and per-device latency) and 3-4 iframe devices with isolated localStorage. `?store=` picks the
+store file; v66 fails 9/15, v67 passes 15/15 under four latency profiles (`&lat=A:3,B:3,C:300`).
+Settings → Sync & Version now shows "Results recorded" so phones can be compared.

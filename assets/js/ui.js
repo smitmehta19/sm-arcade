@@ -1676,12 +1676,14 @@ function renderUs() {
   const verRow = h('div', { class: 'diag-row' }, h('span', {}, '🔢 App version'), h('b', { id: 'diagVer' }, '…'));
   dv.append(
     verRow,
-    h('div', { class: 'diag-row' }, h('span', {}, '☁ Cloud'), h('b', {}, Store.isCloud() ? 'connected' : 'offline / local')),
+    h('div', { class: 'diag-row' }, h('span', {}, '☁ Cloud'), h('b', {}, Store.isCloud() ? (Store.isSynced() ? 'connected · synced' : 'connected · syncing…') : 'offline / local')),
+    // the scoreboard merges by progress: the phone with MORE results recorded holds the fuller history
+    h('div', { class: 'diag-row' }, h('span', {}, '📊 Results recorded'), h('b', {}, String(Store._scoreKey()[1]))),
     h('div', { class: 'diag-row' }, h('span', {}, '🏠 Room'), h('b', {}, roomTag)),
     h('div', { class: 'diag-row' }, h('span', {}, '📅 Plans'), h('b', {}, String(plansN))),
     h('div', { class: 'diag-row' }, h('span', {}, '💞 Memories'), h('b', {}, String(storyN))));
   diag.append(dv,
-    h('p', { class: 'hint' }, 'Compare both phones: the App version AND Room must match. If they differ, tap Force update on the older one.'),
+    h('p', { class: 'hint' }, 'Compare phones: App version and Room must match (if not, Force update the older one). The phone with the most Results recorded has the fullest scoreboard — and it wins automatically when it syncs.'),
     h('button', { class: 'btn btn-ghost btn-sm', onclick: forceUpdate }, '🔄 Force update this phone'));
   // read the ACTUAL served version from the service-worker cache (what this phone runs)
   (function fillVer() {
