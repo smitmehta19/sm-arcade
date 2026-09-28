@@ -485,3 +485,11 @@ Rules for every canvas game (Fleabag, Pocket Tanks, Battleship, dice3d fixed; ne
 Harness: scratchpad tmp-speedrun.html (fake 60/120 Hz screen, counts queued loops; old code → 1250/633/417 ms).
 Harness shims must pass a SYNTHETIC clock (`cb(__ft += 1000/60)`), and the hidden Browser pane throttles
 timers, so tmp-fx/tmp-reg now drive frames synchronously inside sleep() and then also wait real time.
+
+## Mini Golf (v74) — assets/js/games-minigolf.js (game 42)
+9 hand-built holes (neon garden, beach, ice, lava, castle…), slingshot putting, "away" turn order by walking
+distance, water/lava +1, 6-stroke pickup (scores 7). Deterministic sim; windmill/sweeper phase is COMMITTED
+with the stroke (never read from the clock on replay); every device snaps to the committed rest position.
+State bumps `clk` on every stroke: ui.js commitMove/pushTour give a fresh turn clock when `clk` changes even
+if `turn` doesn't (the same player can putt twice in a row). Tests: scratchpad/minigolf/mg-logic.js <repo>
+(57, incl. 27k-shot no-tunnelling fuzz + a solver proving every hole ≤ par+1), mg-phone.html (45).

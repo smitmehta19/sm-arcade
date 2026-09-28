@@ -40,6 +40,7 @@ const Icons = (() => {
     'ultimate-ttt': wrap('<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M9 3.5v17M15 3.5v17M3.5 9h17M3.5 15h17" stroke-width="1.2"/><path d="M5 5.7h2.3M5.7 5v2.3" stroke-width="1.5"/><circle cx="18.8" cy="18.8" r="1.4" stroke-width="1.5"/>'),
     // ---- artillery duels ----
     'fleabag': wrap('<path d="M5.5 11V4.8l3.8 3.1a7.6 7.6 0 015.4 0l3.8-3.1V11"/><path d="M5.5 11a6.5 6.2 0 0013 0"/><circle cx="9.6" cy="12.2" r=".95" ' + fc + '/><circle cx="14.4" cy="12.2" r=".95" ' + fc + '/><path d="M11.1 14.7h1.8l-.9.9z"/><path d="M3 13.2l2.6.4M3.2 16l2.6-.7M21 13.2l-2.6.4M20.8 16l-2.6-.7" stroke-width="1.2"/>'),
+    'mini-golf': wrap('<path d="M7 20V4l9 3.5-9 3.5"/><ellipse cx="12" cy="20" rx="7" ry="1.6"/><circle cx="16.5" cy="17" r="1.6" ' + fc + '/>'),
     'pocket-tanks': wrap('<rect x="3.5" y="14" width="17" height="4.8" rx="2.4"/><circle cx="7.2" cy="16.4" r=".9" ' + fc + '/><circle cx="12" cy="16.4" r=".9" ' + fc + '/><circle cx="16.8" cy="16.4" r=".9" ' + fc + '/><path d="M6.2 14l1.7-3.5h8.2l1.7 3.5"/><path d="M13.6 10.5l5.6-4.2"/><path d="M20.6 3.4l.4 1.3 1.3.4-1.3.4-.4 1.3-.4-1.3-1.3-.4 1.3-.4z" ' + fc + '/>'),
     // ---- batch 3 (chess/dominoes/sos/gops/story + score duels) ----
     'scrabble': wrap('<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M3.5 9h17M3.5 15h17M9 3.5v17M15 3.5v17" stroke-width="1.1" opacity=".55"/><path d="M5.6 7.4l1.2-2.6 1.2 2.6M5.9 6.7h1.8" stroke-width="1.3"/><circle cx="17.6" cy="17.4" r="1" ' + fc + '/>'),
