@@ -56,7 +56,7 @@ const Store = (() => {
     });
   }
   async function initCloud() {
-    if (!window.CLOUD || !window.CLOUD.ENABLED) { synced = true; setPill('local'); return; }
+    if (!window.CLOUD || !window.CLOUD.ENABLED) { synced = true; setPill('local'); dailyBackup(); return; }
     try {
       if (typeof firebase === 'undefined') {
         await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
@@ -170,8 +170,65 @@ const Store = (() => {
     const t = Date.now() + serverOffset, v = state.scoreV || {};
     state.scoreV = { e: reset ? t : (v.e || 0), t };
   }
+  // ---- score backups: the safety net ----
+  // Each phone keeps its OWN rolling copies of the score block in a separate localStorage key
+  // (never synced — a bad room write cannot reach them). Firebase keeps no history, so these
+  // are the only way back if the scoreboard is ever lost again. Taken:
+  //   'daily'   — once a day, after the phone has synced;
+  //   'drop'    — BEFORE a sync lowers any total / tournament win / results count;
+  //   'adjust' / 'reset' / 'restore' — before those deliberate edits.
+  // Routine copies (daily, adjust) and important ones are capped separately so a month of
+  // daily copies can never push the one taken before a glitch out of the list.
+  const BAK_KEY = 'sm_arcade_scorebak';
+  const BAK_ROUTINE = ['daily', 'adjust'], BAK_CAP_ROUTINE = 14, BAK_CAP_KEY = 10;
+  function bakList() {
+    try { const a = JSON.parse(localStorage.getItem(BAK_KEY) || '[]'); return Array.isArray(a) ? a.filter(b => b && b.block) : []; }
+    catch (e) { return []; }
+  }
+  function bakSummary(block) {
+    const t = block.totals || {}, tw = Array.isArray(block.tourWins) ? block.tourWins : [0, 0];
+    return { p1: t.p1 || 0, p2: t.p2 || 0, draws: t.draws || 0, plays: scoreKey(block)[1], tw: [tw[0] || 0, tw[1] || 0] };
+  }
+  function backup(kind, src) {
+    const block = scoreBlock(src || state), list = bakList(), sum = bakSummary(block);
+    const newest = list[list.length - 1];
+    const same = newest && JSON.stringify(newest.block) === JSON.stringify(block);
+    if (same && kind === 'daily') return;      // deliberate edits always get their own labelled copy
+    // one 'adjust' copy per editing session — the state from BEFORE the first tap
+    if (kind === 'adjust' && newest && newest.kind === 'adjust' && Date.now() - newest.t < 10 * 60e3) return;
+    list.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), t: Date.now(), kind, sum, block });
+    const routine = list.filter(b => BAK_ROUTINE.includes(b.kind)).slice(-BAK_CAP_ROUTINE);
+    const key = list.filter(b => !BAK_ROUTINE.includes(b.kind)).slice(-BAK_CAP_KEY);
+    const out = routine.concat(key).sort((a, b) => a.t - b.t);
+    try { localStorage.setItem(BAK_KEY, JSON.stringify(out)); }
+    catch (e) { try { localStorage.setItem(BAK_KEY, JSON.stringify(out.slice(-8))); } catch (e2) {} } // storage full: keep the newest few
+  }
+  function dailyBackup() {
+    if (!synced) return;                       // never checkpoint a copy the room hasn't vetted yet
+    const newest = bakList().filter(b => b.kind === 'daily').pop();
+    if (!newest || new Date(newest.t).toDateString() !== new Date().toDateString()) backup('daily');
+  }
+  // did this change make the scoreboard go DOWN anywhere? (results only ever add up)
+  function scoresDropped(before, after) {
+    const a = bakSummary(before), b = bakSummary(after);
+    return b.p1 < a.p1 || b.p2 < a.p2 || b.draws < a.draws || b.plays < a.plays || b.tw[0] < a.tw[0] || b.tw[1] < a.tw[1];
+  }
+  function restoreBackup(id) {
+    const b = bakList().find(x => x.id === id);
+    if (!b) return false;
+    backup('restore');                         // the restore itself can be undone
+    Object.assign(state, JSON.parse(JSON.stringify(b.block)));
+    if (!Array.isArray(state.history)) state.history = [];
+    if (!Array.isArray(state.tourWins)) state.tourWins = [0, 0];
+    rollSeasons();
+    stampScore(true);                          // new epoch: beats every copy on every phone
+    save();
+    return true;
+  }
+
   function mergeRemote(remote) {
     const first = !synced; synced = true;
+    const before = scoreBlock(state);
     // First read after boot: the ROOM is the truth for the shared bulk, whatever timestamp
     // this device's copy carries — nothing it did before hydrating may beat the room.
     const remoteNewer = first || (remote.updated || 0) >= (state.updated || 0);
@@ -202,6 +259,8 @@ const Store = (() => {
     else if (scoreCmp < 0 && !remoteNewer) Object.assign(state, scoreBlock(remote));   // room holds more — take it even if our bulk won
     if (tz0 && state.players[0]) state.players[0].tz = tz0;
     if (tz1 && state.players[1]) state.players[1].tz = tz1;
+    if (scoresDropped(before, state)) backup('drop', before);   // keep what we had before the sync lowered it
+    dailyBackup();
     persistLocal();
     emit();
     if (roomLacks || !remoteNewer) save();  // publish the merged truth; idempotent echo stops the loop
@@ -261,9 +320,11 @@ const Store = (() => {
     state.history = state.history.slice(0, 40);
     stampScore(false);
     save();
+    dailyBackup();
   }
   function adjustScore(field, delta) { // field: 'p1' | 'p2' | 'draws' — manual correction (Smit only, gated in UI)
     if (!['p1', 'p2', 'draws'].includes(field)) return;
+    backup('adjust');
     state.totals[field] = Math.max(0, (state.totals[field] || 0) + delta);
     stampScore(false);
     save();
@@ -349,6 +410,7 @@ const Store = (() => {
   function setPlayer(idx, patch) { Object.assign(state.players[idx], patch); save(); }
   function setSetting(key, val) { state.settings[key] = val; save(); }
   function resetScores() {
+    backup('reset');
     state.totals = { p1: 0, p2: 0, draws: 0 };
     state.perGame = {}; state.streak = { who: null, n: 0 }; state.history = []; state.tourWins = [0, 0];
     state.seasons = { cur: { ym: curYM(), p1: 0, p2: 0, draws: 0 }, past: [] };
@@ -461,6 +523,7 @@ const Store = (() => {
     planAdd, planRemove, planConfirm, stampTz, _mergeRemote: mergeRemote,
     storySave, storyRemove,
     Sound, isCloud: () => cloud, isSynced: () => synced, _scoreKey: s => scoreKey(s || state),
+    backups: () => bakList().map(({ id, t, kind, sum }) => ({ id, t, kind, sum })).reverse(), restoreBackup,
     getIdentity, setIdentity, onCloud, Net,
   };
 })();

@@ -403,6 +403,20 @@ and per-device latency) and 3-4 iframe devices with isolated localStorage. `?sto
 store file; v66 fails 9/15, v67 passes 15/15 under four latency profiles (`&lat=A:3,B:3,C:300`).
 Settings → Sync & Version now shows "Results recorded" so phones can be compared.
 
+## Score backups (v69) — the safety net, because Firebase keeps NO history
+After the incident the real pre-glitch numbers were unrecoverable: RTDB (free plan) stores only the
+current value and every phone had already adopted the bad copy. Now each phone keeps its own copies
+of the score block in `localStorage['sm_arcade_scorebak']` — deliberately LOCAL ONLY (a bad room
+write can't reach them, and the room isn't bloated since ref.set sends the whole state every save).
+  - 'daily' after sync (skipped if identical to the newest copy); 'drop' taken inside mergeRemote
+    whenever the merge LOWERS any total / tourWin / results count (normal play only ever adds up, so
+    partner games don't spam it); 'adjust' (one per 10-min session), 'reset', 'restore' before those.
+  - Caps: 14 routine (daily, adjust) + 10 key (drop, reset, restore) — dailies can't evict a drop.
+  - restoreBackup(id) copies the block back and stamps a NEW EPOCH, so it beats every other phone's
+    copy (even one with more games). It backs up the current board first ('restore') = undoable.
+  - UI: Settings → SCORE BACKUPS, password `smitwins` only (not Smit-identity-gated: the copy you
+    need may live on Meera's phone). Harness: scratchpad tmp-bak.html (21 checks) + tmp-bakui.html.
+
 ## Cinematic 2.5D artillery (v68) — Pocket Tanks + Fleabag
 Both now use the persistent MODULE-LEVEL canvas + loop pattern (scene `S`): render() re-attaches the
 same canvas, so no repaint can cut an animation. Shared ideas, each implemented per game:

@@ -1711,9 +1711,53 @@ function renderUs() {
 
   view.append(h('div', { class: 'sec-label' }, '📱 IDENTITY'), idCard,
     h('div', { class: 'sec-label' }, '👤 PLAYERS'), profileCard(0), profileCard(1),
-    h('div', { class: 'sec-label' }, '⚙ APP'), set, diag,
+    h('div', { class: 'sec-label' }, '⚙ APP'), set, diag, backupCard(s),
     h('div', { class: 'card' }, h('h3', {}, 'MAKE IT AN APP'), h('p', { class: 'hint' }, 'On your phone: browser menu → “Add to Home Screen” to launch full-screen and offline. 📲')),
     h('div', { class: 'love-note', html: `Built with neon and love for <b>${esc(s.players[0].name)}</b> &amp; <b>${esc(s.players[1].name)}</b>. Miles apart, still playing. 💞` }));
+}
+// ---- Score backups — this phone's own rolling copies of the scoreboard (see Store.backup) ----
+const BAK_LABEL = { daily: 'Daily copy', drop: 'Before scores dropped', adjust: 'Before an adjustment', reset: 'Before a reset', restore: 'Before a restore' };
+let bakShowAll = false;
+function backupCard(s) {
+  const card = h('div', { class: 'card' }, h('h3', {}, 'SCORE BACKUPS'));
+  const list = Store.backups();
+  const n0 = s.players[0].name, n1 = s.players[1].name;
+  const line = x => `${n0} ${x.p1} · ${n1} ${x.p2}${x.draws ? ' · 🤝 ' + x.draws : ''}`;
+  const when = t => new Date(t).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  card.append(h('p', { class: 'hint' }, 'This phone keeps its own copies of the scoreboard: one a day, plus one right before scores ever go down. If the scores ever look wrong, restore a copy — it syncs to both phones.'),
+    h('div', { class: 'bak-now' }, h('span', {}, 'Now'), h('b', {}, line(s.totals))));
+  if (!list.length) { card.append(h('p', { class: 'hint' }, 'No copies yet — the first one is taken once this phone has synced.')); return card; }
+  const rows = h('div', { class: 'bak-list' });
+  (bakShowAll ? list : list.slice(0, 5)).forEach(b => {
+    const row = h('div', { class: 'bak-row' + (b.kind === 'daily' ? '' : ' key') },
+      h('div', { class: 'bak-info' },
+        h('b', {}, line(b.sum)),
+        h('small', {}, `${when(b.t)} · ${BAK_LABEL[b.kind] || b.kind} · ${b.sum.plays} games`)),
+      h('button', { class: 'btn btn-ghost btn-sm', onclick: () => arm() }, 'Restore'));
+    function arm() {
+      Store.Sound.tap();
+      rows.querySelectorAll('.bak-confirm').forEach(el => el.remove());
+      const inp = h('input', { type: 'password', class: 'reset-pass', placeholder: 'score password…', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+      const err = h('div', { class: 'reset-err' });
+      const go = () => {
+        if (inp.value !== 'smitwins') { Store.Sound.bad(); err.textContent = '✕ Wrong password — nothing changed.'; inp.value = ''; inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake'); inp.focus(); return; }
+        if (Store.restoreBackup(b.id)) { Store.Sound.win(); renderUs(); }
+      };
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+      const box = h('div', { class: 'bak-confirm' },
+        h('p', { class: 'hint' }, `Put the scoreboard back to ${line(b.sum)}? Today's scores are backed up first, so you can undo this.`),
+        inp, err,
+        h('div', { class: 'btn-row mt' },
+          h('button', { class: 'btn btn-ghost', onclick: () => { box.remove(); Store.Sound.tap(); } }, 'Cancel'),
+          h('button', { class: 'btn btn-primary', onclick: go }, 'Restore')));
+      row.after(box);
+      setTimeout(() => inp.focus(), 60);
+    }
+    rows.append(row);
+  });
+  card.append(rows);
+  if (list.length > 5) card.append(h('button', { class: 'btn btn-ghost btn-sm mt', onclick: () => { bakShowAll = !bakShowAll; Store.Sound.tap(); renderUs(); } }, bakShowAll ? 'Show fewer' : `Show all ${list.length}`));
+  return card;
 }
 function toggleRow(label, on, onChange) {
   return h('div', { class: 'toggle-row', onclick: () => { onChange(!on); Store.Sound.tap(); } }, h('span', {}, label), h('div', { class: 'switch' + (on ? ' on' : '') }, h('i')));
