@@ -493,3 +493,12 @@ with the stroke (never read from the clock on replay); every device snaps to the
 State bumps `clk` on every stroke: ui.js commitMove/pushTour give a fresh turn clock when `clk` changes even
 if `turn` doesn't (the same player can putt twice in a row). Tests: scratchpad/minigolf/mg-logic.js <repo>
 (57, incl. 27k-shot no-tunnelling fuzz + a solver proving every hole ≤ par+1), mg-phone.html (45).
+
+## Knockout (v75) — assets/js/games-knockout.js (game 43)
+Penguin sumo: both players aim 4 penguins SIMULTANEOUSLY and hidden; `turn` points at whoever hasn't
+submitted. Aims live in memory + localStorage and self-heal into state (duels pattern). Exactly one phone
+resolves (seat 0 at once, seat 1 after ~2.5 s fallback) and commits `res` (init, launches, final positions);
+everyone replays and snaps. Played resolutions persist (`LS+'done'`) so a reload never replays. Floe shrinks
+each round; 8-round cap. Tests: scratchpad/knockout (1,921 checks incl. an 84-run Ready-race matrix).
+Also v75 (ui.js): ordinary moves no longer send `status:'active'` — a move landing AFTER the finishing commit
+(e.g. a timer skip racing it) used to reopen a finished match and could record the result twice.
