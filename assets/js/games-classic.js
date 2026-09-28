@@ -183,10 +183,13 @@
     init: host => {
       const b = Array.from({ length: 8 }, () => Array(8).fill(null));
       for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === 1) { if (r < 3) b[r][c] = { p: 1, k: false }; else if (r > 4) b[r][c] = { p: 0, k: false }; }
-      return { board: b, turn: host, chain: null };
+      return { board: b, turn: host, chain: null, quiet: 0 };
     },
+    // timeout "skip": drop any half-finished multi-jump so the opponent is never left locked to its piece
+    skipTurn: (s, opp) => Object.assign({}, s, { turn: opp, chain: null }),
     render(ctx) {
       const b = ctx.state.board, me = ctx.me; let sel = null;
+      const QUIET = 80;   // 40 moves each with no capture and no man moved (men only move forward) → draw
       ctx.root.append(ctx.turnBar({ scores: [count(0), count(1)] }));
       const grid = ctx.h('div', { class: 'cb' }); const sq = Array.from({ length: 8 }, () => Array(8));
       for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
@@ -197,8 +200,10 @@
       }
       ctx.root.append(ctx.h('div', { class: 'board-frame' }, grid));
       if (!ctx.isMyTurn) { waiting(ctx); return; }
+      // no legal move on my turn (e.g. reached via a timeout skip) = a loss, never a frozen board
+      if (!ctx.state.chain && !hasMoves(b, me)) { ctx.msg('No legal move — you lose', 'var(--gold)'); setTimeout(() => ctx.commit(ctx.clone(ctx.state), 1 - me), 600); return; }
       if (ctx.state.chain) { sel = { r: ctx.state.chain[0], c: ctx.state.chain[1] }; highlight(); ctx.msg('Continue your jump! 🔗', ctx.players[me].color); }
-      else ctx.msg(allCaptures(me).length ? 'Your turn — a capture is available!' : 'Your turn', ctx.players[me].color);
+      else { const left = Math.ceil((QUIET - (ctx.state.quiet || 0)) / 2); ctx.msg((allCaptures(me).length ? 'Your turn — a capture is available!' : 'Your turn') + (left <= 10 ? ` · ${left} king moves each to a draw` : ''), ctx.players[me].color); }
 
       function inB(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
       function dirs(pc) { return pc.k ? [[1,1],[1,-1],[-1,1],[-1,-1]] : (pc.p === 0 ? [[-1,1],[-1,-1]] : [[1,1],[1,-1]]); }
@@ -214,9 +219,10 @@
       }
       function move(r, c) {
         const m = legal(sel.r, sel.c).find(x => x.r === r && x.c === c); if (!m) return;
-        const s = ctx.clone(ctx.state); const pc = s.board[sel.r][sel.c];
+        const s = ctx.clone(ctx.state); const pc = s.board[sel.r][sel.c], wasMan = !pc.k;
         s.board[r][c] = pc; s.board[sel.r][sel.c] = null; ctx.sound.move();
         let captured = false; if (m.cap) { s.board[m.cap[0]][m.cap[1]] = null; captured = true; }
+        s.quiet = (captured || wasMan) ? 0 : (ctx.state.quiet || 0) + 1;   // only king shuffles count toward the draw
         let promoted = false; if (!pc.k && ((pc.p === 0 && r === 0) || (pc.p === 1 && r === 7))) { pc.k = true; promoted = true; }
         // recompute further captures on the NEW board
         const further = (function () { const sv = b; /* use s.board */ const save = JSON.stringify; return capsOn(s.board, r, c); })();
@@ -225,6 +231,7 @@
         const opp = 1 - me;
         if (!s.board.flat().some(x => x && x.p === opp)) return ctx.commit(s, me);
         if (!hasMoves(s.board, opp)) return ctx.commit(s, me);
+        if (s.quiet >= QUIET) return ctx.commit(s, 'draw');
         s.turn = opp; ctx.commit(s);
       }
       function capsOn(board, r, c) { const pc = board[r][c]; if (!pc) return []; const o = []; const ds = pc.k ? [[1,1],[1,-1],[-1,1],[-1,-1]] : (pc.p === 0 ? [[-1,1],[-1,-1]] : [[1,1],[1,-1]]); for (const [dr, dc] of ds) { const mr = r + dr, mc = c + dc, lr = r + 2 * dr, lc = c + 2 * dc; if (lr >= 0 && lr < 8 && lc >= 0 && lc < 8 && board[mr] && board[mr][mc] && board[mr][mc].p !== pc.p && !board[lr][lc]) o.push(1); } return o; }

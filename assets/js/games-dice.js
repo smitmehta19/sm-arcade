@@ -100,12 +100,26 @@
     { id: 'chance', label: 'Chance', fn: d => sum(d) },
   ];
   const yUpper = card => Y_CATS.filter(c => c.up).reduce((a, c) => a + (card[c.id] || 0), 0);
-  const yTotal = card => { const up = yUpper(card); const low = Y_CATS.filter(c => !c.up).reduce((a, c) => a + (card[c.id] || 0), 0); return up + (up >= 63 ? 35 : 0) + low; };
+  // ybonus = +100 per extra Yahtzee (only while the Yahtzee box holds 50); not a box, so yDone ignores it
+  const yTotal = card => { const up = yUpper(card); const low = Y_CATS.filter(c => !c.up).reduce((a, c) => a + (card[c.id] || 0), 0); return up + (up >= 63 ? 35 : 0) + low + (card.ybonus || 0); };
+  // an EXTRA Yahtzee (box already used, 50 or 0) plays as a Joker — official forced-Joker rule:
+  // 1) the matching upper box if open, else 2) any open lower box (FH/SS/LS at full value), else 3) scratch an upper box
+  const isJoker = (card, d) => d.length === 5 && nKind(d, 5) && ('yahtzee' in card);
+  const JOKER_FIX = { full: 25, small: 30, large: 40 };
+  function yAllowed(card, d) {
+    const open = Y_CATS.filter(c => !(c.id in card)).map(c => c.id);
+    if (!isJoker(card, d)) return open;
+    const up = Y_CATS[d[0] - 1].id; if (open.includes(up)) return [up];
+    const low = open.filter(id => !Y_CATS.find(c => c.id === id).up);
+    return low.length ? low : open;                // only upper boxes left → they score 0 (faces don't match)
+  }
+  const yCatScore = (card, d, id) => (isJoker(card, d) && JOKER_FIX[id]) ? JOKER_FIX[id] : Y_CATS.find(c => c.id === id).fn(d);
   const yDone = card => Y_CATS.every(c => c.id in card);
 
   Games.register({
     id: 'yahtzee', name: 'Yahtzee', emoji: '🎲', category: 'Dice', accent: '#ff9f45',
     tagline: 'Roll, hold, fill the card.',
+    test: { allowed: yAllowed, catScore: yCatScore, total: yTotal, isJoker },
     init: host => ({ turn: host, scores: [{}, {}], dice: [], held: [false, false, false, false, false], rollsLeft: 3, host }),
     // on a timeout "skip", hand a CLEAN turn to the opponent (don't inherit my dice/rolls)
     skipTurn: (s, opp) => Object.assign({}, s, { turn: opp, dice: [], held: [false, false, false, false, false], rollsLeft: 3 }),
@@ -142,13 +156,15 @@
         const cell = (seat, c) => {
           const card = st.scores[seat];
           if (c.id in card) return ctx.h('td', { class: 'yz-cell' + (card[c.id] === 0 ? ' zero' : '') }, String(card[c.id]));
-          const liveHere = ctx.isMyTurn && seat === me && st.dice.length > 0;
-          if (liveHere) { const td = ctx.h('td', { class: 'yz-cell live' }, String(c.fn(st.dice))); td.onclick = () => scoreCat(c.id); return td; }
+          const liveHere = ctx.isMyTurn && seat === me && st.dice.length > 0 && yAllowed(card, st.dice).includes(c.id);
+          if (liveHere) { const td = ctx.h('td', { class: 'yz-cell live' }, String(yCatScore(card, st.dice, c.id))); td.onclick = () => scoreCat(c.id); return td; }
           return ctx.h('td', { class: 'yz-cell zero' }, '·');
         };
         Y_CATS.forEach((c, i) => {
           const tr = ctx.h('tr', {}, ctx.h('td', { class: 'lbl' }, c.label), cell(0, c), cell(1, c));
           tbl.append(tr);
+          if (c.id === 'yahtzee') tbl.append(ctx.h('tr', {}, ctx.h('td', { class: 'lbl yz-sub' }, 'Yahtzee bonus (+100 each)'),
+            ...[0, 1].map(p => ctx.h('td', { class: 'yz-sub' }, st.scores[p].ybonus ? '+' + st.scores[p].ybonus : '·'))));
           if (c.id === 'sixes') tbl.append(ctx.h('tr', {}, ctx.h('td', { class: 'lbl yz-sub' }, 'Upper bonus (63+→35)'),
             ctx.h('td', { class: 'yz-sub' }, yUpper(st.scores[0]) >= 63 ? '+35' : `${yUpper(st.scores[0])}/63`),
             ctx.h('td', { class: 'yz-sub' }, yUpper(st.scores[1]) >= 63 ? '+35' : `${yUpper(st.scores[1])}/63`)));
@@ -160,7 +176,8 @@
       function redraw() { diceBox.innerHTML = ''; diceBox.append(drawDice()); cardBox.innerHTML = ''; cardBox.append(scoreCard()); }
       diceBox = ctx.h('div', {}); cardBox = ctx.h('div', { style: 'margin-top:10px' });
       pane.append(diceBox, cardBox); redraw();
-      ctx.isMyTurn ? ctx.msg('Your turn 🎲', ctx.players[me].color) : waiting(ctx, ctx.seat(st.turn).name);
+      const joker = ctx.isMyTurn && isJoker(st.scores[me], st.dice);
+      ctx.isMyTurn ? ctx.msg(joker ? `Extra Yahtzee!${st.scores[me].yahtzee === 50 ? ' +100 bonus 🎉' : ''} Joker: ${yAllowed(st.scores[me], st.dice).length === 1 ? 'it must go in its upper box' : 'pick a highlighted box'}` : 'Your turn 🎲', ctx.players[me].color) : waiting(ctx, ctx.seat(st.turn).name);
 
       function rollDice() {
         if (st.rollsLeft <= 0) return;
@@ -170,10 +187,12 @@
         s.held = held.slice(); s.rollsLeft = st.rollsLeft - 1; ctx.sound.place(); ctx.commit(s);
       }
       function scoreCat(id) {
-        if (!st.dice.length) { ctx.sound.bad(); return; }
+        const card = st.scores[me];
+        if (!ctx.isMyTurn || !st.dice.length || !yAllowed(card, st.dice).includes(id)) { ctx.sound.bad(); return; }   // used box / Joker order
         const s = ctx.clone(st);
         s.scores = [Object.assign({}, st.scores[0]), Object.assign({}, st.scores[1])];
-        s.scores[me][id] = Y_CATS.find(c => c.id === id).fn(st.dice);
+        s.scores[me][id] = yCatScore(card, st.dice, id);
+        if (isJoker(card, st.dice) && card.yahtzee === 50) s.scores[me].ybonus = (card.ybonus || 0) + 100;
         s.dice = []; s.held = [false, false, false, false, false]; s.rollsLeft = 3; s.turn = 1 - me; ctx.sound.good();
         if (yDone(s.scores[0]) && yDone(s.scores[1])) { const a = yTotal(s.scores[0]), b = yTotal(s.scores[1]); return ctx.commit(s, a === b ? 'draw' : (a > b ? 0 : 1)); }
         ctx.commit(s);
@@ -204,8 +223,11 @@
           `Bid was ${st.last.qty}× `, dieEl(ctx.h, st.last.face, { xs: true }),
           ` · actually ${st.last.actual} → ${ctx.players[st.last.caller].name} called ${st.last.good ? 'wrong' : 'right'}!`));
         ctx.root.append(card);
-        if (me === st.host) ctx.root.append(ctx.h('button', { class: 'btn btn-primary btn-block mt', onclick: nextRound }, 'Next round ▶'));
-        else waiting(ctx, ctx.players[st.host].name + ' to continue');
+        // the button follows `turn` (the loser, who opens next round) — the player on the clock can always
+        // continue, so a timer can't run out on someone who has nothing to press
+        const cont = st.turn != null ? st.turn : st.host;
+        if (me === cont && ctx.status === 'active') ctx.root.append(ctx.h('button', { class: 'btn btn-primary btn-block mt', onclick: nextRound }, 'Next round ▶'));
+        else if (ctx.status === 'active') waiting(ctx, ctx.players[cont].name + ' to continue');
         return;
       }
 
@@ -258,11 +280,13 @@
         const loser = bidGood ? me : st.bid.by;       // caller loses if bid good, else bidder loses
         const s = ctx.clone(st); s.counts = st.counts.slice(); s.counts[loser]--;
         s.phase = 'reveal'; s.last = { qty: st.bid.qty, face: st.bid.face, actual, caller: me, good: bidGood, loser };
+        s.turn = loser;                               // the loser opens the next round, so they hold the reveal too
         bidGood ? ctx.sound.bad() : ctx.sound.good();
         if (s.counts[loser] <= 0) return ctx.commit(s, 1 - loser);   // loser out of dice → opponent wins
         ctx.commit(s);
       }
       function nextRound() {
+        if (st.phase !== 'reveal' || !ctx.isMyTurn) return;
         const s = ctx.clone(st);
         s.dice = [roll(s.counts[0]), roll(s.counts[1])]; s.bid = null; s.phase = 'bid';
         s.turn = st.last.loser;                       // the player who lost the die starts

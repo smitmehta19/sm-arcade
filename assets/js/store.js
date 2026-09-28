@@ -504,6 +504,21 @@ const Store = (() => {
     },
     setMatch(obj) { if (cloud) return db.ref('matches/' + ROOM() + '/active').set(obj); return Promise.resolve(); },
     updateMatch(patch) { if (cloud) return db.ref('matches/' + ROOM() + '/active').update(patch); return Promise.resolve(); },
+    // FINISH a match exactly once. Both phones can try to end the same match (a timeout fires on the
+    // player on the clock AND, 2 s later, on the partner) — a plain update let both record the result.
+    // The transaction only applies while `ok(current)` still holds; resolves true only for the winner
+    // of that race, and ONLY that phone records the score.
+    finishMatch(ok, patch) {
+      if (!cloud) return Promise.resolve(true);
+      const r = db.ref('matches/' + ROOM() + '/active');
+      let mine = false;
+      return r.transaction(cur => {
+        mine = false;
+        if (cur === null) return null;                       // cache not warm yet — the server will retry with real data
+        if (!ok(cur)) return;                                // someone already finished it: abort
+        mine = true; return Object.assign({}, cur, patch);
+      }).then(res => !!(res && res.committed && mine && res.snapshot && res.snapshot.val()), () => false);
+    },
     clearMatch() { if (cloud) return db.ref('matches/' + ROOM() + '/active').remove(); return Promise.resolve(); },
     serverTime: () => (typeof firebase !== 'undefined' && firebase.database) ? firebase.database.ServerValue.TIMESTAMP : Date.now(),
     serverNow: () => Date.now() + serverOffset,   // synced wall-clock for countdown timers

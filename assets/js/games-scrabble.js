@@ -34,6 +34,11 @@
   .sc-t .v{ position:absolute; right:1px; bottom:0; font-size:5.5px; font-weight:700; opacity:.7; }
   .sc-t.blank{ color:#7a3f8f; }
   .sc-t.pend{ background:linear-gradient(160deg,#bdf5d8,#7fe0ae); box-shadow:0 0 7px rgba(121,245,182,.8); }
+  .sc-t.ask{ background:linear-gradient(160deg,#ffe3a8,#ffc14d); box-shadow:0 0 8px rgba(255,193,77,.85); animation:scAsk 1.4s ease-in-out infinite; }
+  @keyframes scAsk{ 50%{ box-shadow:0 0 2px rgba(255,193,77,.4); } }
+  @media (prefers-reduced-motion: reduce){ .sc-t.ask{ animation:none; } }
+  .sc-ask{ text-align:center; font-size:13px; line-height:1.55; color:var(--ink); }
+  .sc-ask b{ color:var(--gold); letter-spacing:.5px; }
   @media(min-width:520px){ .sc-c{ font-size:7px; } .sc-t{ font-size:15px; } .sc-t .v{ font-size:7px; } .sc-c.ctr{ font-size:12px; } }
   .sc-rack{ display:flex; gap:5px; justify-content:center; flex-wrap:wrap; padding:8px; border-radius:12px;
     background:rgba(0,0,0,.3); border:1px solid var(--glass-brd); min-height:56px; }
@@ -79,15 +84,15 @@
     'pe pi qi re sh si so ta ti to uh um un up us ut we wo xi xu ya ye yo za ok ew').split(' '));
 
   /* ---- the big dictionary loads only when Scrabble is actually opened ---- */
-  let dictLoading = false;
+  let dictLoading = false, dictFailed = false;
   const dictReady = () => !!window.SCRABBLE_DICT;
   function loadDict(then) {
     if (dictReady() || dictLoading) { if (dictReady() && then) then(); return; }
-    dictLoading = true;
+    dictLoading = true; dictFailed = false;
     const s = document.createElement('script');
     s.src = 'assets/js/words-scrabble.js';
     s.onload = () => { dictLoading = false; if (then) then(); };
-    s.onerror = () => { dictLoading = false; };      // stays on the small DICT
+    s.onerror = () => { dictLoading = false; dictFailed = true; s.remove(); if (then) then(); };
     document.head.append(s);
   }
   function isWord(w) {
@@ -189,12 +194,23 @@
     return { words: f.words, detail, score: total + (bingo ? 50 : 0), bingo, bad: f.words.filter(w => !isWord(w.word)).map(w => w.word.toUpperCase()) };
   }
 
+  // the rack left after playing these tiles (a blank comes off as '_'); null if the rack can't cover them
+  function rackAfter(rack, tiles) {
+    const left = (rack || []).slice();
+    for (const t of tiles) {
+      const k = left.indexOf(t.blank ? '_' : t.l);
+      if (k < 0) return null;
+      left.splice(k, 1);
+    }
+    return left;
+  }
+
   const waiting = ctx => ctx.msg(`⏳ Waiting for ${ctx.seat(1 - ctx.me).name}…`, 'var(--ink-faint)');
 
   Games.register({
     id: 'scrabble', name: 'Scrabble', emoji: '🔠', category: 'Word', accent: '#79f5b6',
     tagline: 'Words, premiums, and a 50-point bingo.',
-    test: { evaluate, formedWords, wordAt, isWord, freshBag, PREM, VAL, DIST },
+    test: { evaluate, formedWords, wordAt, isWord, freshBag, rackAfter, PREM, VAL, DIST },
     init: host => {
       const bag = freshBag();
       return {
@@ -205,7 +221,12 @@
       };
     },
     // a timed-out turn just passes cleanly (mid-turn tiles are never committed)
-    skipTurn: (st, opp) => { const s = JSON.parse(JSON.stringify(st)); s.turn = opp; s.passes = (s.passes || 0) + 1; return s; },
+    // an unanswered "allow this word?" request just lapses: the asker gets the turn back, unpenalised
+    skipTurn: (st, opp) => {
+      const s = JSON.parse(JSON.stringify(st));
+      if (s.ask) { delete s.ask; s.turn = opp; return s; }
+      s.turn = opp; s.passes = (s.passes || 0) + 1; return s;
+    },
     render(ctx) {
       const st = ctx.state, me = ctx.me;
       const myRack = (st.racks && st.racks[me]) ? st.racks[me].slice() : [];
@@ -217,7 +238,7 @@
       const wrap = ctx.h('div', { class: 'sc-wrap' });
       const top = ctx.h('div', { class: 'sc-top' },
         ctx.h('span', {}, '🎒 ', ctx.h('span', { class: 'bag' }, String((st.bag || []).length)), ' left'),
-        ctx.h('span', { class: 'last' }, st.last ? `${ctx.players[st.last.seat].name}: ${st.last.word} +${st.last.score}` : 'First word goes on the ★'));
+        ctx.h('span', { class: 'last' }, st.last ? (st.last.rejected ? `${ctx.players[st.last.seat].name}: ${st.last.word} ✕ not allowed` : `${ctx.players[st.last.seat].name}: ${st.last.word} +${st.last.score}`) : 'First word goes on the ★'));
       const board = ctx.h('div', { class: 'sc-board' });
       const cells = [];
       for (let i = 0; i < 225; i++) {
@@ -246,6 +267,37 @@
       // pull the full word list in the background the first time we play
       if (!dictReady()) loadDict(() => { if (ctx.isMyTurn) paintActs(); });
 
+      // ---- a word outside the dictionary waits for the PARTNER's verdict (nobody can wave their own word through) ----
+      if (st.ask) {
+        const ask = st.ask, asker = ctx.players[ask.seat].name, judge = ctx.players[1 - ask.seat].name;
+        const ev = evaluate(st.board, ask.tiles, st.first);
+        const pts = ev.err ? 0 : ev.score;
+        paintBoard(); paintRack();
+        line.innerHTML = '';
+        if (me === ask.seat) {
+          line.append(ctx.h('div', { class: 'sc-ask' }, `Asked ${judge} to allow `, ctx.h('b', {}, ask.words.join(', ')), ` for ${pts} points.`, ctx.h('br'), 'If the answer is no, you lose this turn.'));
+          ctx.msg(`⏳ Waiting for ${judge}’s verdict…`, 'var(--ink-faint)');
+        } else {
+          line.append(ctx.h('div', { class: 'sc-ask' }, ctx.h('b', {}, ask.words.join(', ')), ` isn’t in the dictionary. ${asker} wants to play it for ${pts} points — allow it?`));
+          if (!ev.err) acts.append(ctx.h('button', { class: 'btn btn-primary', onclick: allow }, '✓ Allow it'));
+          acts.append(ctx.h('button', { class: 'btn btn-ghost', onclick: reject }, `✕ No — ${asker} loses the turn`));
+          ctx.msg(`${asker} needs your verdict`, ctx.players[me].color);
+        }
+        function allow() {
+          const s = ctx.clone(st); delete s.ask;
+          if (ev.err || !playTiles(s, ask.seat, ask.tiles, ev)) { reject(); return; }
+          finishOrCommit(s, ask.seat);
+        }
+        function reject() {
+          const s = ctx.clone(st); delete s.ask;
+          s.passes = (s.passes || 0) + 1; s.turn = 1 - ask.seat;
+          s.last = { word: ask.words.join('+'), score: 0, cells: [], seat: ask.seat, rejected: true };
+          ctx.sound.bad();
+          finishOrCommit(s, ask.seat);
+        }
+        return;
+      }
+
       paintBoard(); paintRack(); paintActs();
       if (!ctx.isMyTurn) { waiting(ctx); return; }
       ctx.msg('Your turn — spell something good', ctx.players[me].color);
@@ -258,20 +310,21 @@
           c.onclick = null;
           const onB = st.board[i];
           const pen = pending.find(p => p.i === i);
-          const t = onB || (pen ? { l: pen.l, blank: pen.blank } : null);
+          const asked = !onB && st.ask ? st.ask.tiles.find(p => p.i === i) : null;
+          const t = onB || (pen ? { l: pen.l, blank: pen.blank } : asked);
           if (t) {
-            const el = ctx.h('div', { class: 'sc-t' + (t.blank ? ' blank' : '') + (pen ? ' pend' : '') }, t.l);
+            const el = ctx.h('div', { class: 'sc-t' + (t.blank ? ' blank' : '') + (pen ? ' pend' : '') + (asked ? ' ask' : '') }, t.l);
             if (!t.blank) el.append(ctx.h('span', { class: 'v' }, String(VAL[t.l] || 0)));
             c.append(el);
           }
-          if (!ctx.isMyTurn || st.over) continue;
+          if (!ctx.isMyTurn || st.over || st.ask) continue;
           if (pen) { c.classList.add('live'); c.onclick = () => { pending = pending.filter(p => p.i !== i); repaint(); ctx.sound.tap(); }; }
           else if (!onB && sel != null) { c.classList.add('live'); c.onclick = () => place(i); }
         }
       }
       function paintRack() {
         rack.innerHTML = '';
-        if (!ctx.isMyTurn) { rack.append(ctx.h('div', { style: 'color:var(--ink-faint);font-size:12px;align-self:center' }, `${ctx.seat(1 - me).name} is thinking…`)); return; }
+        if (!ctx.isMyTurn || st.ask) { rack.append(ctx.h('div', { style: 'color:var(--ink-faint);font-size:12px;align-self:center' }, st.ask ? 'Waiting on a verdict…' : `${ctx.seat(1 - me).name} is thinking…`)); return; }
         myRack.forEach((l, ri) => {
           const used = pending.some(p => p.ri === ri);
           const isEx = !!(exchanging && exchanging.has(ri));
@@ -305,7 +358,7 @@
           line.innerHTML = '';
           if (ev.err) line.textContent = ev.err;
           else line.append(ctx.h('span', {}, ev.detail.map(d => d.word).join(' · ') + ' = '), ctx.h('b', {}, String(ev.score)), ev.bingo ? ctx.h('span', {}, ' 🎉 BINGO +50') : '');
-        } else if (!dictReady()) line.textContent = 'Loading the full word list…';
+        } else if (!dictReady()) line.textContent = dictFailed ? 'Couldn’t load the word list — check your connection.' : 'Loading the full word list…';
         else line.textContent = '';
       }
       function repaint() { paintBoard(); paintRack(); paintActs(); }
@@ -341,36 +394,56 @@
         }
         return false;
       }
-      function applyMove(ev) {
-        const s = ctx.clone(st);
-        pending.forEach(p => { s.board[p.i] = { l: p.l, blank: !!p.blank }; });
-        const used = new Set(pending.map(p => p.ri));
-        s.racks[me] = myRack.filter((_, ri) => !used.has(ri));
-        while (s.racks[me].length < 7 && s.bag.length) s.racks[me].push(s.bag.shift());
-        s.scores[me] += ev.score;
+      // lays `tiles` for `seat` onto s (board, rack, refill, score); false if the rack can't cover them
+      function playTiles(s, seat, tiles, ev) {
+        const left = rackAfter(s.racks[seat], tiles);
+        if (!left) return false;
+        tiles.forEach(p => { s.board[p.i] = { l: p.l, blank: !!p.blank }; });
+        s.racks[seat] = left;
+        while (s.racks[seat].length < 7 && s.bag.length) s.racks[seat].push(s.bag.shift());
+        s.scores[seat] += ev.score;
         s.first = false; s.passes = 0;
-        s.last = { word: ev.detail.map(d => d.word).join('+'), score: ev.score, cells: pending.map(p => p.i), seat: me };
-        s.turn = 1 - me;
+        s.last = { word: ev.detail.map(d => d.word).join('+'), score: ev.score, cells: tiles.map(p => p.i), seat };
+        s.turn = 1 - seat;
         if (ev.bingo) {                                   // all 7 tiles — its own signature moment
           ctx.sound.win();
           try { window.fxBanner && fxBanner('BINGO! +50', 'var(--gold)'); window.fxShockwave && fxShockwave('var(--gold)'); } catch (e) {}
         } else ctx.sound.good();
-        if (!finishIfDone(s, me)) ctx.commit(s);
+        return true;
       }
+      function finishOrCommit(s, seat) { if (!finishIfDone(s, seat)) ctx.commit(s); }
+      const tilesOf = list => list.map(p => ({ i: p.i, l: p.l, blank: !!p.blank }));
       function submit() {
         if (!pending.length) { ctx.sound.bad(); line.textContent = 'Place some tiles first.'; return; }
         const ev = evaluate(st.board, pending, st.first);
         if (ev.err) { ctx.sound.bad(); line.textContent = ev.err; return; }
+        // never judge words against the small fallback list — it would wrongly reject real words
+        if (!dictReady()) {
+          ctx.sound.bad();
+          line.textContent = dictFailed ? 'Couldn’t load the word list — check your connection and try again.' : 'Still loading the word list — try again in a moment.';
+          loadDict(() => { if (ctx.isMyTurn) paintActs(); });
+          return;
+        }
         if (ev.bad.length) {
           ctx.sound.bad();
           line.innerHTML = '';
+          const partner = ctx.players[1 - me].name;
           line.append(ctx.h('div', {}, `“${ev.bad.join(', ')}” isn’t in the dictionary.`),
             ctx.h('div', { class: 'sc-acts', style: 'margin-top:7px' },
-              ctx.h('button', { class: 'btn btn-sm btn-ghost', onclick: () => applyMove(ev) }, '🤝 Play it anyway'),
-              ctx.h('button', { class: 'btn btn-sm btn-ghost', onclick: () => { pending = []; sel = null; repaint(); } }, 'Take it back')));
+              ctx.h('button', { class: 'btn btn-sm btn-ghost', onclick: () => { pending = []; sel = null; repaint(); } }, '↩ Take it back'),
+              ctx.h('button', { class: 'btn btn-sm btn-ghost', onclick: () => askPartner(ev) }, `🙋 Ask ${partner} to allow it`)),
+            ctx.h('div', { style: 'margin-top:6px;font-size:11.5px;color:var(--ink-faint)' }, `If ${partner} says no, you lose this turn.`));
           return;
         }
-        applyMove(ev);
+        const s = ctx.clone(st);
+        if (!playTiles(s, me, tilesOf(pending), ev)) { ctx.sound.bad(); line.textContent = 'Those tiles aren’t on your rack.'; return; }
+        finishOrCommit(s, me);
+      }
+      function askPartner(ev) {
+        const s = ctx.clone(st);
+        s.ask = { seat: me, tiles: tilesOf(pending), words: ev.bad, t: Date.now() };
+        s.turn = 1 - me;                                  // the partner is "on the clock" to judge
+        ctx.sound.tap(); ctx.commit(s);
       }
       function doPass() {
         const s = ctx.clone(st);

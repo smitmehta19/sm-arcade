@@ -64,6 +64,11 @@
     'birthday suit', 'skinny dip', 'spank', 'tongue', 'wink', 'devil horns', 'horny devil',
   ];
   const DG_PROMPTS = DG_CLEAN.concat(DG_ADULT);
+  // Fair-play limits: the drawer can only give up the round once the guesser has had a real
+  // go (3 misses), and 6 misses ends it. A correct guess pays guesser +2 AND drawer +1 — the
+  // drawer is rewarded for a guessable sketch, while +1/+1 would make every game a tie.
+  const DG_MAX_GUESSES = 6, DG_REVEAL_AFTER = 3, DG_PTS_GUESS = 2, DG_PTS_DRAW = 1;
+  const dgMisses = st => (st.guesses || []).filter(g => !g.ok).length;
 
   function drawStrokes(canvas, strokes, extra) {
     const g = canvas.getContext && canvas.getContext('2d'); if (!g) return;   // harness-safe (mock canvas has no context)
@@ -83,10 +88,11 @@
   Games.register({
     id: 'draw-guess', name: 'Draw & Guess', emoji: '🎨', category: 'Couple', accent: '#ff9f45',
     tagline: 'Doodle it, guess it.',
-    test: { norm },
+    test: { norm, misses: dgMisses, MAX: DG_MAX_GUESSES, REVEAL_AFTER: DG_REVEAL_AFTER },
     init: host => ({ phase: 'draw', drawer: host, prompt: DG_PROMPTS[rint(DG_PROMPTS.length)], strokes: [], guesses: [], scores: [0, 0], round: 0, rounds: 6, host }),
     render(ctx) {
       const st = ctx.state, me = ctx.me, drawer = st.drawer, guesser = 1 - drawer;
+      st.strokes = st.strokes || []; st.guesses = st.guesses || [];   // RTDB drops empty arrays
       ctx.root.append(ctx.h('div', { class: 'score-line' },
         ctx.h('span', { style: `color:${ctx.players[0].color}` }, ctx.players[0].name + ' ' + st.scores[0]), '  –  ',
         ctx.h('span', { style: `color:${ctx.players[1].color}` }, st.scores[1] + ' ' + ctx.players[1].name)));
@@ -98,7 +104,7 @@
         frame.append(ctx.h('div', { class: 'dg-prompt' }, st.prompt), canvas);
         drawStrokes(canvas, st.strokes);
         const got = st.guesses.some(g => g.ok);
-        frame.append(ctx.h('p', { class: 'center', style: 'margin:8px 0;font-weight:700;color:' + (got ? 'var(--lime)' : 'var(--magenta)') }, got ? `${ctx.players[guesser].name} guessed it! +1` : 'Nobody got it 🙈'));
+        frame.append(ctx.h('p', { class: 'center', style: 'margin:8px 0;font-weight:700;color:' + (got ? 'var(--lime)' : 'var(--magenta)') }, got ? `${ctx.players[guesser].name} guessed it! +${DG_PTS_GUESS} · ${ctx.players[drawer].name} +${DG_PTS_DRAW} for the drawing` : 'Nobody got it 🙈'));
         if (me === st.host) {
           const last = st.round + 1 >= st.rounds;
           ctx.root.append(ctx.h('button', { class: 'btn btn-primary btn-block mt', onclick: next }, last ? 'See result 🏆' : 'Next round ▶'));
@@ -120,7 +126,8 @@
           frame.append(ctx.h('div', { class: 'dg-tools' },
             ctx.h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { const s = ctx.clone(st); s.strokes = st.strokes.slice(0, -1); ctx.commit(s); } }, '↶ Undo'),
             ctx.h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { const s = ctx.clone(st); s.strokes = []; ctx.commit(s); } }, '🗑 Clear')));
-          ctx.root.append(ctx.h('button', { class: 'btn btn-primary btn-block mt', onclick: () => { const s = ctx.clone(st); s.phase = 'guess'; ctx.commit(s); } }, 'Done — let them guess ▶'));
+          // a blank canvas can't be handed over — that was a free way to deny the guesser
+          ctx.root.append(ctx.h('button', { class: 'btn btn-primary btn-block mt', onclick: () => { if (!st.strokes.length) { ctx.sound.bad(); ctx.msg('Draw something first!', 'var(--gold)'); return; } const s = ctx.clone(st); s.phase = 'guess'; ctx.commit(s); } }, 'Done — let them guess ▶'));
           ctx.msg('Sketch the word, then hand it over 🎨', ctx.players[me].color);
         } else {
           frame.append(ctx.h('div', { class: 'dg-prompt' }, '✏️ guessing soon…'), canvas);
@@ -133,22 +140,29 @@
       // phase 'guess' — guesser types, drawer watches; only the guesser commits
       frame.append(canvas); drawStrokes(canvas, st.strokes);
       const list = ctx.h('div', { class: 'dg-list' }, st.guesses.map(g => ctx.h('div', { class: 'dg-g' + (g.ok ? ' ok' : '') }, `${ctx.players[g.by].name}: ${g.text}${g.ok ? ' ✓' : ''}`)));
+      const misses = dgMisses(st), left = DG_MAX_GUESSES - misses;
       if (me === guesser) {
         const inp = ctx.h('input', { class: 'dg-input', placeholder: 'your guess…', maxlength: '24' });
+        let sent = false;                                    // one commit per paint (Enter + tap double-fire)
         const submit = () => {
-          const text = (inp.value || '').trim(); if (!text) { ctx.sound.bad(); return; }
+          const text = (inp.value || '').trim(); if (!text || sent || left <= 0) { ctx.sound.bad(); return; }
           const ok = norm(text) === norm(st.prompt);
           const s = ctx.clone(st); s.guesses = st.guesses.concat([{ by: me, text, ok }]);
-          if (ok) { s.scores[guesser]++; s.phase = 'reveal'; ctx.sound.good(); } else ctx.sound.bad();
-          inp.value = ''; ctx.commit(s);
+          if (ok) { s.scores[guesser] += DG_PTS_GUESS; s.scores[drawer] += DG_PTS_DRAW; s.phase = 'reveal'; ctx.sound.good(); }
+          else { ctx.sound.bad(); if (misses + 1 >= DG_MAX_GUESSES) s.phase = 'reveal'; }   // out of guesses → answer shown
+          sent = true; inp.value = ''; ctx.commit(s);
         };
         inp.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
         frame.append(ctx.h('div', { class: 'dg-guess-row' }, inp, ctx.h('button', { class: 'btn btn-primary', onclick: submit }, 'Guess')), list);
-        ctx.msg('What is it? Type your guess', ctx.players[me].color);
+        ctx.msg(`What is it? ${left} guess${left === 1 ? '' : 'es'} left`, ctx.players[me].color);
       } else {
         frame.append(list);
-        ctx.root.append(ctx.h('button', { class: 'btn btn-ghost btn-block mt', onclick: () => { const s = ctx.clone(st); s.phase = 'reveal'; ctx.commit(s); } }, 'Reveal the answer'));
-        waiting(ctx, ctx.players[guesser].name + ' (guessing)');
+        // the drawer may only end the round after the guesser has had a fair shot
+        const canReveal = misses >= DG_REVEAL_AFTER;
+        ctx.root.append(ctx.h('button', { class: 'btn btn-ghost btn-block mt', disabled: canReveal ? null : 'disabled',
+          onclick: () => { if (dgMisses(st) < DG_REVEAL_AFTER) { ctx.sound.bad(); return; } const s = ctx.clone(st); s.phase = 'reveal'; ctx.commit(s); } },
+          canReveal ? 'Reveal the answer' : `Reveal unlocks after ${DG_REVEAL_AFTER} wrong guesses (${misses}/${DG_REVEAL_AFTER})`));
+        waiting(ctx, ctx.players[guesser].name + ` (guessing · ${left} left)`);
       }
 
       function next() {

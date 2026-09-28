@@ -631,6 +631,16 @@
     resultDelay: () => S.anim ? Math.round((Math.max(0, (S.anim.pts.length - S.anim.i) / 1.6) + Math.max(0, TAIL - S.anim.tail)) * 16.7) + 250 : 0,
     test: { simulate, throwFrom, torsoOf, VW, VH, GROUND, FENCE_X, FENCE_TOP, MAX_POW, fx: S, S,
       replay: () => ({ inFlight: S.anim ? { hitDone: S.anim.hitDone, tail: S.anim.tail, i: S.anim.i } : null, seenShot: S.doneId }) },
+    // timer ran out ("Chance gone"): no throw, and nothing of this turn leaks to the opponent —
+    // an owed Double Attack or an armed Power Throw would otherwise hand THEM a bonus throw / 2x hit
+    skipTurn: (st, opp) => {
+      const s = JSON.parse(JSON.stringify(st));
+      s.extra = 0; s.armed = [null, null];
+      s.stink = [0, 1].map(i => !!(s.stink && s.stink[i]));
+      s.wind = rollWind(s.stink[opp] ? 2 : 1); s.stink[opp] = false;   // fresh wind, like any turn change
+      s.turn = opp; s.note = '';
+      return s;
+    },
     init: host => ({
       hp: [100, 100], turn: host, wind: rollWind(),
       powers: [freshPowers(), freshPowers()],

@@ -49,7 +49,8 @@
     init: host => ({ boards: Array.from({ length: 9 }, () => Array(9).fill(null)), won: Array(9).fill(null), active: null, turn: host, host }),
     render(ctx) {
       const st = ctx.state, me = ctx.me, MARK = ['✕', '◯'];
-      ctx.root.append(ctx.turnBar());
+      const boards = p => st.won.filter(w => w === p).length;   // small boards won — the tiebreak if no line forms
+      ctx.root.append(ctx.turnBar({ scores: [boards(0), boards(1)] }));
       const meta = ctx.h('div', { class: 'ut-meta' });
       for (let m = 0; m < 9; m++) {
         const isActive = ctx.isMyTurn && st.won[m] == null && (st.active === m || st.active == null);
@@ -69,8 +70,13 @@
         const wl = LINES.find(l => l.every(i => st.won[i] === p));
         if (wl) { fxWinLine(meta, meta.children[wl[0]], meta.children[wl[2]], ctx.players[p].color); break; }
       }
-      ctx.isMyTurn ? ctx.msg(st.active != null ? 'Play in the highlighted board' : 'Free move — play in any open board', ctx.players[me].color) : waiting(ctx);
-      function play(m, c) { const { next, winner } = utApply(st, me, m, c); ctx.sound.place(); ctx.commit(next, winner); }
+      // house rule: every board decided with no line of three → most small boards wins (equal = draw)
+      const noLine = ![0, 1].some(p => utMetaWin(st.won, p));
+      if (noLine && st.won.every(w => w != null)) {
+        const a = boards(0), b = boards(1);
+        ctx.msg(`No three in a row — decided on board count (${a}–${b}): ${a === b ? 'draw' : ctx.players[a > b ? 0 : 1].name + ' wins'}`, 'var(--gold)');
+      } else ctx.isMyTurn ? ctx.msg(st.active != null ? 'Play in the highlighted board' : 'Free move — play in any open board', ctx.players[me].color) : waiting(ctx);
+      function play(m, c) { if (!utLegal(st, m, c)) return; const { next, winner } = utApply(st, me, m, c); ctx.sound.place(); ctx.commit(next, winner); }
     },
   });
 })();

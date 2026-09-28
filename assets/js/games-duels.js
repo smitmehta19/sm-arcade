@@ -8,6 +8,11 @@
      so live sync repaints of the stage never interrupt a run.
    - `latest[id]` always holds the freshest ctx (updated on every
      paint) so the finish-commit never clobbers the partner's score.
+   - ONE run per seat: "started" is committed before the run, and a
+     quit / reload / abandoned run is final (score so far, or worst).
+     The partner's score stays hidden until yours is locked in.
+   - Each phone keeps its own result (memory + localStorage) and
+     re-merges it on every paint, so a simultaneous finish can't lose it.
    ============================================================ */
 (function () {
   const css = `
@@ -52,26 +57,70 @@
 
   const mulberry32 = seed => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   const latest = {};                                   // gameId → freshest ctx (set on every paint)
-  let ov = null, ovCleanup = null;
+  // THIS seat's own run per match ('id:seed:seat' → {started} | {score}), mirrored to localStorage:
+  // a reload / killed app must neither forget a banked score nor forget that the run was started.
+  const mine = {}, LS = 'sm_duel_';
+  const keyOf = (def, seed, seat) => def.id + ':' + seed + ':' + seat;
+  const memGet = k => { if (mine[k]) return mine[k]; try { return (mine[k] = JSON.parse(localStorage.getItem(LS + k) || 'null')); } catch (e) { return null; } };
+  const memSet = (k, v) => { mine[k] = v; try { localStorage.setItem(LS + k, JSON.stringify(v)); } catch (e) {} };
+  // Firebase strips nulls / empty arrays → re-default on read (a result implies the run was started)
+  const norm = st => {
+    const r = Array.isArray(st.results) ? st.results : [], sd = Array.isArray(st.started) ? st.started : [];
+    st.results = [0, 1].map(i => r[i] != null ? r[i] : null);
+    st.started = [0, 1].map(i => !!sd[i] || st.results[i] != null);
+    return st;
+  };
+  const winOf = (def, a, b) => a === b ? 'draw' : ((def.lowerWins ? a < b : a > b) ? 0 : 1);
+  // Push my banked result into the shared state if it isn't there. Both phones write the WHOLE state,
+  // so two finishes inside the network delay can erase one score; re-merging on every paint heals it.
+  // The winner is committed only here, once both results are present (commit ignores a finished match).
+  // If BOTH phones lost their score to the race, both heal at once; seat 1 then waits a grace and
+  // re-checks, so only one of them closes the match (and records the result).
+  const HEAL_GRACE = 2500;
+  function sync(def, heal) {
+    const c = latest[def.id]; if (!c || c.status !== 'active') return;
+    const st = norm(c.clone(c.state)), me = c.me, m = memGet(keyOf(def, st.seed, me));
+    if (!m || m.score == null || st.results[me] != null) return;
+    st.results[me] = m.score; st.started[me] = true;
+    const a = st.results[0], b = st.results[1];
+    if (a == null || b == null) return c.commit(st);
+    if (heal === true && me === 1) return void setTimeout(() => sync(def, 'late'), HEAL_GRACE);
+    c.commit(st, winOf(def, a, b));
+  }
+  function bank(def, seed, seat, score) { memSet(keyOf(def, seed, seat), { score }); sync(def); }
+  let ov = null, ovCleanup = null, run = null;         // run = the run live on THIS phone
+  // a run that ends without finishing (quit, back, hashchange) is FINAL: its score so far, or the worst
+  function abandon() {
+    const r = run; if (!r || r.done) return; r.done = true;
+    bank(r.def, r.seed, r.seat, (r.sure || !r.def.lowerWins) && r.partial != null ? r.partial : r.def.worst);
+  }
   function closeOverlay() {
     if (ovCleanup) { try { ovCleanup(); } catch (e) {} ovCleanup = null; }
     if (ov) { ov.remove(); ov = null; }
     window.removeEventListener('hashchange', closeOverlay);
+    abandon();
   }
-  function openOverlay(def, seed, onScore) {
+  function startRun(def, ctx) {
+    const c = latest[def.id] || ctx, st = norm(c.clone(c.state)), me = c.me, k = keyOf(def, st.seed, me);
+    if (c.status !== 'active' || (run && !run.done) || st.started[me] || memGet(k)) return;   // one run per seat, ever
     closeOverlay();
+    memSet(k, { started: true });
+    run = { key: k, def, seed: st.seed, seat: me, done: false, partial: null, sure: false };
+    openOverlay(def, st.seed, run);                    // overlay first, so the repaint below sees a live run
+    st.started[me] = true; c.commit(st);               // bank "started" before playing — no quit-and-replay
+  }
+  function openOverlay(def, seed, r) {
     const stage = document.createElement('div'); stage.className = 'dov-stage';
     ov = document.createElement('div'); ov.className = 'duel-ov';
     const head = document.createElement('div'); head.className = 'dov-head';
     head.innerHTML = `<b>${def.emoji} ${def.name}</b>`;
-    const quit = document.createElement('button'); quit.className = 'dov-quit'; quit.textContent = '✕ Quit run';
+    const quit = document.createElement('button'); quit.className = 'dov-quit'; quit.textContent = '✕ Quit (locks score)';
     quit.onclick = () => { Store.Sound.bad(); closeOverlay(); };
     head.append(quit); ov.append(head, stage); document.body.append(ov);
     window.addEventListener('hashchange', closeOverlay);
-    let finished = false;
     ovCleanup = def.play(stage, mulberry32(seed), score => {
-      if (finished) return; finished = true;
-      onScore(score);                                  // commit FIRST — the score is banked even if they bail
+      if (r.done) return; r.done = true;
+      bank(def, seed, r.seat, score);                  // commit FIRST — the score is banked even if they bail
       stage.innerHTML = '';
       const end = document.createElement('div'); end.className = 'dov-end';
       end.innerHTML = `<div style="font-size:40px">${def.emoji}</div>
@@ -81,46 +130,54 @@
       ok.onclick = closeOverlay;
       end.append(ok); stage.append(end);
       Store.Sound.win();
-    });
+    }, (v, sure) => { r.partial = v; if (sure) r.sure = true; });   // live score, used if the run is abandoned
   }
 
   function makeDuel(def) {
+    def.worst = def.lowerWins ? 9999 : 0;              // an abandoned run with no usable score
+    const show = r => def.lowerWins && r >= def.worst ? 'DNF' : String(r);
     Games.register({
       id: def.id, name: def.name, emoji: def.emoji, category: 'Duel', accent: def.accent,
       tagline: def.tagline,
-      init: host => ({ seed: 1 + Math.floor(Math.random() * 1e9), results: [null, null], host }),
+      init: host => ({ seed: 1 + Math.floor(Math.random() * 1e9), results: [null, null], started: [false, false], host }),
+      test: { norm, keyOf: (seed, seat) => keyOf(def, seed, seat), winOf: (a, b) => winOf(def, a, b), worst: def.worst, run: () => run, mine, closeOverlay },
       render(ctx) {
         latest[def.id] = ctx;
-        const st = ctx.state, me = ctx.me;
+        const st = norm(ctx.state), me = ctx.me, k = keyOf(def, st.seed, me);
+        const live = !!(run && run.key === k && !run.done);
+        // my result is missing from the shared state: re-merge a banked score (lost race), or close a
+        // started run this phone isn't playing any more (reload / killed app) as final. Deferred so the
+        // commit's own repaint doesn't nest inside this one.
+        if (ctx.status === 'active' && st.results[me] == null && !live) {
+          const m = memGet(k);
+          if ((m && m.score == null) || (!m && st.started[me])) memSet(k, { score: def.worst });
+          if (memGet(k)) setTimeout(() => sync(def, true), 0);
+        }
         const frame = ctx.h('div', { class: 'board-frame dl-card' });
         frame.append(ctx.h('div', { class: 'dl-hint' }, def.hint));
         const row = ctx.h('div', { class: 'dl-status' });
+        // never show the partner's score before mine is locked in — no playing to a known target
+        const peek = ctx.status !== 'active' || st.results[me] != null;
         [0, 1].forEach(p => {
-          const r = st.results[p];
+          const r = st.results[p], sc = r == null ? (st.started[p] ? '▶ playing' : '—')
+            : (p === me || peek) ? [show(r), ctx.h('small', {}, ' ' + def.unit)] : '✓ done';
           row.append(ctx.h('div', { class: 'dl-p p' + p + (r != null ? ' done' : '') },
             ctx.h('div', { class: 'nm' }, ctx.players[p].name + (p === me ? ' (you)' : '')),
-            ctx.h('div', { class: 'sc' }, r != null ? [String(r), ctx.h('small', {}, ' ' + def.unit)] : '—')));
+            ctx.h('div', { class: 'sc' }, sc)));
         });
         frame.append(row);
         if (ctx.status === 'active') {
-          if (st.results[me] == null) {
-            frame.append(ctx.h('button', { class: 'btn btn-primary btn-block', onclick: () => openOverlay(def, st.seed, finish) }, '▶ Play your run'));
+          if (st.results[me] == null && !st.started[me] && !memGet(k)) {
+            frame.append(ctx.h('button', { class: 'btn btn-primary btn-block', onclick: () => startRun(def, ctx) }, '▶ Play your run'));
             const them = st.results[1 - me];
-            ctx.msg(them != null ? `${ctx.seat(1 - me).name} scored ${them} ${def.unit} — ${def.lowerWins ? 'go faster!' : 'beat it!'} 🔥` : 'Same seed, same game — play whenever you’re ready', 'var(--gold)');
+            ctx.msg(them != null ? `${ctx.seat(1 - me).name} has played — your go! One try; quitting locks your score 🔥` : 'Same seed, same game — one try each, play whenever you’re ready', 'var(--gold)');
+          } else if (st.results[me] == null) {
+            ctx.msg('Your run is in progress… 🎮', 'var(--ink-faint)');
           } else {
             ctx.msg(`You’re locked in — waiting for ${ctx.seat(1 - me).name}… 🍿`, 'var(--ink-faint)');
           }
         }
         ctx.root.append(frame);
-        function finish(score) {
-          const c = latest[def.id] || ctx;               // freshest state → never drop the partner's score
-          const s = c.clone(c.state); s.results[me] = score;
-          const a = s.results[0], b = s.results[1];
-          if (a != null && b != null) {
-            const w = a === b ? 'draw' : ((def.lowerWins ? a < b : a > b) ? 0 : 1);
-            c.commit(s, w);
-          } else c.commit(s);
-        }
       },
     });
   }
@@ -130,7 +187,7 @@
     id: 'reaction-duel', name: 'Reaction Duel', emoji: '⚡', accent: '#ffd66b', unit: 'ms avg', lowerWins: true,
     tagline: 'Tap the green — fastest nerves win.',
     hint: '5 rounds: wait for GREEN, then tap as fast as you can. Jumping the gun costs a 500ms round. Lowest average wins.',
-    play(stage, rng, done) {
+    play(stage, rng, done, progress) {
       const delays = Array.from({ length: 5 }, () => 900 + Math.floor(rng() * 2200));
       const times = []; let round = 0, t0 = 0, phase = 'idle', tmr = null;
       const info = document.createElement('div'); info.className = 'rx-rounds';
@@ -150,7 +207,7 @@
       });
       function next(note) {
         round++; show();
-        if (round >= 5) { const avg = Math.round(times.reduce((a, b) => a + b, 0) / times.length); setTimeout(() => done(avg), 500); pad.className = 'rx-pad idle'; pad.textContent = '🏁'; return; }
+        if (round >= 5) { const avg = Math.round(times.reduce((a, b) => a + b, 0) / times.length); progress(avg, true); setTimeout(() => done(avg), 500); pad.className = 'rx-pad idle'; pad.textContent = '🏁'; return; }
         phase = 'idle'; pad.className = 'rx-pad idle'; pad.textContent = note || 'TAP FOR NEXT ROUND';
       }
       return () => clearTimeout(tmr);
@@ -162,7 +219,7 @@
     id: 'speed-math', name: 'Speed Math', emoji: '➗', accent: '#79f5b6', unit: 'correct',
     tagline: '45 seconds of quickfire sums.',
     hint: '45 seconds, same questions for both of you. Tap the right answer — most correct wins. Wrong answers just waste your clock.',
-    play(stage, rng, done) {
+    play(stage, rng, done, progress) {
       const SECS = 45; let score = 0, over = false;
       const bar = document.createElement('div'); bar.className = 'dov-timebar'; bar.innerHTML = '<i style="width:100%"></i>';
       const scoreEl = document.createElement('div'); scoreEl.className = 'dov-score'; scoreEl.textContent = 'Score: 0';
@@ -188,7 +245,7 @@
         for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
         opts.innerHTML = '';
         arr.forEach(v => { const btn = document.createElement('button'); btn.textContent = v;
-          btn.onclick = () => { if (over) return; if (v === ans) { score++; scoreEl.textContent = 'Score: ' + score; Store.Sound.good(); } else Store.Sound.bad(); nextQ(); };
+          btn.onclick = () => { if (over) return; if (v === ans) { score++; progress(score); scoreEl.textContent = 'Score: ' + score; Store.Sound.good(); } else Store.Sound.bad(); nextQ(); };
           opts.append(btn); });
       }
       nextQ();
@@ -201,7 +258,7 @@
     id: 'snake-duel', name: 'Snake', emoji: '🐍', accent: '#b6ff3a', unit: 'apples',
     tagline: 'Old-school snake · same apples for both.',
     hint: 'Swipe (or use the pad) to steer. Eat apples, don’t hit walls or yourself. Same apple layout for both players — most apples wins.',
-    play(stage, rng, done) {
+    play(stage, rng, done, progress) {
       const N = 17, PX = Math.min(20, Math.floor(Math.min(innerWidth * .84, 340) / N));
       const cv = document.createElement('canvas'); cv.className = 'snk-cv'; cv.width = cv.height = N * PX;
       const scoreEl = document.createElement('div'); scoreEl.className = 'dov-score'; scoreEl.textContent = '🍎 0';
@@ -225,7 +282,7 @@
           dead = true; Store.Sound.bad(); clearInterval(tmr); setTimeout(() => done(score), 600); return;
         }
         snake.unshift(h2);
-        if (h2[0] === food[0] && h2[1] === food[1]) { score++; scoreEl.textContent = '🍎 ' + score; Store.Sound.place(); dropFood(); clearInterval(tmr); tmr = setInterval(step, Math.max(85, 150 - score * 3)); }
+        if (h2[0] === food[0] && h2[1] === food[1]) { score++; progress(score); scoreEl.textContent = '🍎 ' + score; Store.Sound.place(); dropFood(); clearInterval(tmr); tmr = setInterval(step, Math.max(85, 150 - score * 3)); }
         else snake.pop();
         draw();
       }
@@ -253,7 +310,7 @@
     id: '2048-race', name: '2048 Race', emoji: '🔢', accent: '#ffb26b', unit: 'points',
     tagline: 'Same tiles · 2 minutes · big merges.',
     hint: 'Swipe to slide & merge tiles. Identical tile drops for both of you. Score when the 2-minute clock runs out (or you jam the board).',
-    play(stage, rng, done) {
+    play(stage, rng, done, progress) {
       const SECS = 120; let cells = Array(16).fill(0), score = 0, over = false;
       const bar = document.createElement('div'); bar.className = 'dov-timebar'; bar.innerHTML = '<i style="width:100%"></i>';
       const scoreEl = document.createElement('div'); scoreEl.className = 'dov-score'; scoreEl.textContent = 'Score: 0';
@@ -286,7 +343,7 @@
           if (m) moved = true; gain += g;
         }
         if (!moved) { Store.Sound.bad(); return; }
-        score += gain; if (gain) Store.Sound.place(); else Store.Sound.move();
+        score += gain; progress(score); if (gain) Store.Sound.place(); else Store.Sound.move();
         spawn(); paint();
         if (!canMove()) end();
       }

@@ -127,8 +127,16 @@
         ctx.root.append(rots);
         ctx.msg('Now twist any block ↺ ↻', ctx.players[me].color);
       } else ctx.isMyTurn ? ctx.msg('Place a marble', ctx.players[me].color) : waiting(ctx);
-      function place(r, c) { const s = ctx.clone(st); s.board[r][c] = me; s.phase = 'rotate'; ctx.sound.place(); ctx.commit(s); }
+      // a skipped twist can leave a full board with nothing to place → settle it as the draw it is
+      if (ctx.isMyTurn && st.phase === 'place' && b.every(row => row.every(x => x != null))) { setTimeout(() => ctx.commit(ctx.clone(st), 'draw'), 600); return; }
+      function place(r, c) {
+        if (st.phase !== 'place' || b[r][c] != null) return;
+        const s = ctx.clone(st); s.board[r][c] = me; s.phase = 'rotate'; ctx.sound.place();
+        if (pWin(s.board, me)) return ctx.commit(s, me);    // real rules: five straight after placing wins — no twist needed
+        ctx.commit(s);
+      }
       function rotate(q, dir) {
+        if (st.phase !== 'rotate') return;
         const s = ctx.clone(st); s.board = pRot(s.board, q, dir); s.phase = 'place'; ctx.sound.move();
         const meWin = pWin(s.board, me), oppWin = pWin(s.board, 1 - me);
         if (meWin && !oppWin) return ctx.commit(s, me);
@@ -152,9 +160,12 @@
   Games.register({
     id: 'hex', name: 'Hex', emoji: '⬡', category: 'Strategy', accent: '#9b7bff',
     tagline: 'Connect your two sides.',
-    init: host => ({ board: Array.from({ length: HN }, () => Array(HN).fill(null)), turn: host }),
+    init: host => ({ board: Array.from({ length: HN }, () => Array(HN).fill(null)), turn: host, swapped: false }),
     render(ctx) {
       const st = ctx.state, b = st.board, me = ctx.me;
+      // swap (pie) rule: facing a lone enemy opening stone, you may take it instead of placing —
+      // it becomes yours mirrored across the diagonal (r,c)→(c,r), which swaps top/bottom for left/right
+      const canSwap = ctx.isMyTurn && !st.swapped && b.flat().filter(v => v != null).length === 1 && b.flat().includes(1 - me);
       ctx.root.append(ctx.turnBar());
       ctx.root.append(ctx.h('div', { class: 'hex-legend' },
         ctx.h('span', { style: `color:${ctx.players[0].color}` }, ctx.players[0].name + ': top ↕ bottom'),
@@ -171,8 +182,15 @@
         inner.append(row);
       }
       wrapEl.append(inner); ctx.root.append(ctx.h('div', { class: 'board-frame' }, wrapEl));
-      ctx.isMyTurn ? ctx.msg('Place a stone to extend your chain', ctx.players[me].color) : waiting(ctx);
-      function play(r, c) { const s = ctx.clone(st); s.board[r][c] = me; ctx.sound.place(); if (hWin(s.board, me)) return ctx.commit(s, me); s.turn = 1 - me; ctx.commit(s); }
+      if (canSwap) ctx.root.append(ctx.h('div', { class: 'btn-row mt' }, ctx.h('button', { class: 'btn btn-ghost', onclick: swap }, '⇄ Swap — take their opening stone')));
+      ctx.isMyTurn ? ctx.msg(canSwap ? 'Place a stone — or Swap to take their opening' : 'Place a stone to extend your chain', ctx.players[me].color) : waiting(ctx);
+      function play(r, c) { if (b[r][c] != null) return; const s = ctx.clone(st); s.board[r][c] = me; ctx.sound.place(); if (hWin(s.board, me)) return ctx.commit(s, me); s.turn = 1 - me; ctx.commit(s); }
+      function swap() {                                     // counts as my move; the opener then plays again
+        if (!canSwap) return;
+        const s = ctx.clone(st); let r0 = 0, c0 = 0;
+        b.forEach((row, r) => row.forEach((v, c) => { if (v != null) { r0 = r; c0 = c; } }));
+        s.board[r0][c0] = null; s.board[c0][r0] = me; s.swapped = true; s.turn = 1 - me; ctx.sound.move(); ctx.commit(s);
+      }
     },
   });
 
@@ -189,13 +207,20 @@
     for (let i = 0; i < 24; i++) if (pts[i] === p && MM_ADJ[i].some(j => pts[j] == null)) return true;
     return false;
   }
+  // legal destinations for the piece on `i`: neighbours only, anywhere when flying (3 left)
+  const mmDests = (pts, i, fly) => fly ? pts.map((v, j) => v == null ? j : -1).filter(j => j >= 0) : MM_ADJ[i].filter(j => pts[j] == null);
+  const MM_QUIET = 50;                                     // 50 moves in total with no mill → draw
   Games.register({
     id: 'nine-mens-morris', name: 'Nine Men’s Morris', emoji: '⚙️', category: 'Strategy', accent: '#ffd66b',
     tagline: 'Form mills, capture pieces.',
-    init: host => ({ pts: Array(24).fill(null), turn: host, phase: 'place', placed: [0, 0], mustRemove: false, host }),
+    init: host => ({ pts: Array(24).fill(null), turn: host, phase: 'place', placed: [0, 0], mustRemove: false, quiet: 0, host }),
+    // timeout "skip": a pending mill removal is forfeited. Placed counts are untouched, and placing
+    // is per player (never past 9), so a skip can't hand anyone a 10th piece.
+    skipTurn: (s, opp) => Object.assign({}, s, { turn: opp, mustRemove: false, placed: (s.placed || [0, 0]).slice() }),
     render(ctx) {
-      const st = ctx.state, pts = st.pts, me = ctx.me; let sel = null;
-      ctx.root.append(ctx.turnBar({ scores: [mmCount(pts, 0) + (9 - st.placed[0]), mmCount(pts, 1) + (9 - st.placed[1])] }));
+      const st = ctx.state, pts = st.pts, me = ctx.me, placed = st.placed || [0, 0];
+      const myPlace = placed[me] < 9;                      // still have pieces in hand? (per player — a skip can desync the two)
+      ctx.root.append(ctx.turnBar({ scores: [mmCount(pts, 0) + (9 - placed[0]), mmCount(pts, 1) + (9 - placed[1])] }));
       const wrap = ctx.h('div', { class: 'mm-wrap' });
       const S = 'http://www.w3.org/2000/svg';
       const svg = document.createElementNS(S, 'svg'); svg.setAttribute('class', 'mm-svg'); svg.setAttribute('viewBox', '0 0 6 6');
@@ -203,49 +228,62 @@
       lineSet.forEach(([a, b]) => { const l = document.createElementNS(S, 'line'); l.setAttribute('x1', MM_CO[a][0]); l.setAttribute('y1', MM_CO[a][1]); l.setAttribute('x2', MM_CO[b][0]); l.setAttribute('y2', MM_CO[b][1]); l.setAttribute('stroke', 'rgba(150,170,230,.3)'); l.setAttribute('stroke-width', '.05'); svg.append(l); });
       wrap.append(svg);
       const oppAllMills = (() => { const opp = 1 - me; const ids = pts.map((v, i) => v === opp ? i : -1).filter(i => i >= 0); return ids.length > 0 && ids.every(i => mmInAnyMill(pts, i, opp)); })();
-      const flying = mmCount(pts, me) <= 3 && st.placed[me] >= 9;
+      const canRemove = i => pts[i] === 1 - me && (oppAllMills || !mmInAnyMill(pts, i, 1 - me));
+      const flying = mmCount(pts, me) <= 3 && !myPlace;
+      const btns = [];
       pts.forEach((v, i) => {
         const [x, y] = MM_CO[i];
-        const placeLive = ctx.isMyTurn && !st.mustRemove && st.phase === 'place' && v == null;
-        const removeTgt = ctx.isMyTurn && st.mustRemove && v === (1 - me) && (oppAllMills || !mmInAnyMill(pts, i, 1 - me));
+        const placeLive = ctx.isMyTurn && !st.mustRemove && myPlace && v == null;
+        const removeTgt = ctx.isMyTurn && st.mustRemove && canRemove(i);
         const btn = ctx.h('button', { class: 'mm-pt' + (placeLive ? ' live' : '') + (removeTgt ? ' tgt' : ''), style: `left:${(x / 6) * 100}%; top:${(y / 6) * 100}%` });
         if (v == null) btn.append(ctx.h('div', { class: 'dot' }));
         else btn.append(ctx.h('div', { class: 'pc p' + v + (removeTgt ? ' removable' : '') }));
         if (placeLive) btn.onclick = () => doPlace(i);
         else if (removeTgt) btn.onclick = () => doRemove(i);
-        else if (ctx.isMyTurn && !st.mustRemove && st.phase === 'move' && v === me) btn.onclick = () => selectPiece(i, btn);
-        wrap.append(btn);
+        else if (ctx.isMyTurn && !st.mustRemove && !myPlace && v === me) btn.onclick = () => selectPiece(i, btn);
+        btns.push(btn); wrap.append(btn);
       });
       ctx.root.append(ctx.h('div', { class: 'board-frame' }, wrap));
+      const quiet = st.quiet || 0, left = MM_QUIET - quiet;
       if (st.mustRemove && ctx.isMyTurn) ctx.msg('Mill! Remove an opponent piece', 'var(--gold)');
       else if (!ctx.isMyTurn) waiting(ctx);
-      else ctx.msg(st.phase === 'place' ? `Place a piece (${9 - st.placed[me]} left)` : (flying ? 'Fly a piece anywhere' : 'Move a piece to a neighbour'), ctx.players[me].color);
+      else ctx.msg((myPlace ? `Place a piece (${9 - placed[me]} left)` : (flying ? 'Fly a piece anywhere' : 'Move a piece to a neighbour')) + (!myPlace && left <= 10 ? ` · ${left} moves to a draw` : ''), ctx.players[me].color);
+      // boxed in on my turn (e.g. after a timeout skip) → that's a loss, never a frozen board
+      if (ctx.isMyTurn && !st.mustRemove && !mmHasMove(pts, me, placed)) { ctx.msg('No legal move — you lose', 'var(--gold)'); setTimeout(() => ctx.commit(ctx.clone(st), 1 - me), 600); return; }
 
+      // a mill only asks for a removal if there's actually an enemy piece on the board to take
+      const millNow = (s, pt) => mmMill(s.pts, pt, me) && mmCount(s.pts, 1 - me) > 0;
       function doPlace(i) {
-        const s = ctx.clone(st); s.pts[i] = me; s.placed[me]++; ctx.sound.place();
-        if (mmMill(s.pts, i, me)) { s.mustRemove = true; if (s.placed[0] >= 9 && s.placed[1] >= 9) s.phase = 'move'; return ctx.commit(s); }
+        if (!ctx.isMyTurn || st.mustRemove || !myPlace || pts[i] != null) return;   // hard 9-piece cap
+        const s = ctx.clone(st); s.placed = placed.slice(); s.pts[i] = me; s.placed[me]++; ctx.sound.place();
         if (s.placed[0] >= 9 && s.placed[1] >= 9) s.phase = 'move';
+        if (millNow(s, i)) { s.mustRemove = true; return ctx.commit(s); }
+        if (!mmHasMove(s.pts, 1 - me, s.placed)) return ctx.commit(s, me);        // e.g. last placement boxes them in
         s.turn = 1 - me; ctx.commit(s);
       }
       function selectPiece(i, btn) {
-        ctx.root.querySelectorAll('.mm-pt.sel').forEach(e => e.classList.remove('sel'));
-        sel = i; btn.classList.add('sel');
-        const dests = flying ? pts.map((v, j) => v == null ? j : -1).filter(j => j >= 0) : MM_ADJ[i].filter(j => pts[j] == null);
-        ctx.root.querySelectorAll('.mm-pt').forEach((e, j) => { e.classList.remove('live'); });
-        dests.forEach(j => { const el = ctx.root.querySelectorAll('.mm-pt')[j]; el.classList.add('live'); el.onclick = () => doMove(sel, j); });
+        // wipe the previous selection's targets first — a stale handler would move the wrong piece
+        btns.forEach((e, j) => { e.classList.remove('sel', 'live'); if (pts[j] == null) e.onclick = null; });
+        btn.classList.add('sel');
+        mmDests(pts, i, flying).forEach(j => { btns[j].classList.add('live'); btns[j].onclick = () => doMove(i, j); }); // `from` bound now
         ctx.sound.tap();
       }
       function doMove(from, to) {
-        const s = ctx.clone(st); s.pts[to] = me; s.pts[from] = null; ctx.sound.move();
-        if (mmMill(s.pts, to, me)) { s.mustRemove = true; return ctx.commit(s); }
+        // rules gate: my piece, an empty target, and adjacent unless flying — no teleports
+        if (!ctx.isMyTurn || st.mustRemove || myPlace || pts[from] !== me || !mmDests(pts, from, flying).includes(to)) return;
+        const s = ctx.clone(st); s.placed = placed.slice(); s.pts[to] = me; s.pts[from] = null; ctx.sound.move();
+        if (millNow(s, to)) { s.mustRemove = true; s.quiet = 0; return ctx.commit(s); }
+        s.quiet = quiet + 1;
         if (!mmHasMove(s.pts, 1 - me, s.placed)) return ctx.commit(s, me);
+        if (s.quiet >= MM_QUIET) return ctx.commit(s, 'draw');
         s.turn = 1 - me; ctx.commit(s);
       }
       function doRemove(i) {
-        const s = ctx.clone(st); s.pts[i] = null; s.mustRemove = false; ctx.sound.bad();
+        if (!ctx.isMyTurn || !st.mustRemove || !canRemove(i)) return;
+        const s = ctx.clone(st); s.placed = placed.slice(); s.pts[i] = null; s.mustRemove = false; ctx.sound.bad();
         const opp = 1 - me;
-        if (s.placed[0] >= 9 && s.placed[1] >= 9 && mmCount(s.pts, opp) < 3) return ctx.commit(s, me);
-        if (s.phase === 'move' && !mmHasMove(s.pts, opp, s.placed)) return ctx.commit(s, me);
+        if (s.placed[opp] >= 9 && mmCount(s.pts, opp) < 3) return ctx.commit(s, me);
+        if (!mmHasMove(s.pts, opp, s.placed)) return ctx.commit(s, me);
         s.turn = opp; ctx.commit(s);
       }
     },
@@ -360,6 +398,17 @@
     id: 'quarto', name: 'Quarto', emoji: '🟫', category: 'Strategy', accent: '#9b7bff',
     tagline: 'Hand your rival their piece.',
     init: host => ({ board: Array(16).fill(null), avail: Array(16).fill(true), hand: null, turn: host, phase: 'pick' }),
+    // timeout "skip". Picking: a random piece is handed over for you and they place it.
+    // Placing: the piece goes back to the pool and the picker (opp) picks again — so whoever
+    // chose a piece never ends up placing it themselves.
+    skipTurn(s, opp) {
+      const n = JSON.parse(JSON.stringify(s));
+      if (n.phase === 'pick') {
+        const pool = n.avail.map((a, p) => a ? p : -1).filter(p => p >= 0);
+        if (pool.length) { n.hand = pool[rint(pool.length)]; n.avail[n.hand] = false; n.phase = 'place'; }
+      } else { if (n.hand != null) n.avail[n.hand] = true; n.hand = null; n.phase = 'pick'; }
+      n.turn = opp; return n;
+    },
     render(ctx) {
       const st = ctx.state, me = ctx.me;
       const piece = p => ctx.h('div', { class: 'qt-piece' }, ctx.h('div', { class: 'qt-pc ' + qtPieceClass(p) }));
@@ -383,8 +432,9 @@
         ctx.msg('Pick your rival’s piece', ctx.players[me].color);
       } else if (ctx.isMyTurn && st.phase === 'place') ctx.msg('Place the piece on the board', ctx.players[me].color);
       else waiting(ctx);
-      function giveTo(p) { const s = ctx.clone(st); s.hand = p; s.avail[p] = false; s.phase = 'place'; s.turn = 1 - me; ctx.sound.tap(); ctx.commit(s); }
+      function giveTo(p) { if (st.phase !== 'pick' || !st.avail[p]) return; const s = ctx.clone(st); s.hand = p; s.avail[p] = false; s.phase = 'place'; s.turn = 1 - me; ctx.sound.tap(); ctx.commit(s); }
       function placeAt(i) {
+        if (st.phase !== 'place' || st.hand == null || st.board[i] != null) return;
         const s = ctx.clone(st); s.board[i] = s.hand; s.hand = null; ctx.sound.place();
         if (qtWin(s.board)) return ctx.commit(s, me);
         if (s.board.every(x => x != null)) return ctx.commit(s, 'draw');
@@ -399,9 +449,20 @@
   Games.register({
     id: 'code-breaker', name: 'Code Breaker', emoji: '🎯', category: 'Strategy', accent: '#2fe6ff',
     tagline: 'Crack the secret colour code.',
-    init: host => ({ secrets: [null, null], guesses: [[], []], phase: 'set', turn: host, host }),
+    init: host => ({ secrets: [null, null], guesses: [[], []], phase: 'set', turn: host, host, final: null }),
+    // timeout "skip". Setting: a random code is locked in for the staller. Guessing: the turn is
+    // logged as a blank "timed out" row, so both players' turn counts stay in step for the tie rule.
+    skipTurn(s, opp) {
+      const n = JSON.parse(JSON.stringify(s)), me = 1 - opp, G = n.guesses || [];
+      n.secrets = n.secrets || [null, null]; n.guesses = [G[0] || [], G[1] || []];
+      if (n.phase === 'set') {
+        if (n.secrets[opp] == null) n.secrets[opp] = Array.from({ length: 4 }, () => rint(CB_COLORS.length)); // my code, for opp to crack
+        if (n.secrets[me] != null) n.phase = 'play';
+      } else n.guesses[me].push({ skip: true });
+      n.turn = opp; return n;
+    },
     render(ctx) {
-      const st = ctx.state, me = ctx.me;
+      const st = ctx.state, me = ctx.me, G = st.guesses || [], guesses = [G[0] || [], G[1] || []];
       if (st.phase === 'set') {
         if (st.secrets[1 - me] == null) {  // I set the code my opponent will crack
           let draft = [];
@@ -414,15 +475,16 @@
               ctx.h('button', { class: 'btn btn-ghost', onclick: () => { draft = []; renderSlots(); } }, 'Clear'),
               ctx.h('button', { class: 'btn btn-primary', onclick: lock }, 'Lock code')));
           ctx.root.append(card); ctx.msg('Build a sneaky code 🤫', ctx.players[me].color);
-          function lock() { if (draft.length !== 4) { ctx.sound.bad(); ctx.msg('Pick 4 colours', 'var(--gold)'); return; } const s = ctx.clone(st); s.secrets[1 - me] = draft.slice(); if (s.secrets[me] != null) { s.phase = 'play'; s.turn = s.host; } ctx.commit(s); }
+          function lock() { if (draft.length !== 4) { ctx.sound.bad(); ctx.msg('Pick 4 colours', 'var(--gold)'); return; } const s = ctx.clone(st); s.secrets[1 - me] = draft.slice(); if (s.secrets[me] != null) { s.phase = 'play'; s.turn = s.host; } else s.turn = 1 - me; ctx.commit(s); } // the clock follows whoever still has to lock — a staller can't run out MY timer
         } else { ctx.root.append(frame(ctx, `Waiting for ${ctx.players[1 - me].name} to set their code…`)); waiting(ctx, ctx.players[1 - me].name); }
         return;
       }
       // play — I crack secrets[me]
-      const target = st.secrets[me], myGuesses = st.guesses[me];
+      const target = st.secrets[me], myGuesses = guesses[me], opp = 1 - me;
       const rows = ctx.h('div', { class: 'cb-rows' });
       myGuesses.forEach(g => {
         const row = ctx.h('div', { class: 'cb-row' });
+        if (g.skip) { row.append(ctx.h('span', { style: 'color:var(--ink-faint);font-size:12px' }, '⏱ timed out — turn lost')); rows.append(row); return; }
         g.guess.forEach(ci => row.append(ctx.h('div', { class: 'cb-peg', style: `background:${CB_COLORS[ci]}` })));
         // clear counts: how many are in the right colour+spot, how many right colour wrong spot
         row.append(ctx.h('div', { class: 'cb-fb2' },
@@ -437,7 +499,9 @@
         ctx.h('p', { style: 'color:var(--ink-dim);margin:0 0 8px;font-size:12px;text-align:center' }, `Cracking ${ctx.players[1 - me].name}’s code — match the counts to deduce it`),
         legend,
         rows.children.length ? rows : ctx.h('p', { class: 'center', style: 'color:var(--ink-faint)' }, 'No guesses yet')));
-      if (ctx.isMyTurn) {
+      if (ctx.isMyTurn && st.final === me) {                 // their last guess timed out (skip handed the turn back) → I win
+        ctx.msg('Their last guess timed out — you win!', 'var(--gold)'); setTimeout(() => ctx.commit(Object.assign(ctx.clone(st), { final: null }), me), 600);
+      } else if (ctx.isMyTurn) {
         let draft = [];
         const slots = ctx.h('div', { class: 'cb-row' });
         const renderSlots = () => { slots.innerHTML = ''; for (let i = 0; i < 4; i++) slots.append(draft[i] != null ? ctx.h('div', { class: 'cb-peg', style: `background:${CB_COLORS[draft[i]]}` }) : ctx.h('div', { class: 'cb-slot' })); };
@@ -446,9 +510,19 @@
         ctx.root.append(slots, pal, ctx.h('div', { class: 'btn-row mt' },
           ctx.h('button', { class: 'btn btn-ghost', onclick: () => { draft = []; renderSlots(); } }, 'Clear'),
           ctx.h('button', { class: 'btn btn-primary', onclick: submit }, 'Guess')));
-        ctx.msg('Take a guess', ctx.players[me].color);
-        function submit() { if (draft.length !== 4) { ctx.sound.bad(); ctx.msg('Pick 4 colours', 'var(--gold)'); return; } const fb = cbFeedback(draft, target); const s = ctx.clone(st); s.guesses[me] = myGuesses.concat([{ guess: draft.slice(), black: fb.black, white: fb.white }]); ctx.sound.place(); if (fb.black === 4) return ctx.commit(s, me); s.turn = 1 - me; ctx.commit(s); }
-      } else waiting(ctx);
+        ctx.msg(st.final != null ? `${ctx.players[opp].name} cracked your code! Last guess — crack theirs to tie` : 'Take a guess', st.final != null ? 'var(--gold)' : ctx.players[me].color);
+        // equal turns: if the first guesser cracks it, the other gets one last guess (both crack → draw)
+        function submit() {
+          if (draft.length !== 4) { ctx.sound.bad(); ctx.msg('Pick 4 colours', 'var(--gold)'); return; }
+          const fb = cbFeedback(draft, target), s = ctx.clone(st), cracked = fb.black === 4;
+          s.guesses = [guesses[0].slice(), guesses[1].slice()]; s.guesses[me].push({ guess: draft.slice(), black: fb.black, white: fb.white }); ctx.sound.place();
+          if (st.final != null) { s.final = null; return ctx.commit(s, cracked ? 'draw' : st.final); } // my equalising last guess
+          if (cracked && s.guesses[opp].length < s.guesses[me].length) { s.final = me; s.turn = opp; return ctx.commit(s); }
+          if (cracked) return ctx.commit(s, me);
+          s.turn = opp; ctx.commit(s);
+        }
+      } else if (st.final === me) ctx.msg(`You cracked it! ${ctx.players[opp].name} gets one last guess to tie…`, 'var(--gold)');
+      else waiting(ctx);
       function frame(ctx, t) { return ctx.h('div', { class: 'board-frame wait-card' }, ctx.h('div', { class: 'spinner' }), ctx.h('h3', {}, t)); }
     },
   });

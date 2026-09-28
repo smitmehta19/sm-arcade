@@ -433,3 +433,30 @@ by seed % 4: Dusk Ridge, Sunset Dunes, Arctic Night (aurora, snow), Toxic Marsh.
 Fleabag: drawn cat & dog (breathe, blink, wag, aim/throw arm, flinch, KO), night backyard, 3D fence,
 drawn spinning can/bone. Game rules & state shape unchanged; test hooks kept (test.fx, test.replay()).
 Harnesses (scratchpad): tmp-pt2.html (63 checks), tmp-shots2.html / tmp-fbshots.html (frozen frames).
+
+## Rules integrity (v70) — nobody wins by skipping the rules
+Trigger: Scrabble had a "Play it anyway" button, so any nonsense word scored. A 3-agent audit of
+all 41 games then found ~30 more holes. The bar now: every game enforces its REAL rules.
+  - Scrabble: a word outside the ENABLE list becomes `st.ask` → the PARTNER allows (scores) or rejects
+    (asker loses the turn, counts as a scoreless turn). Play is refused until words-scrabble.js has
+    loaded (never judge against the small fallback list). A lapsed verdict (timer) returns the turn.
+  - Hangman: the secret must be a real word (SCRABBLE_DICT, lazy-loaded; DICT fallback).
+  - Match shell (ui.js / store.js):
+      * Store.Net.finishMatch = an RTDB TRANSACTION; only the phone that actually flips the match to
+        finished records the result (both phones fire on a timeout). Write/score BEFORE paint().
+      * The turn clock only restarts when `turn` changes (power-ups / rolls / tank moves used to reset it).
+      * `moves` counter on the match; a unilateral "Leave anyway" after ≥1 move = forfeit (recorded
+        for the partner, who gets a toast via `forfeitBy`). Agreed ends and partner-offline exits
+        still record nothing.
+  - Per-game fixes: Morris teleport + draw/no-move rules; Code Breaker set-phase clock + equal final
+    guess; Pentago win-before-twist; Hex swap rule; Checkers/Quarto/Chess/Memory/Fleabag skipTurns;
+    Chess FIDE dead positions + threefold; Ghost dead-end words; Draw & Guess reveal gate + artist
+    point; Memory first flip committed; Codenames clue validation; Letterpress prefix rule + Pass;
+    duels: one locked run each (quit = final, localStorage `sm_duel_*`, self-healing result race);
+    Liar's Dice reveal turn; Yahtzee Joker + 100 bonus; Jaipur 2+ luxury sales, no same-good swap,
+    random bonus tokens; Pocket Tanks can't get stuck with all shots spent.
+  - Known, deliberately left: Who Knows Who? relies on the answerer's honesty (only fixable by
+    making it co-op); Ghost/Letterpress use the 35k DICT (ENABLE has no prefix search).
+Tests (scratchpad): tmp-smoke.html (all 40 games × both seats × both starters), tmp-words (20),
+tmp-match (8), tmp-race (7, fake RTDB with transactions), test.js (92), strat/ (55+50),
+r5/test_duels + test_games (old code fails 33/16 → new all pass).

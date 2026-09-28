@@ -80,44 +80,44 @@ const GAME_RULES = {
   'tic-tac-toe': ['Take turns placing your mark (✕ or ◯) on the grid.', 'First to get 3 in a row — across, down, or diagonally — wins.', 'Block your partner while building your own line!'],
   'connect-four': ['Tap a column to drop your disc; it falls to the lowest open slot.', 'Connect 4 of your discs in a line — horizontal, vertical, or diagonal — to win.', 'Stack and block to set up sneaky traps.'],
   'dots-boxes': ['On your turn, draw one line between two dots.', 'Complete the 4th side of a box to claim it (your emoji appears) — and you get another turn!', 'Most boxes once the grid is full wins.'],
-  'checkers': ['Move your pieces diagonally forward, one square.', 'Jump over your partner’s piece into an empty square to capture it — captures are forced, and you can chain multiple jumps in one turn.', 'Reach the far row to become a King (moves both directions).', 'Capture all their pieces — or leave them with no move — to win.'],
+  'checkers': ['Move your pieces diagonally forward, one square.', 'Jump over your partner’s piece into an empty square to capture it — captures are forced, and you can chain multiple jumps in one turn.', 'Reach the far row to become a King (moves both directions).', 'Capture all their pieces — or leave them with no move — to win. 40 moves each with only kings moving and no capture is a draw.'],
   'reversi': ['Place a disc so it traps a straight line of your partner’s discs between two of yours — those flip to your color.', 'You must make a flipping move; if you can’t, your turn is passed.', 'When the board fills, the most discs of your color wins.'],
   'gomoku': ['Take turns placing a stone on any empty point.', 'First to line up 5 stones in a row — any direction — wins.', 'Watch their lines and block before they reach five!'],
   'battleship': ['First, arrange your 5 ships on your own waters — tap a ship, set ↔/↕ direction, tap to drop it (or hit 🎲 Random). The host places first, then you.', 'Once both fleets are set, take turns firing at ENEMY WATERS. 🔥 = hit, • = miss.', 'Sink your partner’s entire fleet before they sink yours.'],
-  'memory': ['On your turn, flip two cards.', 'Match a pair → you keep it and flip again. No match → they flip back and it’s your partner’s turn.', 'Most pairs when all are found wins. Remember where things are!'],
+  'memory': ['On your turn, flip two cards. Your first flip counts — you both see it straight away.', 'Match a pair → you keep it and flip again. No match → they flip back and it’s your partner’s turn.', 'Most pairs when all are found wins. Remember where things are!'],
   'word-duel': ['There’s a secret 5-letter word; you take turns guessing it.', 'Tiles: 🟩 right letter & spot · 🟨 right letter, wrong spot · ⬛ not in the word.', 'First to guess the word wins. The little dot shows who made each guess.'],
   'hangman': ['One of you secretly types a word; the other tries to guess it.', 'The guesser picks letters — 6 wrong guesses completes the figure.', 'Guesser wins by revealing the whole word; the setter wins if the guesser runs out of lives.'],
   'rps': ['Each of you secretly picks Rock ✊, Paper ✋, or Scissors ✌️.', 'Rock beats Scissors, Scissors beats Paper, Paper beats Rock.', 'First to win 3 rounds takes the match.'],
   'couple-quiz': ['The host picks a vibe — 💕 Sweet, 😂 Funny, 🌶️ Spicy, or 🎲 Mix.', 'Take turns: one guesses what the other will pick between two options; then the other reveals their honest answer.', 'A correct guess scores a point. Whoever knows the other best wins! 💞'],
-  'pentago': ['On your turn do TWO things: place one marble on any empty spot, then rotate any one of the four 3×3 blocks (↺ or ↻).', 'The rotation can make or break lines — that’s the trick.', 'First to get 5 marbles in a row (after the twist) wins.'],
-  'hex': ['Take turns placing one stone on any empty cell.', 'You own the <b>top &amp; bottom</b> edges; your partner owns <b>left &amp; right</b>.', 'First to build an unbroken chain of your stones linking your two sides wins. It can never end in a draw.'],
-  'nine-mens-morris': ['<b>Phase 1:</b> take turns placing your 9 pieces on the points.', 'Make a “mill” (3 of yours in a line) → remove one of your partner’s pieces.', '<b>Phase 2:</b> slide pieces along lines to form new mills. With only 3 left you can “fly” anywhere.', 'Reduce your partner to 2 pieces (or no moves) to win.'],
+  'pentago': ['On your turn do TWO things: place one marble on any empty spot, then rotate any one of the four 3×3 blocks (↺ or ↻).', 'The rotation can make or break lines — that’s the trick.', 'Five in a row wins the moment you place it — even before your twist. If a twist gives you BOTH five, it’s a draw.'],
+  'hex': ['Take turns placing one stone on any empty cell.', 'You own the <b>top &amp; bottom</b> edges; your partner owns <b>left &amp; right</b>.', '<b>Swap rule:</b> after the first stone, the second player may tap <b>Swap</b> to take that stone as their own (mirrored) instead of placing — so the opener can’t just grab the centre.', 'First to build an unbroken chain of your stones linking your two sides wins. It can never end in a draw.'],
+  'nine-mens-morris': ['<b>Phase 1:</b> take turns placing your 9 pieces on the points.', 'Make a “mill” (3 of yours in a line) → remove one of your partner’s pieces.', '<b>Phase 2:</b> slide pieces along lines to form new mills. With only 3 left you can “fly” anywhere.', 'Reduce your partner to 2 pieces — or leave them with no move — to win. 50 moves in total without a mill is a draw.'],
   'quoridor': ['Each turn: <b>move your pawn</b> one square, OR <b>place a wall</b> to block paths (10 walls each).', 'Walls can slow your partner but can never completely trap them.', 'First pawn to reach the far side wins.'],
-  'quarto': ['16 pieces, each big/small · light/dark · round/square · solid/hollow.', 'The twist: <b>your partner chooses the piece you must place</b>, and you choose theirs.', 'Complete a line of 4 pieces that share ANY one trait to win.'],
-  'code-breaker': ['First, each of you secretly sets a 4-colour code for the other to crack.', 'Take turns guessing. ⬤ = right colour &amp; spot · ⚪ = right colour, wrong spot.', 'First to crack your partner’s code exactly wins.'],
-  'ghost': ['Take turns adding ONE letter to a growing word fragment.', 'Whoever completes a real word (4+ letters) <b>loses</b>.', 'Think it’s a dead end? Challenge — if no word can start that way, the previous player loses; if one can, you do.'],
+  'quarto': ['16 pieces, each big/small · light/dark · round/square · solid/hollow.', 'The twist: <b>your partner chooses the piece you must place</b>, and you choose theirs.', 'Complete a line of 4 pieces that share ANY one trait to win.', 'Timer: run out while picking and a random piece is handed over; run out while placing and the piece goes back for your partner to pick again.'],
+  'code-breaker': ['First, each of you secretly sets a 4-colour code for the other to crack.', 'Take turns guessing. ⬤ = right colour &amp; spot · ⚪ = right colour, wrong spot.', 'Crack your partner’s code to win — but if you were first to guess, they get <b>one last guess</b> to match you. Both crack it = draw.'],
+  'ghost': ['Take turns adding ONE letter to a growing word fragment.', 'Whoever completes a real word (4+ letters) <b>loses</b>.', 'Think it’s a dead end? Challenge — if no longer word (4+ letters) starts that way, the previous player loses; if one does, you do. Spelling a short dead-end word like DUO won’t save you.'],
   'two-truths': ['On your turn, write 3 statements about yourself — two true, one a lie — and mark the lie.', 'Your partner guesses which is the fib.', 'Guess right = point to the guesser; fool them = point to you. Most points after 6 rounds wins.'],
   'tournament': ['The host picks how many games — 3, 5, 7, 10, or a custom number (2–20). That many random Word &amp; Strategy games are drawn.', 'Every game you win counts on your scoreboard, exactly like a normal game.', 'Whoever wins the most games is crowned <b>Tournament Champion</b>! 🏆 Leave anytime with both players’ consent.'],
-  'yahtzee': ['On your turn, roll 5 dice up to 3 times — tap dice between rolls to <b>hold</b> them.', 'Then bank your dice into one scorecard box: e.g. Full house = 25, Lg. straight = 40, <b>YAHTZEE</b> (5 of a kind) = 50. Each box is used once, so spend them wisely.', 'Fill the upper boxes (Ones–Sixes) to a total of 63+ for a <b>+35 bonus</b>. Highest grand total once both cards are full wins.'],
-  'liars-dice': ['You each roll 5 <b>secret</b> dice. A bid claims how many dice show a face across <b>both</b> players — e.g. “three ⚄” = at least three 5s in total.', 'On your turn either <b>raise</b> the bid (more dice, or the same count with a higher face) or call <b>“Liar!”</b>.', 'On a call, all dice are revealed: if the bid was true the <b>caller</b> loses a die; if it was a bluff the <b>bidder</b> loses one. Lose all 5 dice and you’re out.', '<b>Example:</b> 10 dice are in play and the bid is “four ⚂”. You can see two ⚂ in your own hand, so four total is very believable — raise to “four ⚃” or “five ⚀”. Push the count too high and you’ll get called!'],
+  'yahtzee': ['On your turn, roll 5 dice up to 3 times — tap dice between rolls to <b>hold</b> them.', 'Then bank your dice into one scorecard box: e.g. Full house = 25, Lg. straight = 40, <b>YAHTZEE</b> (5 of a kind) = 50. Each box is used once, so spend them wisely.', 'Fill the upper boxes (Ones–Sixes) to a total of 63+ for a <b>+35 bonus</b>. Highest grand total once both cards are full wins.', 'Each extra Yahtzee earns <b>+100</b> (only if your Yahtzee box already scored 50) and is a <b>Joker</b>: it must go in its upper box if that’s open; otherwise any open lower box (Full house 25, Sm. straight 30, Lg. straight 40); otherwise scratch an upper box for 0.'],
+  'liars-dice': ['You each roll 5 <b>secret</b> dice. A bid claims how many dice show a face across <b>both</b> players — e.g. “three ⚄” = at least three 5s in total.', 'On your turn either <b>raise</b> the bid (more dice, or the same count with a higher face) or call <b>“Liar!”</b>.', 'On a call, all dice are revealed: if the bid was true the <b>caller</b> loses a die; if it was a bluff the <b>bidder</b> loses one. Lose all 5 dice and you’re out.', '<b>Example:</b> 10 dice are in play and the bid is “four ⚂”. You can see two ⚂ in your own hand, so four total is very believable — raise to “four ⚃” or “five ⚀”. Push the count too high and you’ll get called!', 'After a call, whoever lost the die taps <b>Next round</b> and opens the bidding.'],
   'onitama': ['Each player has a <b>Master</b> (gold ring) + 4 students. Your legal moves come only from your <b>2 face-up cards</b>.', 'On your turn, tap a card, then move ONE piece by that card’s pattern (gold square = the piece, purple = where it may go) — capturing any enemy you land on.', 'Then the card you used <b>swaps with the “next” card</b> and goes to your opponent — so you’re always handing them their future moves.', '<b>Win two ways:</b> capture the enemy Master (Way of the Stone), OR move your Master onto the opponent’s starting temple square (Way of the Stream).'],
-  'jaipur': ['Be the richer trader. On your turn do exactly ONE: <b>take</b> one good from the 5-card market, <b>take all 🐫 camels</b>, <b>exchange</b> 2+ of your cards (goods and/or camels) for the same number of market goods, or <b>sell</b> goods.', 'To sell, play any number of ONE good type and grab that many tokens (highest values first). Sell 3 / 4 / 5 at once for a <b>bonus</b> token. 💎 gold ⚪ silver are the priciest.', 'Camels never score on their own, but the player with the <b>most camels</b> at the end gets +5 — and they fuel big exchanges. Hand limit is 7 goods (camels are kept separately).', 'The round ends the moment <b>3 token piles are empty</b>; most rupees wins. <b>Example:</b> sell 3 🌶️ spice → take the top three spice tokens (5+3+3 = 11) <i>plus</i> a 3-sell bonus.'],
-  'letterpress': ['Tap tiles to spell a word (3+ letters); submitting claims every tile in it for <b>your</b> colour — stealing your partner’s un-locked tiles.', 'A tile is <b>locked 🔒</b> (can’t be stolen) when all its up/down/left/right neighbours are already its own colour. Build walls to protect your lead!', 'When every tile is claimed, the <b>most tiles wins</b>. You can’t replay a word, or just bolt letters onto an earlier one.'],
-  'codenames-duet': ['<b>Co-op!</b> Find all <b>9 secret agents</b> together before you run out of turns — and never tap an <b>assassin ☠️</b>.', 'On your turn you secretly see the key — give your partner a <b>one-word clue + a number</b> pointing at agent words.', 'They tap words: a green agent = keep going, a bystander ends the turn, the assassin = instant loss. You win or lose <b>together</b> — no scoreboard points, just pure teamwork. 💞'],
-  'draw-guess': ['One of you gets a <b>secret word</b> and sketches it on the canvas — your partner watches it appear in real time.', 'Tap <b>“Done”</b> to hand it over, then your partner types guesses. A correct guess scores a point.', 'You swap who draws each round — most points after 6 rounds wins! 🎨'],
-  'ultimate-ttt': ['It’s <b>9 tic-tac-toe boards</b> in a 3×3 grid. Win a small board by getting 3-in-a-row inside it.', 'The twist: the <b>cell</b> you play decides <b>which board your opponent must play next</b> — top-left cell sends them to the top-left board.', 'Sent to a board that’s already won or full? Then you may play <b>anywhere</b>. Win <b>three small boards in a row</b> to win it all. 🧠'],
-  'fleabag': ['Take turns lobbing junk over the fence \u2014 <b>Fleabag the cat</b> throws cans, <b>Mutt the dog</b> throws bones.', '<b>Drag back</b> from your fighter like a slingshot and let go to throw. The dotted line shows your angle, not where it lands.', 'The <b>wind</b> changes every turn \u2014 watch the arrow. A clean hit does up to 30 damage; a near miss still grazes for 7.', 'Four one-use powers: \u26a1 <b>Power Throw</b> (double damage), \u270c\ufe0f <b>Double Attack</b> (throw twice), \ud83d\udca8 <b>Stink Bomb</b> (wrecks their next wind), \u2764\ufe0f <b>Power Up</b> (+25 health). Using one doesn\u2019t use up your turn.', 'First to empty the other\u2019s health bar wins.'],
+  'jaipur': ['Be the richer trader. On your turn do exactly ONE: <b>take</b> one good from the 5-card market, <b>take all 🐫 camels</b>, <b>exchange</b> 2+ of your cards (goods and/or camels) for the same number of market goods — never taking back a good you gave — or <b>sell</b> goods.', 'To sell, play any number of ONE good type and grab that many tokens (highest values first). 💎 gold ⚪ silver are the priciest and must be sold <b>2+ at a time</b>. Sell 3 / 4 / 5+ at once for a random <b>bonus</b> token (1–3 / 4–6 / 8–10).', 'Camels never score on their own, but the player with the <b>most camels</b> at the end gets +5 — and they fuel big exchanges. Hand limit is 7 goods (camels are kept separately).', 'The round ends when <b>3 token piles are empty</b> or the deck can’t refill the market; most rupees wins (tie → more bonus tokens). <b>Example:</b> sell 3 🌶️ spice → take the top three spice tokens (5+3+3 = 11) <i>plus</i> a 3-sell bonus.'],
+  'letterpress': ['Tap tiles to spell a word (3+ letters); submitting claims every tile in it for <b>your</b> colour — stealing your partner’s un-locked tiles.', 'A tile is <b>locked 🔒</b> (can’t be stolen) when all its up/down/left/right neighbours are already its own colour. Build walls to protect your lead!', 'You can’t replay a word or play the start of one already played (CAT after CATS) — extending one (CATS after CAT) is fine. Stuck? <b>Pass</b>. The game ends when every tile is claimed or after two passes in a row — <b>most tiles wins</b>.'],
+  'codenames-duet': ['<b>Co-op!</b> Find all <b>9 secret agents</b> together before you run out of turns — and never tap an <b>assassin ☠️</b>.', 'On your turn you secretly see the key — give your partner a <b>one-word clue + a number (1–9)</b> pointing at agent words. The clue must be letters only and can’t be, contain, sit inside, or be a plural/tense of any unrevealed board word.', 'They tap words: a green agent = keep going, a bystander ends the turn, the assassin = instant loss. You win or lose <b>together</b> — no scoreboard points, just pure teamwork. 💞'],
+  'draw-guess': ['One of you gets a <b>secret word</b> and sketches it on the canvas — your partner watches it appear in real time.', 'Tap <b>“Done”</b> to hand it over (a blank canvas doesn’t count). Your partner gets up to <b>6 guesses</b>: a correct one scores <b>+2 for the guesser and +1 for the artist</b>. The artist can only reveal the answer after 3 wrong guesses.', 'You swap who draws each round — most points after 6 rounds wins! 🎨'],
+  'ultimate-ttt': ['It’s <b>9 tic-tac-toe boards</b> in a 3×3 grid. Win a small board by getting 3-in-a-row inside it.', 'The twist: the <b>cell</b> you play decides <b>which board your opponent must play next</b> — top-left cell sends them to the top-left board.', 'Sent to a board that’s already won or full? Then you may play <b>anywhere</b>. Win <b>three small boards in a row</b> to win it all — if every board is decided with no line, whoever won more small boards wins (equal = draw). 🧠'],
+  'fleabag': ['Take turns lobbing junk over the fence \u2014 <b>Fleabag the cat</b> throws cans, <b>Mutt the dog</b> throws bones.', '<b>Drag back</b> from your fighter like a slingshot and let go to throw. The dotted line shows your angle, not where it lands.', 'The <b>wind</b> changes every turn \u2014 watch the arrow. A clean hit does up to 30 damage; a near miss still grazes for 7.', 'Four one-use powers: \u26a1 <b>Power Throw</b> (double damage), \u270c\ufe0f <b>Double Attack</b> (throw twice), \ud83d\udca8 <b>Stink Bomb</b> (wrecks their next wind), \u2764\ufe0f <b>Power Up</b> (+25 health). Using one doesn\u2019t use up your turn.', 'First to empty the other\u2019s health bar wins.', 'Run out of time and you lose any armed power or owed Double Attack.'],
   'pocket-tanks': ['Every match <b>drafts 10 weapons</b> from a pool of 16 and you both get the same ten. Fire each once and score the damage you deal — <b>most points after 20 shots wins</b>.', '<b>Drag on the battlefield</b> to aim, fine-tune <b>angle</b> and <b>power</b> with −/+ (hold to repeat), then hit <b>FIRE</b>. You can aim up to 20° below the horizon.', 'The ground is <b>destructible</b>: craters collapse and tanks drop into them. The <b>wind</b> changes every turn — except for Sniper and Railgun, which ignore it.', 'Look out for the <b>Tactical Nuke</b>, <b>Napalm</b> (burns the ground), <b>Roller</b> (rolls downhill), <b>Bouncer</b>, <b>MIRV</b> (splits mid-air), <b>Homing</b>, <b>Railgun</b> (a straight beam through the ground), <b>Air Strike</b>, <b>Chain Blast</b> and <b>Earthquake</b>. Hit yourself and the points go to your partner.', 'You get <b>3 tank moves</b> per match (◀ ▶) — moving doesn’t cost your turn. Tap ⤢ for landscape. Four maps: Dusk Ridge, Sunset Dunes, Arctic Night, Toxic Marsh.'],
-  'scrabble': ['Each of you holds <b>7 tiles</b>. Make a word on the board — the first one must cross the <b>\u2605 centre</b>, and every word after that has to touch a tile already down.', 'Tap a tile, then tap a square. Tiles you\u2019ve placed glow green \u2014 tap one again to take it back. The running score shows under the board before you commit.', 'Coloured squares multiply: <b>DL/TL</b> double or triple that letter, <b>DW/TW</b> double or triple the whole word (only on the turn you cover them). Use all 7 tiles in one go for a <b>50-point BINGO</b>.', 'Blank tiles (?) can be any letter but score 0. Stuck? <b>Swap</b> tiles back into the bag or <b>Pass</b>. When the bag is empty and someone plays their last tile the game ends \u2014 they gain the value of what\u2019s left in the other rack, and their partner loses it.'],
-  'chess': ['The full royal game — the host plays <b>White</b> and moves first; the board flips so you each see your side at the bottom.', 'Tap a piece to see its legal moves: green dot = move, pink ring = capture. Castling, en passant and promotion (you pick the piece!) all work.', 'Trap the enemy king so it can’t escape — <b>checkmate</b> — to win. Stalemate, dead positions and the 50-move rule are automatic draws.'],
+  'scrabble': ['Each of you holds <b>7 tiles</b>. Make a word on the board — the first one must cross the <b>\u2605 centre</b>, and every word after that has to touch a tile already down.', 'Tap a tile, then tap a square. Tiles you\u2019ve placed glow green \u2014 tap one again to take it back. The running score shows under the board before you commit.', 'Coloured squares multiply: <b>DL/TL</b> double or triple that letter, <b>DW/TW</b> double or triple the whole word (only on the turn you cover them). Use all 7 tiles in one go for a <b>50-point BINGO</b>.', 'Blank tiles (?) can be any letter but score 0. Stuck? <b>Swap</b> tiles back into the bag or <b>Pass</b>. When the bag is empty and someone plays their last tile the game ends \u2014 they gain the value of what\u2019s left in the other rack, and their partner loses it.', 'Every word is checked against the full 168,000-word tournament list. Want one that isn\u2019t in it (a name, some slang)? <b>Ask your partner</b> \u2014 if they allow it, it scores; if they say no, you lose your turn.'],
+  'chess': ['The full royal game — the host plays <b>White</b> and moves first; the board flips so you each see your side at the bottom.', 'Tap a piece to see its legal moves: green dot = move, pink ring = capture. Castling, en passant and promotion (you pick the piece!) all work.', 'Trap the enemy king so it can’t escape — <b>checkmate</b> — to win. Stalemate, dead positions, threefold repetition and the 50-move rule are automatic draws.'],
   'dominoes': ['You each get <b>7 bones</b>; the rest are the boneyard. Take turns adding a bone whose number <b>matches an open end</b> of the line.', 'Can’t play? <b>Draw</b> from the boneyard until you can. Boneyard empty too? You pass.', 'First to play their <b>last bone</b> wins. If you’re both stuck, the <b>lowest total pips</b> in hand wins.'],
   'sos': ['Take turns writing an <b>S or an O</b> (your choice, every turn) into any empty cell.', 'Complete <b>S-O-S</b> in any direction → +1 point, the cells light in your colour, and you <b>go again</b>.', 'One move can score several SOS lines at once! Board full → most points wins.'],
   'gops': ['13 rounds. Each round a <b>diamond prize</b> (A=1 … K=13) is revealed; you both <b>secretly bid</b> one of your 13 spades.', 'Higher bid takes the prize points. <b>Tie → the prize rolls over</b> onto the next one — pots get juicy.', 'Every spade can be used only once, so spend big cards wisely. Most prize points after 13 rounds wins.'],
   'story-builder': ['<b>Co-op!</b> A random opening line sets the scene; you take turns adding <b>one sentence each</b>.', 'Build on whatever your partner wrote — the weirder the better 😄', 'After 6 lines either of you can call <b>“The End”</b> (it auto-ends at 14). Read your masterpiece out loud — you win together. 💞'],
-  'reaction-duel': ['<b>Score Duel:</b> you each play the SAME run locally, whenever you like — only the score syncs. No lag, pure skill.', '5 rounds: wait for the pad to turn <b>GREEN</b>, then tap instantly. Tapping early costs a 500ms round.', 'Lowest <b>average reaction time</b> wins the point.'],
-  'speed-math': ['<b>Score Duel:</b> same 45-second quiz for both of you — play whenever, only the score syncs.', 'Tap the correct answer; wrong taps just burn your clock.', 'Most correct answers wins.'],
-  'snake-duel': ['<b>Score Duel:</b> identical apple layout for both of you — play your run whenever, only the score syncs.', 'Swipe (or use the arrow pad) to steer. Eat apples; walls and your own tail are fatal. It speeds up!', 'Most apples wins.'],
-  '2048-race': ['<b>Score Duel:</b> identical tile drops for both of you — play whenever, only the score syncs.', 'Swipe to slide the board; equal tiles merge and score. You have <b>2 minutes</b> (or until you jam the board).', 'Highest score wins.'],
+  'reaction-duel': ['<b>Score Duel:</b> you each play the SAME run locally, whenever you like — only the score syncs. No lag, pure skill.', '5 rounds: wait for the pad to turn <b>GREEN</b>, then tap instantly. Tapping early costs a 500ms round.', 'Lowest <b>average reaction time</b> wins the point.', '<b>One run each.</b> Once you press Play, quitting or leaving counts as a DNF — no do-overs — and your partner’s time stays hidden until yours is in.'],
+  'speed-math': ['<b>Score Duel:</b> same 45-second quiz for both of you — play whenever, only the score syncs.', 'Tap the correct answer; wrong taps just burn your clock.', 'Most correct answers wins.', '<b>One run each.</b> Once you press Play, quitting or leaving locks in your score so far — no do-overs — and your partner’s score stays hidden until yours is in.'],
+  'snake-duel': ['<b>Score Duel:</b> identical apple layout for both of you — play your run whenever, only the score syncs.', 'Swipe (or use the arrow pad) to steer. Eat apples; walls and your own tail are fatal. It speeds up!', 'Most apples wins.', '<b>One run each.</b> Once you press Play, quitting or leaving locks in your score so far — no do-overs — and your partner’s score stays hidden until yours is in.'],
+  '2048-race': ['<b>Score Duel:</b> identical tile drops for both of you — play whenever, only the score syncs.', 'Swipe to slide the board; equal tiles merge and score. You have <b>2 minutes</b> (or until you jam the board).', 'Highest score wins.', '<b>One run each.</b> Once you press Play, quitting or leaving locks in your score so far — no do-overs — and your partner’s score stays hidden until yours is in.'],
 };
 function showRules(game) {
   const back = h('div', { class: 'rules-overlay', onclick: e => { if (e.target === back) close(); } });
@@ -536,6 +536,11 @@ function initNet() {
     if (me != null) Store.Net.goOnline(me, Store.get().players[me].name);
     Store.Net.watchPresence(p => { presence = p || {}; if (isLobby()) renderHome(); });
     Store.Net.watchMatch(m => {
+      const prev = currentMatch, me = Store.getIdentity();
+      if (!m && prev && prev.forfeitBy != null && prev.forfeitBy !== me && (me === 0 || me === 1)) {
+        const s = Store.get();
+        setTimeout(() => showToast(`🏳️ ${esc(s.players[prev.forfeitBy].name)} left the game — it counts as <b>your win</b>.`), 300);
+      }
       currentMatch = m;
       if (stageHook) stageHook(m);
       else if (isLobby()) renderHome();
@@ -955,7 +960,7 @@ function advanceRound(gameId) {
   const me = Store.getIdentity();
   const newStarter = 1 - (currentMatch && currentMatch.starter != null ? currentMatch.starter : 0);
   const state = JSON.stringify(Games.byId(gameId).init(newStarter));
-  const patch = { state, status: 'active', starter: newStarter, roundWinner: null };
+  const patch = { state, status: 'active', starter: newStarter, roundWinner: null, moves: 0 };
   const dl = freshDeadline(); if (dl) patch.deadline = dl;
   optimistic(patch);
   Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
@@ -974,8 +979,28 @@ function requestEndGame() {
 function cancelEndGame() { Store.Sound.tap(); optimistic({ endReq: null }); Store.Net.updateMatch({ endReq: null, t: Date.now() }); }
 const END_ESCAPE_MS = 6000;   // how long you wait before 'Leave anyway' appears
 function agreeEndGame() { Store.Sound.good(); exitMatch(); }
-// unilateral bail-out — only offered after the partner has had a fair chance to answer
-function forceEndGame() { Store.Sound.tap(); exitMatch(); }
+// the (sub-)game a unilateral leave forfeits — only once real moves have been made
+function forfeitTarget() {
+  const m = currentMatch;
+  if (!m || m.status !== 'active' || !(m.moves > 0)) return null;
+  if (m.gameId !== 'tournament') return m.gameId;
+  try { const t = JSON.parse(m.state); return t.phase === 'play' ? t.subId : null; } catch (e) { return null; }
+}
+// unilateral bail-out — only offered after the partner has had a fair chance to answer. Leaving a game
+// that is under way COUNTS AS A LOSS: walking out used to wipe the match with nothing recorded, so
+// the player who was losing could always escape the result.
+function forceEndGame() {
+  Store.Sound.tap();
+  const me = Store.getIdentity(), gid = forfeitTarget();
+  if (gid && (me === 0 || me === 1)) {
+    Store.recordResult(gid, me === 0 ? 'p2' : 'p1');
+    Store.Net.updateMatch({ forfeitBy: me, t: Date.now() });   // lets the partner's phone say why it ended
+    setTimeout(exitMatch, 700);
+    location.hash = '#/';
+    return;
+  }
+  exitMatch();
+}
 
 /* ============================================================
    NETWORKED GAME STAGE
@@ -1147,7 +1172,7 @@ function renderStage(gameId) {
       // out. Previously the only button here was "Keep playing" — a dead end.
       const waited = Date.now() - (m.t || Date.now());
       const btns = [{ label: 'Keep playing', primary: true, onClick: cancelEndGame }];
-      if (waited >= END_ESCAPE_MS) btns.push({ label: 'Leave anyway', onClick: forceEndGame });
+      if (waited >= END_ESCAPE_MS) btns.push({ label: forfeitTarget() ? 'Leave anyway (counts as a loss)' : 'Leave anyway', onClick: forceEndGame });
       else setTimeout(() => {
         if (overlayMode === 'endWait' && currentMatch && currentMatch.endReq === me) showEndOverlay(currentMatch, 'endWait');
       }, END_ESCAPE_MS - waited + 150);
@@ -1188,32 +1213,43 @@ function renderStage(gameId) {
   }
 
   // ----- tournament engine (orchestrates sub-games inside one match) -----
-  function pushTour(t, status, roundWinner) {
-    const patch = { state: JSON.stringify(t), status };
+  function pushTour(t, status, roundWinner, guard) {
+    const patch = { state: JSON.stringify(t), status, moves: (currentMatch.moves || 0) + 1 };
     if (roundWinner !== undefined) patch.roundWinner = roundWinner;
-    if (status === 'active' && t.phase === 'play') { const dl = freshDeadline(); if (dl) patch.deadline = dl; }
+    if (status === 'active' && t.phase === 'play') {
+      let p = {}; try { p = JSON.parse(currentMatch.state); } catch (e) {}
+      const same = p.phase === 'play' && p.slot === t.slot && p.sub && t.sub && p.sub.turn === t.sub.turn;
+      if (!same || !currentMatch.deadline) { const dl = freshDeadline(); if (dl) patch.deadline = dl; }
+    }
     currentMatch = Object.assign({}, currentMatch, patch);
-    paint();
-    Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
+    const full = Object.assign({ by: me, t: Date.now() }, patch);
+    const sent = guard ? Store.Net.finishMatch(guard, full) : (Store.Net.updateMatch(full), Promise.resolve(true));
+    paint();                                            // after the write, so a render error can't lose it
+    return sent;
   }
   function tourCommit(nextSub, winner) {
     if (!currentMatch || currentMatch.status !== 'active') return;
     let t; try { t = JSON.parse(currentMatch.state); } catch (e) { return; }
     if (t.phase !== 'play') return;
     if (winner === undefined) { t.sub = nextSub; pushTour(t, 'active'); return; } // ongoing sub-game move
-    // sub-game finished → record it on the scoreboard like any normal game
-    const subId = t.subId;
-    if (winner === 0 || winner === 1) { t.wins[winner]++; Store.recordResult(subId, winner === 0 ? 'p1' : 'p2'); }
-    else { Store.recordResult(subId, 'draw'); }
+    // sub-game finished → record it on the scoreboard like any normal game — but only on the phone
+    // that actually closed it (both can try at once on a timeout)
+    const subId = t.subId, slot = t.slot;
+    if (winner === 0 || winner === 1) t.wins[winner]++;
     (t.log = t.log || []).push({ game: subId, winner });
     t.lastResult = { game: subId, winner };
     t.sub = nextSub; // keep the final board visible behind the overlay
-    if (t.slot + 1 >= t.schedule.length) {
+    const stillPlaying = cur => { if (cur.status !== 'active') return false; try { const c = JSON.parse(cur.state); return c.phase === 'play' && c.slot === slot; } catch (e) { return false; } };
+    const done = t.slot + 1 >= t.schedule.length;
+    if (done) {
       t.phase = 'done';
       t.champion = (t.wins[0] === t.wins[1]) ? 'draw' : (t.wins[0] > t.wins[1] ? 0 : 1);
-      if (t.champion === 0 || t.champion === 1) Store.recordTournament(t.champion);
-      pushTour(t, 'finished', t.champion);
-    } else { t.phase = 'intermission'; pushTour(t, 'active'); }
+    } else t.phase = 'intermission';
+    pushTour(t, done ? 'finished' : 'active', done ? t.champion : undefined, stillPlaying).then(won => {
+      if (!won) return;
+      Store.recordResult(subId, winner === 0 ? 'p1' : winner === 1 ? 'p2' : 'draw');
+      if (done && (t.champion === 0 || t.champion === 1)) Store.recordTournament(t.champion);
+    });
   }
   function advanceTournament() {
     if (!currentMatch) return;
@@ -1264,16 +1300,24 @@ function renderStage(gameId) {
     const stateStr = JSON.stringify(nextState);
     let patch;
     if (finishing) {
-      // every finished game records immediately — a single win is a win
-      patch = { state: stateStr, status: 'finished', roundWinner: winner };
-      if (gid !== 'tournament') {
+      patch = { state: stateStr, status: 'finished', roundWinner: winner };   // a single win is a win — scored below, once
+    } else {
+      patch = { state: stateStr, status: 'active', moves: (currentMatch.moves || 0) + 1 };
+      let prevTurn; try { prevTurn = JSON.parse(currentMatch.state).turn; } catch (e) {}
+      if (nextState.turn !== prevTurn || !currentMatch.deadline) { const dl = freshDeadline(); if (dl) patch.deadline = dl; }
+    }
+    currentMatch = Object.assign({}, currentMatch, patch);
+    // write (and score) BEFORE painting, so a rendering error can never cost a result
+    if (!finishing) Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
+    else {
+      // record the result only if THIS phone is the one that actually finished the match
+      Store.Net.finishMatch(cur => cur.status === 'active', Object.assign({ by: me, t: Date.now() }, patch)).then(won => {
+        if (!won || gid === 'tournament') return;
         if (winner === 0 || winner === 1) Store.recordResult(gid, winner === 0 ? 'p1' : 'p2');
         else if (winner === 'draw') Store.recordResult(gid, 'draw');
-      }
-    } else { patch = { state: stateStr, status: 'active' }; const dl = freshDeadline(); if (dl) patch.deadline = dl; }
-    currentMatch = Object.assign({}, currentMatch, patch);
+      });
+    }
     paint();
-    Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
   }
 
   // ----- per-turn countdown timer (synced via server time; both phones see the same clock) -----

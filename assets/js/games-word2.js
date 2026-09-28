@@ -56,18 +56,22 @@
   }
   const lpEnded = owner => owner.every(o => o != null);
   const lpScore = owner => [owner.filter(o => o === 0).length, owner.filter(o => o === 1).length];
-  function lpWinner(owner) { if (!lpEnded(owner)) return undefined; const s = lpScore(owner); return s[0] === s[1] ? 'draw' : (s[0] > s[1] ? 0 : 1); }
+  const lpLeader = owner => { const s = lpScore(owner); return s[0] === s[1] ? 'draw' : (s[0] > s[1] ? 0 : 1); };
+  function lpWinner(owner) { return lpEnded(owner) ? lpLeader(owner) : undefined; }
+  // Real Letterpress: CAT → CATS is fine (an extension), but CAT after CATS is not
+  // (a prefix of a played word), and nothing can be played twice.
   function lpWordOk(word, played) {
     if (!window.DICT || !window.DICT.has(word)) return 'not a word';
     if (word.length < 3) return 'too short (3+)';
     if (played.includes(word)) return 'already played';
-    if (played.some(p => p.length < word.length && word.startsWith(p))) return 'no extending old words';
+    const longer = played.find(p => p.startsWith(word));
+    if (longer) return `already inside ${longer.toUpperCase()}`;
     return 'ok';
   }
   Games.register({
     id: 'letterpress', name: 'Letterpress', emoji: '🔠', category: 'Word', accent: '#b6ff3a',
     tagline: 'Spell words, claim the board.',
-    test: { defended: lpDefended, apply: lpApply, winner: lpWinner, wordOk: lpWordOk, score: lpScore },
+    test: { defended: lpDefended, apply: lpApply, winner: lpWinner, wordOk: lpWordOk, score: lpScore, leader: lpLeader },
     init: host => ({ letters: lpGen(), owner: Array(25).fill(null), turn: host, played: [], plays: [], host }),
     render(ctx) {
       const st = ctx.state, me = ctx.me, sc = lpScore(st.owner);
@@ -90,6 +94,7 @@
         pane.append(wordEl, grid);
         if (ctx.isMyTurn) pane.append(ctx.h('div', { class: 'btn-row mt' },
           ctx.h('button', { class: 'btn btn-ghost', onclick: () => { sel = []; draw(); } }, 'Clear'),
+          ctx.h('button', { class: 'btn btn-ghost', onclick: pass }, st.passes ? 'Pass & end game' : 'Pass'),
           ctx.h('button', { class: 'btn btn-primary', onclick: submit }, 'Submit word')));
         // words played so far, newest first, coloured by who played them
         const plays = st.plays || [];
@@ -102,12 +107,18 @@
         }
       }
       draw();
-      ctx.isMyTurn ? ctx.msg('Tap tiles to spell a word (3+). Surround tiles to lock them 🔒', ctx.players[me].color) : waiting(ctx, ctx.seat(st.turn).name);
+      ctx.isMyTurn ? ctx.msg(st.passes ? `${ctx.players[1 - me].name} passed — play a word, or pass too to end it (most tiles wins)` : 'Tap tiles to spell a word (3+). Surround tiles to lock them 🔒', ctx.players[me].color) : waiting(ctx, ctx.seat(st.turn).name);
+      // a stuck board would otherwise never finish: two passes in a row end it on tiles held
+      function pass() {
+        const s = ctx.clone(st); s.passes = (st.passes || 0) + 1; ctx.sound.tap();
+        if (s.passes >= 2) return ctx.commit(s, lpLeader(s.owner));
+        s.turn = 1 - me; ctx.commit(s);
+      }
       function submit() {
         const word = sel.map(i => st.letters[i]).join('').toLowerCase();
         const why = lpWordOk(word, st.played);
         if (why !== 'ok') { ctx.sound.bad(); ctx.msg('✕ ' + why, 'var(--gold)'); return; }
-        const s = ctx.clone(st); s.owner = lpApply(st, me, sel); s.played = st.played.concat([word]);
+        const s = ctx.clone(st); s.owner = lpApply(st, me, sel); s.played = st.played.concat([word]); s.passes = 0;
         s.plays = (st.plays || []).concat([{ w: word.toUpperCase(), s: me }]); ctx.sound.good();
         const w = lpWinner(s.owner); if (w !== undefined) return ctx.commit(s, w);
         s.turn = 1 - me; ctx.commit(s);
@@ -134,11 +145,31 @@
   // We deliberately do NOT swap s.turn — if the guesser ever became clue-giver they'd see the
   // red/assassin tiles and could avoid them on later guesses, killing the whole point of the game.
   function endTurn(s) { s.phase = 'clue'; s.clue = null; s.turnsLeft--; if (s.turnsLeft <= 0 && s.found < CN_AGENTS) s.over = 'loss'; }
+  // Real Codenames clue rules: ONE word, and never a board word, part of one, or a mere
+  // plural/tense of one ("SHIPS" for SHIP just names the answer). Only unrevealed words count.
+  // containment already catches SHIP→SHIPS; the stem catches KNIFE→KNIVES, DIVE→DIVING
+  const CN_SUF = [['ies', 'y'], ['ves', 'f'], ['ing', ''], ['ers', ''], ['er', ''], ['ed', ''], ['es', ''], ['s', '']];
+  const cnStem = w => {
+    for (const [suf, rep] of CN_SUF) if (w.endsWith(suf) && w.length - suf.length + rep.length >= 3) { w = w.slice(0, -suf.length) + rep; break; }
+    return w.replace(/^(.{3,})e$/, '$1');
+  };
+  function cnClueOk(word, num, state) {
+    const c = String(word || '').trim().toLowerCase();
+    if (!c) return 'Type a one-word clue.';
+    if (!/^[a-z]+$/.test(c)) return 'One word, letters only — no spaces, digits or hyphens.';
+    if (!Number.isInteger(num) || num < 1 || num > 9) return 'The number must be 1–9.';
+    const hit = state.words.find((w, i) => {
+      if (state.revealed[i]) return false;
+      const b = w.toLowerCase();
+      return c.includes(b) || b.includes(c) || cnStem(c) === cnStem(b);
+    });
+    return hit ? `“${c.toUpperCase()}” is too close to ${hit} on the board — pick another clue.` : 'ok';
+  }
   Games.register({
     id: 'codenames-duet', name: 'Codenames Duet', emoji: '🕵️', category: 'Word', accent: '#2fe6ff',
     coop: true,
     tagline: 'Co-op: find all 9 agents together.',
-    test: { reveal: cnReveal, AGENTS: CN_AGENTS },
+    test: { reveal: cnReveal, AGENTS: CN_AGENTS, clueOk: cnClueOk },
     init: host => ({ words: shuffle(CN_WORDS.slice()).slice(0, 25), key: cnKey(), revealed: Array(25).fill(null), turn: host, phase: 'clue', clue: null, found: 0, guessesLeft: 0, turnsLeft: CN_TURNS, host }),
     render(ctx) {
       const st = ctx.state, me = ctx.me, giver = st.turn, guesser = 1 - st.turn;
@@ -182,7 +213,9 @@
         } else { ctx.root.append(waitFrame(ctx, `${ctx.players[guesser].name} is guessing…`)); waiting(ctx, ctx.players[guesser].name); }
       }
       function giveClue(word, num) {
-        word = (word || '').trim(); if (!word) { ctx.sound.bad(); ctx.msg('Type a one-word clue.', 'var(--gold)'); return; }
+        const why = cnClueOk(word, num, st);
+        if (why !== 'ok') { ctx.sound.bad(); ctx.msg(why, 'var(--gold)'); return; }
+        word = word.trim().toUpperCase();
         const s = ctx.clone(st); s.clue = { word, num }; s.phase = 'guess'; s.guessesLeft = num + 1; ctx.sound.tap(); ctx.commit(s);
       }
       function guess(i) { const r = cnReveal(st, i); ctx.sound[st.key[i] === 'agent' ? 'good' : 'bad'](); commit(r.next, r.end); }

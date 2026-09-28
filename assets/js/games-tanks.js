@@ -1053,6 +1053,22 @@
     return b;
   }
 
+  // Close a match whose shots are all spent (a timeout skip can use up the last one). The turn-holder
+  // closes it at once; the other phone after a grace, so an ABSENT turn-holder (the usual case after a
+  // skip) can't strand it. Deferred out of render and re-checked against the freshest ctx, so it's
+  // idempotent: once either phone has committed the finish, status isn't 'active' and it no-ops.
+  const SETTLE_GRACE = 2500;
+  function settle(st, first) {
+    const key = st.seed + ':' + (st.n || 0) + ':' + st.fired + ':' + first;
+    if (S.settleKey === key) return;                                   // one pending check per state
+    S.settleKey = key;
+    setTimeout(() => {
+      const c = S.ctx; if (!c || c.status !== 'active' || S.anim) return;
+      const cur = c.state; if (cur.seed !== st.seed || !allFired(cur)) return;
+      c.commit(c.clone(cur), winnerOf(cur));
+    }, first ? 0 : SETTLE_GRACE);
+  }
+
   /* ---------------- registration ---------------- */
   const DEF = {
     id: 'pocket-tanks', name: 'Pocket Tanks', emoji: '💥', category: 'Duel', accent: '#ff8a3d',
@@ -1136,9 +1152,9 @@
       if (window.Landscape) wrap.append(Landscape.button());
       S.ui = { ang: angB, pow: powB };
 
-      // a timeout can exhaust everyone's arsenal without a winner being declared;
-      // exactly ONE device (whoever holds `turn`) closes the match, so it can't double-count
-      if (allFired(st) && ctx.status === 'active' && ctx.isMyTurn && !S.anim) ctx.commit(ctx.clone(st), winnerOf(st));
+      // a timeout can exhaust everyone's arsenal without a winner being declared — either phone
+      // settles it (turn-holder first); finishAnim's rerender lands back here once a replay ends
+      if (allFired(st) && ctx.status === 'active' && !S.anim) settle(st, ctx.isMyTurn);
     },
   };
   Games.register(DEF);

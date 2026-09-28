@@ -38,10 +38,16 @@
     if (window.DICT) return window.DICT.hasPrefix(f);
     for (const w of WORDS) if (w.startsWith(f)) return true; return false;
   };
+  // A fragment is only "alive" if some 4+ letter word LONGER than it starts with it.
+  // hasPrefix alone is true for the word itself, so a dead-end 3-letter word (duo, elf,
+  // fez) survived a challenge and forced the next player into a non-word → a free win.
+  const LETTERS = 'abcdefghijklmnopqrstuvwxyz';
+  const alive = f => [...LETTERS].some(c => hasPrefix(f + c) && (f.length + 1 >= 4 || alive(f + c)));
 
   Games.register({
     id: 'ghost', name: 'Ghost', emoji: '👻', category: 'Word', accent: '#9b7bff',
     tagline: 'Add letters — don’t finish a word.',
+    test: { isWord, alive },
     init: host => ({ frag: '', turn: host, last: null, host }),
     render(ctx) {
       const st = ctx.state, frag = st.frag;
@@ -62,8 +68,8 @@
         const s = ctx.clone(st); s.frag = nf; s.last = ctx.me; s.turn = 1 - ctx.me; ctx.commit(s);
       }
       function challenge() {
-        // I claim no word starts with `frag`. If a word does exist → I lose; else the previous player loses.
-        if (hasPrefix(frag)) { ctx.sound.bad(); return ctx.commit(ctx.clone(st), 1 - ctx.me); }
+        // I claim `frag` can't grow into a word. If a longer 4+ word exists → I lose; else the previous player loses.
+        if (alive(frag)) { ctx.sound.bad(); return ctx.commit(ctx.clone(st), 1 - ctx.me); }
         ctx.sound.good(); return ctx.commit(ctx.clone(st), ctx.me);
       }
     },

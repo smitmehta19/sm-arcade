@@ -29,21 +29,43 @@
   const ICON = { diamond: '💎', gold: '🟡', silver: '⚪', cloth: '🧵', spice: '🌶️', leather: '🟫', camel: '🐫' };
   const TOKENS = { diamond: [7, 7, 5, 5, 5], gold: [6, 6, 5, 5, 5], silver: [5, 5, 5, 5, 5], cloth: [5, 3, 3, 2, 2, 1, 1], spice: [5, 3, 3, 2, 2, 1, 1], leather: [4, 3, 2, 1, 1, 1, 1, 1, 1] };
   const DECKDEF = { diamond: 6, gold: 6, silver: 6, cloth: 8, spice: 8, leather: 10, camel: 11 };
-  const BONUS = { 3: 2, 4: 5, 5: 8 };
+  const BONUS = { 3: 2, 4: 5, 5: 8 };                    // legacy fixed bonuses (matches started before the bonus piles)
+  const BONUS_PILES = { 3: [1, 1, 2, 2, 2, 3, 3], 4: [4, 4, 5, 5, 6, 6], 5: [8, 8, 9, 10, 10] };   // the real game's hidden bonus tokens
+  const PRECIOUS = ['diamond', 'gold', 'silver'];        // must be sold 2+ at a time
 
   /* ---- pure logic (also exposed via def.test) ---- */
   const refill = s => { while (s.market.length < 5 && s.deck.length) s.market.push(s.deck.pop()); };
   const emptyPiles = s => GOODS.filter(g => s.tokens[g].length === 0).length;
   const jScore = s => { const r = [0, 1].map(p => s.collected[p].reduce((a, b) => a + b, 0)); let cb = [0, 0]; if (s.camels[0] > s.camels[1]) cb[0] = 5; else if (s.camels[1] > s.camels[0]) cb[1] = 5; return [r[0] + cb[0], r[1] + cb[1]]; };
-  const jEnded = s => emptyPiles(s) >= 3 || (s.deck.length === 0 && s.market.length === 0);
-  const jWinner = s => { if (!jEnded(s)) return undefined; const sc = jScore(s); return sc[0] === sc[1] ? 'draw' : (sc[0] > sc[1] ? 0 : 1); };
+  // round ends when 3 goods piles are empty, OR the deck can't refill the market back to 5
+  const jEnded = s => emptyPiles(s) >= 3 || (s.deck.length === 0 && s.market.length < 5);
+  // score tie → more bonus tokens wins, then more goods tokens (the real tie-breaks)
+  const jWinner = s => {
+    if (!jEnded(s)) return undefined;
+    const sc = jScore(s), nb = s.nBonus || [0, 0], ng = [0, 1].map(p => s.collected[p].length - nb[p]);
+    const d = sc[0] - sc[1] || nb[0] - nb[1] || ng[0] - ng[1];
+    return d === 0 ? 'draw' : (d > 0 ? 0 : 1);
+  };
   function jTakeGood(s, seat, idx) { if (s.market[idx] === 'camel') return false; if (s.hands[seat].length >= 7) return false; const c = s.market.splice(idx, 1)[0]; s.hands[seat].push(c); refill(s); return true; }
   function jTakeCamels(s, seat) { const n = s.market.filter(c => c === 'camel').length; if (!n) return false; s.camels[seat] += n; s.market = s.market.filter(c => c !== 'camel'); refill(s); return true; }
-  function jSell(s, seat, good, n) { const have = s.hands[seat].filter(c => c === good).length; if (n < 1 || n > have) return false; let rm = 0; s.hands[seat] = s.hands[seat].filter(c => { if (c === good && rm < n) { rm++; return false; } return true; }); for (let i = 0; i < n; i++) if (s.tokens[good].length) s.collected[seat].push(s.tokens[good].shift()); if (n >= 5) s.collected[seat].push(BONUS[5]); else if (n >= 3) s.collected[seat].push(BONUS[n]); return true; }
+  function jSell(s, seat, good, n) {
+    const have = s.hands[seat].filter(c => c === good).length;
+    if (!GOODS.includes(good) || n < (PRECIOUS.includes(good) ? 2 : 1) || n > have) return false;
+    let rm = 0; s.hands[seat] = s.hands[seat].filter(c => { if (c === good && rm < n) { rm++; return false; } return true; });
+    for (let i = 0; i < n; i++) if (s.tokens[good].length) s.collected[seat].push(s.tokens[good].shift());
+    if (n >= 3) {
+      const k = Math.min(5, n), pile = s.bonus && s.bonus[k];
+      const b = s.bonus ? (pile && pile.length ? pile.shift() : 0) : BONUS[k];   // an empty bonus pile pays nothing
+      if (b) { s.collected[seat].push(b); s.nBonus = s.nBonus || [0, 0]; s.nBonus[seat]++; }
+    }
+    return true;
+  }
   function jExchange(s, seat, takeIdxs, give) {
     if (takeIdxs.length < 2 || takeIdxs.length !== give.length) return false;
+    if (new Set(takeIdxs).size !== takeIdxs.length) return false;
     const taken = takeIdxs.map(i => s.market[i]); if (taken.some(c => c === 'camel' || c == null)) return false;
     const giveGoods = give.filter(g => g !== 'camel'), giveCamels = give.filter(g => g === 'camel').length;
+    if (giveGoods.some(g => taken.includes(g))) return false;    // can't take and give back the same good type
     if (giveCamels > s.camels[seat]) return false;
     const handCopy = s.hands[seat].slice();
     for (const g of giveGoods) { const i = handCopy.indexOf(g); if (i < 0) return false; handCopy.splice(i, 1); }
@@ -56,10 +78,21 @@
     return true;
   }
 
+  // Firebase strips empty arrays → re-default every pile/hand on read (bonus stays absent on legacy matches)
+  function jNorm(st) {
+    const arr = v => Array.isArray(v) ? v : [];
+    ['deck', 'market'].forEach(k => st[k] = arr(st[k]));
+    st.hands = [0, 1].map(p => arr((st.hands || [])[p])); st.collected = [0, 1].map(p => arr((st.collected || [])[p]));
+    st.camels = [0, 1].map(p => (st.camels || [])[p] || 0); st.nBonus = [0, 1].map(p => (st.nBonus || [])[p] || 0);
+    st.tokens = st.tokens || {}; GOODS.forEach(g => st.tokens[g] = arr(st.tokens[g]));
+    if (st.bonus) [3, 4, 5].forEach(k => st.bonus[k] = arr(st.bonus[k]));
+    return st;
+  }
+
   Games.register({
     id: 'jaipur', name: 'Jaipur', emoji: '🐫', category: 'Cards', accent: '#ffd66b',
     tagline: 'Trade goods, beat the bazaar.',
-    test: { takeGood: jTakeGood, takeCamels: jTakeCamels, sell: jSell, exchange: jExchange, winner: jWinner, score: jScore, ended: jEnded },
+    test: { takeGood: jTakeGood, takeCamels: jTakeCamels, sell: jSell, exchange: jExchange, winner: jWinner, score: jScore, ended: jEnded, norm: jNorm, BONUS_PILES },
     init: host => {
       let deck = [];
       for (const k in DECKDEF) for (let i = 0; i < DECKDEF[k]; i++) deck.push(k);
@@ -68,10 +101,11 @@
       const market = ['camel', 'camel', 'camel', deck.pop(), deck.pop()];
       const hands = [[], []], camels = [0, 0];
       for (let p = 0; p < 2; p++) for (let i = 0; i < 5; i++) { const c = deck.pop(); if (c === 'camel') camels[p]++; else hands[p].push(c); }
-      return { deck, market, hands, camels, tokens: JSON.parse(JSON.stringify(TOKENS)), collected: [[], []], turn: host, host };
+      const bonus = {}; for (const k in BONUS_PILES) bonus[k] = shuffle(BONUS_PILES[k].slice());   // face-down, random order
+      return { deck, market, hands, camels, tokens: JSON.parse(JSON.stringify(TOKENS)), bonus, nBonus: [0, 0], collected: [[], []], turn: host, host };
     },
     render(ctx) {
-      const st = ctx.state, me = ctx.me, opp = 1 - me;
+      const st = jNorm(ctx.state), me = ctx.me, opp = 1 - me;
       const sc = jScore(st);
       ctx.root.append(ctx.turnBar({ scores: sc }));
       const pane = ctx.h('div', { class: 'board-frame' }); ctx.root.append(pane);
@@ -89,7 +123,7 @@
         // token piles
         const toks = ctx.h('div', { class: 'jp-tokens' });
         GOODS.forEach(g => toks.append(ctx.h('span', { class: 'jp-tok' }, ICON[g], ' ', ctx.h('b', {}, st.tokens[g].length ? String(st.tokens[g][0]) : '–'), ctx.h('span', {}, '×' + st.tokens[g].length))));
-        pane.append(ctx.h('div', { class: 'jp-mini' }, `${emptyPiles(st)}/3 token piles emptied (round ends at 3) · deck ${st.deck.length}`), toks);
+        pane.append(ctx.h('div', { class: 'jp-mini' }, `${emptyPiles(st)}/3 token piles emptied (round ends at 3, or when the deck can't refill the market) · deck ${st.deck.length}`), toks);
 
         // market
         pane.append(ctx.h('div', { class: 'jp-label' }, 'MARKET'));
@@ -117,7 +151,7 @@
             count: counts[g], cls: (ctx.isMyTurn ? ' live' : '') + (give ? ' give' : ''),
             onclick: ctx.isMyTurn ? () => {
               if (mode === 'exchange') { if (xGive.filter(x => x === g).length < counts[g]) { xGive.push(g); draw(); } }
-              else { mode = 'sell'; sellGood = g; sellN = 1; draw(); }
+              else { mode = 'sell'; sellGood = g; sellN = PRECIOUS.includes(g) ? 2 : 1; draw(); }
             } : null,
           }));
         });
@@ -132,14 +166,14 @@
         if (mode === 'sell') {
           const have = counts[sellGood] || 1;
           pane.append(ctx.h('div', { class: 'jp-sell' },
-            ctx.h('button', { class: 'st', onclick: () => { sellN = Math.max(1, sellN - 1); draw(); } }, '−'),
+            ctx.h('button', { class: 'st', onclick: () => { sellN = Math.max(PRECIOUS.includes(sellGood) ? 2 : 1, sellN - 1); draw(); } }, '−'),
             ctx.h('div', { class: 'v' }, ICON[sellGood] + ' ' + sellN),
             ctx.h('button', { class: 'st', onclick: () => { sellN = Math.min(have, sellN + 1); draw(); } }, '+')));
           pane.append(ctx.h('div', { class: 'jp-acts' },
             ctx.h('button', { class: 'btn btn-ghost', onclick: () => { mode = 'normal'; draw(); } }, 'Cancel'),
-            ctx.h('button', { class: 'btn btn-primary', onclick: () => act(s => jSell(s, me, sellGood, sellN)) }, `Sell ${sellN} ${sellGood}${sellN >= 3 ? ' (+bonus)' : ''}`)));
+            ctx.h('button', { class: 'btn btn-primary', onclick: () => { if (PRECIOUS.includes(sellGood) && (sellN < 2 || (counts[sellGood] || 0) < 2)) { ctx.sound.bad(); ctx.msg(`${sellGood} must be sold 2 or more at a time.`, 'var(--gold)'); return; } act(s => jSell(s, me, sellGood, sellN)); } }, `Sell ${sellN} ${sellGood}${sellN >= 3 ? ' (+bonus)' : ''}`)));
         } else if (mode === 'exchange') {
-          pane.append(ctx.h('div', { class: 'jp-mini', style: 'margin-top:8px' }, `Taking ${xTake.length} from market · giving ${xGive.length} (goods/camels). Counts must match, 2+.`));
+          pane.append(ctx.h('div', { class: 'jp-mini', style: 'margin-top:8px' }, `Taking ${xTake.length} from market · giving ${xGive.length} (goods/camels). Counts must match, 2+, and you can't give back a good you take.`));
           pane.append(ctx.h('div', { class: 'jp-acts' },
             ctx.h('button', { class: 'btn btn-ghost', onclick: () => { mode = 'normal'; xTake = []; xGive = []; draw(); } }, 'Cancel'),
             ctx.h('button', { class: 'btn btn-primary', onclick: () => act(s => jExchange(s, me, xTake, xGive)) }, 'Confirm trade')));

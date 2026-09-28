@@ -248,8 +248,13 @@
     id: 'memory', name: 'Memory Match', emoji: '🧠', category: 'Luck', accent: '#b266ff',
     tagline: 'Find the pairs.',
     init: host => ({ deck: shuffle([0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7]), matched: Array(16).fill(false), scores: [0, 0], turn: host, reveal: null }),
+    // a timed-out turn drops its half-done flip and any pending mismatch, then passes
+    skipTurn: (state, opp) => Object.assign({}, state, { turn: opp, first: null, reveal: null }),
     render(ctx) {
-      const st = ctx.state, me = ctx.me; let firstLocal = null;
+      const st = ctx.state, me = ctx.me;
+      // The first flip lives in SHARED state (st.first), not just on this phone: a local-only
+      // flip was undone by any re-render (reload, End-game → Keep playing), i.e. free peeks.
+      let firstLocal = st.first != null ? st.first : null;
       ctx.root.append(ctx.turnBar({ scores: st.scores }));
       const grid = ctx.h('div', { class: 'mem' });
       // the grid is rebuilt on every sync, so remember which cards were face-up
@@ -258,7 +263,7 @@
       const prev = (memPrev && memPrev.key === memKey) ? memPrev.shown : null;
       const nowShown = [];
       const cards = st.deck.map((e, i) => {
-        const shown = st.matched[i] || (st.reveal && st.reveal.includes(i));
+        const shown = st.matched[i] || (st.reveal && st.reveal.includes(i)) || i === firstLocal;
         nowShown[i] = !!shown;
         const inner = ctx.h('div', { class: 'mci' },
           ctx.h('div', { class: 'mcf' }, ctx.h('span', { class: 'mem-face', html: shown ? memFace(e) : '' })),
@@ -285,15 +290,16 @@
       }
       ctx.isMyTurn ? ctx.msg('Your turn — flip two', ctx.players[me].color) : waiting(ctx);
       function flip(i, card, e) {
-        if (firstLocal == null) {                             // local flip — CSS transition plays on the class change
+        if (firstLocal == null) {                             // first flip: shown now AND committed, so it can't be taken back
           firstLocal = i; card.classList.remove('down');
           card.querySelector('.mem-face').innerHTML = memFace(e);
           if (memPrev && memPrev.key === memKey) memPrev.shown[i] = true;
-          ctx.sound.tap(); return;
+          ctx.sound.tap();
+          const s1 = ctx.clone(st); s1.first = i; return ctx.commit(s1);
         }
         if (i === firstLocal) return;
         ctx.sound.tap();
-        const s = ctx.clone(st);
+        const s = ctx.clone(st); s.first = null;
         if (st.deck[i] === st.deck[firstLocal]) {
           s.matched[i] = true; s.matched[firstLocal] = true; s.scores[me]++; ctx.sound.good();
           if (s.matched.every(Boolean)) return ctx.commit(s, s.scores[0] === s.scores[1] ? 'draw' : (s.scores[0] > s.scores[1] ? 0 : 1));
@@ -349,7 +355,9 @@
       }
       function submit() {
         if (cur.length !== 5) { ctx.sound.bad(); ctx.msg('Need 5 letters!', 'var(--gold)'); return; }
-        if (window.DICT && cur !== st.answer && !window.DICT.five().has(cur.toLowerCase())) { ctx.sound.bad(); ctx.msg('Not in the word list — guess a real word', 'var(--gold)'); return; }
+        // fail closed: without the word list we can't tell a real guess from letter-fishing gibberish
+        if (!window.DICT) { ctx.sound.bad(); ctx.msg('Word list didn’t load — reload the page to guess', 'var(--gold)'); return; }
+        if (cur !== st.answer && !window.DICT.five().has(cur.toLowerCase())) { ctx.sound.bad(); ctx.msg('Not in the word list — guess a real word', 'var(--gold)'); return; }
         const res = score(cur, st.answer); ctx.sound.place();
         const s = ctx.clone(st); s.guesses.push({ by: ctx.me, word: cur, res });
         if (cur === st.answer) return ctx.commit(s, ctx.me);
@@ -361,6 +369,16 @@
   });
 
   /* ---------- 12. HANGMAN ---------- */
+  // the secret word is checked against the full tournament list (lazy-loaded, shared with Scrabble)
+  let hmDictLoading = false, hmDictFailed = false;
+  function hmLoadDict() {
+    if (window.SCRABBLE_DICT || hmDictLoading || document.querySelector('script[src="assets/js/words-scrabble.js"]')) return;
+    hmDictLoading = true; hmDictFailed = false;
+    const sc = document.createElement('script'); sc.src = 'assets/js/words-scrabble.js';
+    sc.onload = () => { hmDictLoading = false; };
+    sc.onerror = () => { hmDictLoading = false; hmDictFailed = true; sc.remove(); };
+    document.head.append(sc);
+  }
   Games.register({
     id: 'hangman', name: 'Hangman', emoji: '🎯', category: 'Word', accent: '#ff2fa6',
     tagline: 'Set a word, save the guesser.',
@@ -375,7 +393,16 @@
             ctx.h('p', { style: 'color:var(--ink-dim);margin:0 0 12px' }, `Type a word for ${ctx.players[guesser].name} to guess (letters only):`),
             inp, ctx.h('button', { class: 'btn btn-primary btn-block mt', onclick: go }, 'Send & start ▶')));
           ctx.msg('You set the word 🤫', ctx.players[me].color); setTimeout(() => inp.focus(), 50);
-          function go() { const w = inp.value.toUpperCase().replace(/[^A-Z]/g, ''); if (w.length < 2) { ctx.sound.bad(); ctx.msg('At least 2 letters.', 'var(--gold)'); return; } const s = ctx.clone(st); s.word = w; s.phase = 'play'; s.turn = guesser; ctx.commit(s); }
+          inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+          hmLoadDict();
+          // the secret must be a REAL word — gibberish like "XQZVK" is unguessable and hands the setter a free win
+          function go() {
+            const w = inp.value.toUpperCase().replace(/[^A-Z]/g, '');
+            if (w.length < 2) { ctx.sound.bad(); ctx.msg('At least 2 letters.', 'var(--gold)'); return; }
+            if (!window.SCRABBLE_DICT) { ctx.sound.bad(); ctx.msg(hmDictFailed ? 'Couldn’t load the word list — check your connection.' : 'Loading the word list — try again in a second.', 'var(--gold)'); hmLoadDict(); return; }
+            if (!SCRABBLE_DICT.has(w.toLowerCase()) && !(window.DICT && DICT.has(w.toLowerCase()))) { ctx.sound.bad(); ctx.msg(`“${w}” isn’t in the dictionary — pick a real word.`, 'var(--gold)'); inp.select(); return; }
+            const s = ctx.clone(st); s.word = w; s.phase = 'play'; s.turn = guesser; ctx.commit(s);
+          }
         } else { ctx.root.append(waitFrame(ctx, `${ctx.players[st.setter].name} is choosing a secret word…`)); waiting(ctx, ctx.players[st.setter].name); }
         return;
       }

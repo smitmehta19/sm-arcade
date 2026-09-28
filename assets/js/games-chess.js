@@ -86,7 +86,8 @@
   // pseudo-legal moves for the piece at (r,c): [{r,c,ep?,castle?,dbl?}]
   function pseudo(st, B, r, c) {
     const pc = B[r][c]; if (!pc) return [];
-    const out = [], p = pc.p, add = (nr, nc, x) => out.push(Object.assign({ r: nr, c: nc }, x));
+    // a king is never captured: only reachable if a timeout skip left one in check — that side must answer it on its turn
+    const out = [], p = pc.p, add = (nr, nc, x) => { const v = B[nr][nc]; if (!v || v.t !== 'k') out.push(Object.assign({ r: nr, c: nc }, x)); };
     if (pc.t === 'p') {
       const d = dirOf(st, p);
       if (inB(r + d, c) && !B[r + d][c]) {
@@ -140,19 +141,38 @@
   }
   const legal = (st, r, c) => pseudo(st, st.board, r, c).filter(m => { const s = applyMove(st, r, c, m); return !inCheck(s, s.board, st.board[r][c].p); });
   function anyLegal(st, p) { for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) { const x = st.board[r][c]; if (x && x.p === p && legal(st, r, c).length) return true; } return false; }
+  // dead positions only: K v K, K+minor v K, K+B v K+B with both bishops on the same square colour
+  // (K+N v K+N, K+B v K+N etc. can still mate if one side blunders, so those play on)
   function insufficient(B) {
-    const pcs = B.flat().filter(Boolean).filter(x => x.t !== 'k');
+    const pcs = []; B.forEach((row, r) => row.forEach((x, c) => { if (x && x.t !== 'k') pcs.push({ t: x.t, p: x.p, sq: (r + c) % 2 }); }));
     if (!pcs.length) return true;
-    if (pcs.length === 1 && (pcs[0].t === 'b' || pcs[0].t === 'n')) return true;
-    if (pcs.length === 2 && pcs.every(x => x.t === 'b' || x.t === 'n') && pcs[0].p !== pcs[1].p) return true;
-    return false;
+    if (pcs.length === 1) return pcs[0].t === 'b' || pcs[0].t === 'n';
+    return pcs.length === 2 && pcs.every(x => x.t === 'b') && pcs[0].p !== pcs[1].p && pcs[0].sq === pcs[1].sq;
   }
+  // threefold repetition key: board + side to move + castling rights + a *usable* en-passant square,
+  // hashed (cyrb53 → base36, ~11 chars) so the per-game list stays tiny
+  function posKey(st) {
+    const B = st.board, cr = st.castle || [{}, {}]; let k = '';
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) { const x = B[r][c]; k += x ? (x.p ? x.t : x.t.toUpperCase()) : '.'; }
+    k += st.turn + (cr[0].k ? 'K' : '') + (cr[0].q ? 'Q' : '') + (cr[1].k ? 'k' : '') + (cr[1].q ? 'q' : '');
+    if (st.ep && B.some((row, r) => row.some((x, c) => x && x.p === st.turn && x.t === 'p' && pseudo(st, B, r, c).some(m => m.ep)))) k += 'e' + st.ep.join('');
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < k.length; i++) { const ch = k.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+  // positions can't recur across a pawn move or capture (half resets), so the list restarts there
+  const withRep = (prev, s) => { s.reps = (s.half === 0 ? [] : (prev.reps || [])).concat(posKey(s)); return s; };
+  const isThreefold = s => { const k = s.reps[s.reps.length - 1]; return s.reps.filter(x => x === k).length >= 3; };
 
   Games.register({
     id: 'chess', name: 'Chess', emoji: '♞', category: 'Strategy', accent: '#eaf0ff',
     tagline: 'The royal game — checkmate to win.',
-    init: host => ({ board: freshBoard(host), white: host, turn: host, castle: [{ k: true, q: true }, { k: true, q: true }], ep: null, half: 0, last: null }),
-    test: { freshBoard, legal, applyMove, inCheck, anyLegal, insufficient },
+    init: host => { const s = { board: freshBoard(host), white: host, turn: host, castle: [{ k: true, q: true }, { k: true, q: true }], ep: null, half: 0, last: null }; s.reps = [posKey(s)]; return s; },
+    // timeout "skip" = a pass: the en-passant chance lapses; a king left in check must still answer it next turn
+    skipTurn: (s, opp) => withRep(s, Object.assign({}, s, { turn: opp, ep: null })),
+    test: { freshBoard, legal, applyMove, inCheck, anyLegal, insufficient, posKey, withRep, isThreefold },
     render(ctx) {
       const st = ctx.state, B = st.board, me = ctx.me;
       let sel = null, pendingPromo = null;
@@ -179,6 +199,8 @@
       const promoRow = ctx.h('div', { class: 'ch-promo', hidden: '' }); ctx.root.append(promoRow);
 
       if (!ctx.isMyTurn) { ctx.msg(`⏳ Waiting for ${ctx.seat(1 - me).name}…`, 'var(--ink-faint)'); return; }
+      // no legal move on my turn (only reachable via a timeout skip) → settle it: mate or stalemate
+      if (!anyLegal(st, me)) { const w = myCheck ? 1 - me : 'draw'; ctx.msg(myCheck ? 'Checkmate' : 'Stalemate', 'var(--gold)'); setTimeout(() => ctx.commit(ctx.clone(st), w), 600); return; }
       ctx.msg(myCheck ? '⚠ You’re in CHECK — get out of it!' : `Your turn — you’re ${me === st.white ? 'White' : 'Black'}`, myCheck ? 'var(--gold)' : ctx.players[me].color);
 
       function clearHi() { for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) sq[r][c].classList.remove('sel', 'mv', 'cap'); }
@@ -210,11 +232,11 @@
         const mv = pendingPromo ? pendingPromo.m : m;
         const fr = pendingPromo ? pendingPromo.fr : sel.r, fc = pendingPromo ? pendingPromo.fc : sel.c;
         pendingPromo = null; promoRow.hidden = true;
-        const s = applyMove(st, fr, fc, mv, promo);
+        const s = withRep(st, applyMove(st, fr, fc, mv, promo));
         ctx.sound[(mv.ep || st.board[mv.r][mv.c]) ? 'good' : 'move']();
         const opp = 1 - me;
         if (!anyLegal(s, opp)) return ctx.commit(s, inCheck(s, s.board, opp) ? me : 'draw'); // mate or stalemate
-        if (insufficient(s.board) || s.half >= 100) return ctx.commit(s, 'draw');
+        if (insufficient(s.board) || s.half >= 100 || isThreefold(s)) return ctx.commit(s, 'draw');
         ctx.commit(s);
       }
     },
