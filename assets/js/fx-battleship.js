@@ -193,12 +193,12 @@
     now = now || performance.now();
     const hot = busy();
     const dt = S.lastNow ? now - S.lastNow : 16;
-    if (!hot && dt < 31) { S.raf = requestAnimationFrame(loop); return; }   // idle: ~30 fps is plenty for water
+    if (!hot && dt < 31) { if (!S.raf) S.raf = requestAnimationFrame(loop); return; }   // idle: ~30 fps is plenty for water
     S.lastNow = now;
     step(Math.min(50, Math.max(1, dt)), Math.min(250, Math.max(1, dt)));   // the shot's clock keeps wall time even on slow frames
     draw();
     if (!S.visible && !hot) return;                             // off-screen and idle → sleep until seen again
-    S.raf = requestAnimationFrame(loop);
+    if (!S.raf) S.raf = requestAnimationFrame(loop);            // step() may have re-rendered → ensureLoop already queued one
   }
 
   /* ---------------- input ---------------- */

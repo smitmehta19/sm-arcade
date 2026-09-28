@@ -473,3 +473,15 @@ r5/test_duels + test_games (old code fails 33/16 → new all pass).
   the partner a free win). Watched shots persist per phone in localStorage `sm_bs_seen` = {k: match `mid`
   (new in init; 'legacy:'+host for old saves), id} so a reload never replays a shot; an UNSEEN shot (fired while
   this phone was closed) still plays once on open.
+
+## Gotcha — ONE loop, FIXED timestep (v73: "every throw after the first flies at double speed")
+loop() cleared S.raf, then step() finished a throw and RE-RENDERED the game → render() → ensureLoop() saw
+S.raf === 0 and queued a SECOND rAF, then loop() queued its own too: 2 loops after throw 1, 3 after throw 2…
+Also step() advanced one 1/60 s tick per FRAME, so 90/120 Hz phones ran everything 1.5-2x fast.
+Rules for every canvas game (Fleabag, Pocket Tanks, Battleship, dice3d fixed; new games must follow):
+  - end of loop: `if (!S.raf) S.raf = requestAnimationFrame(loop)` — never schedule unconditionally;
+  - tick-based sims use an accumulator: acc += real elapsed (cap ~6 ticks), `while (acc >= TICK) step()`;
+    or make motion dt-based on wall time.
+Harness: scratchpad tmp-speedrun.html (fake 60/120 Hz screen, counts queued loops; old code → 1250/633/417 ms).
+Harness shims must pass a SYNTHETIC clock (`cb(__ft += 1000/60)`), and the hidden Browser pane throttles
+timers, so tmp-fx/tmp-reg now drive frames synchronously inside sleep() and then also wait real time.

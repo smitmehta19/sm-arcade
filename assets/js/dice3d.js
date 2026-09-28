@@ -362,7 +362,7 @@
       if (!sc.cv || !sc.cv.isConnected) return;               // detached: stop cleanly
       const dt = sc.last ? clamp(now - sc.last, 0, 50) : 16.7; sc.last = now;
       step(dt); draw();
-      if (busy()) sc.raf = requestAnimationFrame(loop);
+      if (busy()) { if (!sc.raf) sc.raf = requestAnimationFrame(loop); }   // a tween may already have woken a loop
       else if (sc.onIdle) { try { sc.onIdle(); } catch (e) { console.error(e); } }
     }
 

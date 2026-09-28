@@ -412,11 +412,21 @@
     draw();                       // resizing wipes the bitmap — repaint now (rotation) rather than next frame
   }
   function ensureLoop() { if (!S.raf) S.raf = requestAnimationFrame(loop); }
-  function loop() {
+  // FIXED 60 Hz simulation. step() advances one 1/60 s tick, so it must NOT simply run once per frame:
+  // a 90/120 Hz phone would play everything 1.5-2x fast. And step() can re-render the game (a finished
+  // throw), which calls ensureLoop() while this frame is running — scheduling a SECOND loop that made
+  // every later throw fly at double speed. So: accumulate real time, and never schedule twice.
+  const TICK = 1000 / 60;
+  function loop(now) {
     S.raf = 0;
-    if (!S.cv || !S.cv.isConnected) return;                     // left the game — render() restarts us
-    step(); draw();
-    S.raf = requestAnimationFrame(loop);
+    if (!S.cv || !S.cv.isConnected) { S.lastT = 0; return; }   // left the game — render() restarts us
+    now = now || performance.now();
+    S.acc = Math.min((S.acc || 0) + (S.lastT ? now - S.lastT : TICK), 6 * TICK);   // cap catch-up after a stall
+    S.lastT = now;
+    let n = 0;
+    while (S.acc >= TICK - 0.5) { step(); S.acc -= TICK; n++; }
+    if (n) draw();
+    if (!S.raf) S.raf = requestAnimationFrame(loop);
   }
 
   /* ---------------- replay: animate a committed shot ---------------- */
