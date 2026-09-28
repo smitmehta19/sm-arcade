@@ -141,8 +141,8 @@ assets/js/
                            function of (seat,angle,power,wind) so both phones replay the same arc from
                            4 numbers in `last`; slingshot drag to aim, preview shows only the opening
                            slice. Wind re-rolls each turn (doubled by a Stink Bomb).
-  games-tanks.js           Pocket Tanks — points-based artillery: same 6-weapon arsenal each, fire every weapon
-                           once, most damage wins. Seeded terrain generated ONCE by the host and stored in state
+  games-tanks.js           Pocket Tanks — points-based artillery: each match drafts 10 of 16 weapons (seeded,
+                           Shell always in; old 6-weapon matches fall back to LEGACY), fire each once, most damage wins. Seeded terrain generated ONCE by the host and stored in state
                            (never regenerated — engine trig can differ). resolveShot() is pure; the thrower commits
                            terrain+scores, the partner replays from last.prev and snaps to the committed terrain.
                            PERSISTENT module-level <canvas> + loop (scene S) re-attached on every repaint, so
@@ -402,3 +402,20 @@ Proof harness: scratchpad tmp-sync.html + tmp-dev.html — a fake RTDB (with nul
 and per-device latency) and 3-4 iframe devices with isolated localStorage. `?store=` picks the
 store file; v66 fails 9/15, v67 passes 15/15 under four latency profiles (`&lat=A:3,B:3,C:300`).
 Settings → Sync & Version now shows "Results recorded" so phones can be compared.
+
+## Cinematic 2.5D artillery (v68) — Pocket Tanks + Fleabag
+Both now use the persistent MODULE-LEVEL canvas + loop pattern (scene `S`): render() re-attaches the
+same canvas, so no repaint can cut an animation. Shared ideas, each implemented per game:
+  - camera `S.cam {x,y,z}` eased toward a target (follow the shell, push in on the impact, rest at
+    z=1 while aiming); parallax layers drawn through view(g, f) — f=0 fixed sky … f=1 the world;
+    edges can never show because the camera is clamped for f=1 and f<1 layers move less.
+  - slow motion as a projectile closes on a tank (and after big blasts in Pocket Tanks).
+  - prefers-reduced-motion (`S.calm`) disables camera moves, shake and slow motion.
+Pocket Tanks: 16 weapons incl. Nuke (mushroom cloud), Napalm (lingering flames), Roller (rollPath
+downhill), Bouncer, MIRV (apex split), Homing (steers on descent), Railgun (straight, PIERCES the
+ground — otherwise the mid-map ridge makes it useless), Air Strike, Chain Blast, Earthquake. Aim range
+is -20°..200° (clampAim) — a Railgun must aim below the horizon when the target sits lower. Four maps
+by seed % 4: Dusk Ridge, Sunset Dunes, Arctic Night (aurora, snow), Toxic Marsh.
+Fleabag: drawn cat & dog (breathe, blink, wag, aim/throw arm, flinch, KO), night backyard, 3D fence,
+drawn spinning can/bone. Game rules & state shape unchanged; test hooks kept (test.fx, test.replay()).
+Harnesses (scratchpad): tmp-pt2.html (63 checks), tmp-shots2.html / tmp-fbshots.html (frozen frames).
