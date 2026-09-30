@@ -51,7 +51,7 @@ Squads are revealed together (same hidden-until-both-ready rule as aims).
 ## Build order (units — one at a time, each shipped when tested)
 | Unit | Contents | Est. tokens* |
 |---|---|---|
-| **U1 Engine + Arenas + Setup** | generalise physics (per-penguin mass/size, arena shapes, bumper walls, current, tiles), setup screen, 6 arenas | ~400k |
+| **U1 Engine + Arenas + Setup** ✅ shipped v78 | generalise physics (per-penguin mass/size, arena shapes, bumper walls, current, tiles), setup screen, 6 arenas | ~400k |
 | **U2 Power-ups** | item spawn/pickup/effects + badges | ~200k |
 | **U3 Penguin types** | squad-pick phase (hidden), 4 types | ~200k |
 | **U4 Modes** | King of the Hill + Fish Hockey (puck body, goals, respawn, scoring) | ~350k |
@@ -69,6 +69,9 @@ Squads are revealed together (same hidden-until-both-ready rule as aims).
 
 ## Out of scope
 Real-time play, landscape mode, online matchmaking, more than 2 players, new sounds beyond the app's sound set.
+
+## Unit log
+- **U1 (v78):** engine generalised (identical results to the old engine on 4,000 slides / 400 games), 6 arenas, setup screen. Deviations: Crumbling Ice drops 2 tiles/round (odd counts can't be mirrored); Current is fair across each opposite pair of rounds, not within one round. Review fixes: setup timeout never forfeits (`skipOnly`), replay grace on the turn clock (`clockGrace`), compositor-only READY pulse, slow tick for the Surprise preview.
 
 ## Parking lot
 (new ideas that come up mid-build go here, not into the current unit)

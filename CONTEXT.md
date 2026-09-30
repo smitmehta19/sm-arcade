@@ -522,3 +522,19 @@ Measured on the real app (390px, 4x CPU throttle; local copy with GATE=null, CLO
   - After: ~58-61 fps idle, 4-5 slow frames per 90 while scrolling, no long tasks while idle, screen switches
     ~50-150 ms at 4x throttle. RULE: never animate filter / background-position / box-shadow in an infinite
     loop, and never put backdrop-filter on list items.
+
+## v78 — Curling (game 45) + Knockout 2.0 unit 1 (arenas + setup)
+- games-curling.js: 4 ends × 4 stones each, hammer, deterministic curl, real scoring; commit-first + snap;
+  `sm_cl_seen` no-replay; `clk` when the same seat throws twice; `clockGrace` 8 s. Tests: scratchpad/curling.
+- games-knockout.js U1: `simulate(init, L, geo, bd)` (per-body mass/radius/restitution, in(x,y) ice test,
+  bumper walls, constant current, onStep hook); 6 arenas as pure functions of (arena, round, mid); `phase`
+  'setup'|'play', `mode`, `arena`, `roulette`. Old saves = Sumo on Classic Floe. Tests: scratchpad/ko2.
+- NEW GAME HOOKS in ui.js (any game may define them):
+  * `skipOnly(state)` → true forces "Chance gone" even when the host chose Forfeit (Knockout setup: a host
+    still choosing an arena must never hand the partner a free win).
+  * `clockGrace` (ms) → added to the NEXT player's turn deadline, because their controls unlock only after the
+    partner-side replay (Curling 8 s, Knockout 5 s). The countdown text never shows more than the chosen secs.
+  * resultHold cap raised 5 s → 8 s for long final replays.
+- `h()` sets attributes via setAttribute: `disabled:false` still disables — pass null to omit an attribute.
+- Parking lot for a ui-level guard: a stale non-final write landing after the finish can revert the final board
+  (status stays finished, nothing is double-recorded — cosmetic).

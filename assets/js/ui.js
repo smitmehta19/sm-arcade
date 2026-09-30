@@ -107,8 +107,9 @@ const GAME_RULES = {
   'draw-guess': ['One of you gets a <b>secret word</b> and sketches it on the canvas — your partner watches it appear in real time.', 'Tap <b>“Done”</b> to hand it over (a blank canvas doesn’t count). Your partner gets up to <b>6 guesses</b>: a correct one scores <b>+2 for the guesser and +1 for the artist</b>. The artist can only reveal the answer after 3 wrong guesses.', 'You swap who draws each round — most points after 6 rounds wins! 🎨'],
   'ultimate-ttt': ['It’s <b>9 tic-tac-toe boards</b> in a 3×3 grid. Win a small board by getting 3-in-a-row inside it.', 'The twist: the <b>cell</b> you play decides <b>which board your opponent must play next</b> — top-left cell sends them to the top-left board.', 'Sent to a board that’s already won or full? Then you may play <b>anywhere</b>. Win <b>three small boards in a row</b> to win it all — if every board is decided with no line, whoever won more small boards wins (equal = draw). 🧠'],
   'fleabag': ['Take turns lobbing junk over the fence \u2014 <b>Fleabag the cat</b> throws cans, <b>Mutt the dog</b> throws bones.', '<b>Drag back</b> from your fighter like a slingshot and let go to throw. The dotted line shows your angle, not where it lands.', 'The <b>wind</b> changes every turn \u2014 watch the arrow. A clean hit does up to 30 damage; a near miss still grazes for 7.', 'Four one-use powers: \u26a1 <b>Power Throw</b> (double damage), \u270c\ufe0f <b>Double Attack</b> (throw twice), \ud83d\udca8 <b>Stink Bomb</b> (wrecks their next wind), \u2764\ufe0f <b>Power Up</b> (+25 health). Using one doesn\u2019t use up your turn.', 'First to empty the other\u2019s health bar wins.', 'Run out of time and you lose any armed power or owed Double Attack.'],
+  'curling': ['<b>4 ends.</b> Each end you both throw <b>4 stones</b>, taking turns. The player who did <b>not</b> score last end throws last (the <b>hammer</b>); a blank end keeps the hammer.', '<b>Drag back</b> to aim and set the power — the bar marks hog line, button and takeout weight. Pick the curl: <b>↺</b> bends left, <b>↻</b> bends right, and it bends more as it slows. No sweeping.', 'Stones knock each other out. A stone that goes <b>past the back line</b>, hits the <b>side boards</b> or <b>stops short of the far hog line</b> is removed.', '<b>Scoring:</b> after all 8 stones only the player closest to the button scores — <b>1 point per stone in the house</b> closer than the opponent’s nearest. Stones outside the house never count; equal distance is a blank end.', 'Most points after 4 ends wins. Tied: <b>one extra end</b>; still tied is a draw. Run out of time and that stone is lost. Tap the ice to speed a replay up; <b>House view</b> looks down on the rings.'],
   'cup-pong': ['You each have <b>10 cups</b> in a triangle at your end. <b>Swipe up</b> to throw — the angle aims, a longer swipe throws harder.', '<b>2 throws a turn.</b> Sink both and you get <b>balls back</b> — one extra turn.', 'A throw that <b>bounces on the table</b> and drops in counts double: that cup plus the <b>back-most</b> cup left.', '<b>One re-rack per game</b>, on your turn before your first throw — the cups you’re aiming at snap into a tight shape.', 'Sink <b>3 in a row</b> and you’re <b>ON FIRE</b>: your throws glow and the cups are a little more forgiving until you miss.', 'Clear all your partner’s cups and they get a <b>rebuttal</b> — they throw until they miss. If they clear all of yours, it’s a <b>draw</b>.', 'Run out of time and the rest of your turn is lost (and your streak). In a rebuttal, a timeout counts as the miss.'],
-  'knockout': ['Penguin sumo on a shrinking ice floe! You each have <b>4 penguins</b> and you both plan <b>at the same time</b>: drag from a penguin to aim (longer arrow = harder shove), drag back onto it to cancel, then tap <b>READY</b>.', 'Neither of you sees the other’s arrows until you’re <b>both</b> ready — then all 8 launch at once, slide and bounce off each other. A penguin with no arrow stays put (but can still get shoved!).', 'A penguin whose middle slides off the ice falls in. <i>Splash.</i>', 'After every round the floe <b>shrinks</b> — the dashed ring breaks off, and anyone standing on it goes swimming.', 'Last side with penguins wins; lose your last ones in the same round = draw. After <b>8 rounds</b>, more penguins left wins (equal = draw).', 'Timer: run out of time and your penguins sit that round out.'],
+  'knockout': ['Penguin sumo on shifting ice! You each have <b>4 penguins</b> and you both plan <b>at the same time</b>: drag from a penguin to aim (longer arrow = harder shove), drag back onto it to cancel, then tap <b>READY</b>.', 'Before round 1 the host picks the arena — or <b>Surprise me</b>, or <b>Arena roulette</b> for a new arena every round — and taps Start. (King of the Hill and Fish Hockey are coming soon.)', 'Neither of you sees the other’s arrows until you’re <b>both</b> ready — then all 8 launch at once, slide and bounce off each other. A penguin with no arrow stays put (but can still get shoved!).', 'A penguin whose middle slides off the ice falls in. <i>Splash.</i>', 'The ice <b>tightens every round</b>: <b>Classic Floe</b> — the dashed ring breaks off. <b>Donut</b> — the hole widens. <b>Twin Floes</b> — the bridge cracks after round 3, then the islands shrink. <b>Bumper Rink</b> — bumpers bounce you back; the pulsing pair pops and the rim shrinks. <b>Crumbling Ice</b> — cracked tiles fall. <b>Current</b> — the sea drags everything along the arrow, turning each round, and the floe shrinks a little.', 'Last side with penguins wins; lose your last ones in the same round = draw. After <b>8 rounds</b>, more penguins left wins (equal = draw).', 'Timer: run out of time and your penguins sit that round out (in setup, the match starts with what’s picked).'],
   'mini-golf': ['Nine holes, one ball each. <b>Drag back</b> from anywhere like a slingshot and let go to putt — the dotted line shows direction and strength, never the bounces.', 'Everyone tees off first (honour: lower score on the last hole). After that, whoever is <b>farther from the cup</b> putts next. Balls pass through each other.', 'Water or lava = <b>+1 stroke</b> and the ball goes back where you hit it from. Sand is slow, ice is slippery, arrows are slopes. Time the <b>windmill</b> and the <b>sweeper</b>; ride the ramp and the tunnel.', 'A fast ball lips out — roll it in gently. Not holed after <b>6 strokes</b>? It’s picked up and scores 7.', '<b>Fewest total strokes after 9 holes wins.</b> Equal totals are a draw.'],
   'pocket-tanks': ['Every match <b>drafts 10 weapons</b> from a pool of 16 and you both get the same ten. Fire each once and score the damage you deal — <b>most points after 20 shots wins</b>.', '<b>Drag on the battlefield</b> to aim, fine-tune <b>angle</b> and <b>power</b> with −/+ (hold to repeat), then hit <b>FIRE</b>. You can aim up to 20° below the horizon.', 'The ground is <b>destructible</b>: craters collapse and tanks drop into them. The <b>wind</b> changes every turn — except for Sniper and Railgun, which ignore it.', 'Look out for the <b>Tactical Nuke</b>, <b>Napalm</b> (burns the ground), <b>Roller</b> (rolls downhill), <b>Bouncer</b>, <b>MIRV</b> (splits mid-air), <b>Homing</b>, <b>Railgun</b> (a straight beam through the ground), <b>Air Strike</b>, <b>Chain Blast</b> and <b>Earthquake</b>. Hit yourself and the points go to your partner.', 'You get <b>3 tank moves</b> per match (◀ ▶) — moving doesn’t cost your turn. Tap ⤢ for landscape. Four maps: Dusk Ridge, Sunset Dunes, Arctic Night, Toxic Marsh.'],
   'scrabble': ['Each of you holds <b>7 tiles</b>. Make a word on the board — the first one must cross the <b>\u2605 centre</b>, and every word after that has to touch a tile already down.', 'Tap a tile, then tap a square. Tiles you\u2019ve placed glow green \u2014 tap one again to take it back. The running score shows under the board before you commit.', 'Coloured squares multiply: <b>DL/TL</b> double or triple that letter, <b>DW/TW</b> double or triple the whole word (only on the turn you cover them). Use all 7 tiles in one go for a <b>50-point BINGO</b>.', 'Blank tiles (?) can be any letter but score 0. Stuck? <b>Swap</b> tiles back into the bag or <b>Pass</b>. When the bag is empty and someone plays their last tile the game ends \u2014 they gain the value of what\u2019s left in the other rack, and their partner loses it.', 'Every word is checked against the full 168,000-word tournament list. Want one that isn\u2019t in it (a name, some slang)? <b>Ask your partner</b> \u2014 if they allow it, it scores; if they say no, you lose your turn.'],
@@ -524,14 +525,16 @@ const TIMER_GAMES = {
   'ghost': { skip: false }, 'word-duel': { skip: false }, 'hangman': { skip: false }, 'letterpress': { skip: false },
   'code-breaker': { skip: false }, 'liars-dice': { skip: false }, 'yahtzee': { skip: false },
   'chess': { skip: false }, 'scrabble': { skip: true }, 'dominoes': { skip: false }, 'sos': { skip: true },
-  'fleabag': { skip: true }, 'pocket-tanks': { skip: true }, 'mini-golf': { skip: true }, 'knockout': { skip: true }, 'cup-pong': { skip: true },
+  'fleabag': { skip: true }, 'pocket-tanks': { skip: true }, 'mini-golf': { skip: true }, 'knockout': { skip: true }, 'cup-pong': { skip: true }, 'curling': { skip: true },
 };
 // A game still animating its final move (e.g. the knockout shot in flight) can ask the
 // result card to wait for it via def.resultDelay() → ms. Capped so nothing can stall it.
-const resultHold = def => { try { return Math.max(0, Math.min(5000, (def && def.resultDelay && def.resultDelay()) | 0)); } catch (e) { return 0; } };
+const resultHold = def => { try { return Math.max(0, Math.min(8000, (def && def.resultDelay && def.resultDelay()) | 0)); } catch (e) { return 0; } };
 const timerCap = gameId => TIMER_GAMES[gameId] || (Games.byId(gameId) && Games.byId(gameId).isTournament ? { skip: true, tour: true } : null);
 // next turn's deadline (synced server ms) when the current match has a live timer
-const freshDeadline = () => (currentMatch && currentMatch.timer && currentMatch.timer.on) ? (Store.Net.serverNow() + currentMatch.timer.secs * 1000) : null;
+const freshDeadline = extra => (currentMatch && currentMatch.timer && currentMatch.timer.on) ? (Store.Net.serverNow() + currentMatch.timer.secs * 1000 + (extra | 0)) : null;
+// replay time a game adds to the next player's clock (their controls unlock only after the replay)
+const clockGrace = gid => { const d = Games.byId(gid); return (d && d.clockGrace) | 0; };
 
 function initNet() {
   Store.onCloud(() => {
@@ -1222,7 +1225,7 @@ function renderStage(gameId) {
     if (status === 'active' && t.phase === 'play') {
       let p = {}; try { p = JSON.parse(currentMatch.state); } catch (e) {}
       const same = p.phase === 'play' && p.slot === t.slot && p.sub && t.sub && p.sub.turn === t.sub.turn && (t.sub.clk == null || t.sub.clk === p.sub.clk);
-      if (!same || !currentMatch.deadline) { const dl = freshDeadline(); if (dl) patch.deadline = dl; }
+      if (!same || !currentMatch.deadline) { const dl = freshDeadline(same === false && p.slot === t.slot ? clockGrace(t.subId) : 0); if (dl) patch.deadline = dl; }
     }
     currentMatch = Object.assign({}, currentMatch, patch);
     const full = Object.assign({ by: me, t: Date.now() }, patch);
@@ -1311,7 +1314,7 @@ function renderStage(gameId) {
       // fresh clock when the turn changes — or when a game says a new turn began for the SAME player (`clk`,
       // e.g. Mini Golf: still away after a putt). Power-ups / rolls / tank moves keep the running clock.
       let prev = {}; try { prev = JSON.parse(currentMatch.state) || {}; } catch (e) {}
-      if (nextState.turn !== prev.turn || (nextState.clk != null && nextState.clk !== prev.clk) || !currentMatch.deadline) { const dl = freshDeadline(); if (dl) patch.deadline = dl; }
+      if (nextState.turn !== prev.turn || (nextState.clk != null && nextState.clk !== prev.clk) || !currentMatch.deadline) { const dl = freshDeadline(clockGrace(gid)); if (dl) patch.deadline = dl; }
     }
     currentMatch = Object.assign({}, currentMatch, patch);
     // write (and score) BEFORE painting, so a rendering error can never cost a result
@@ -1343,7 +1346,7 @@ function renderStage(gameId) {
     const lvl = pct > 50 ? 'ok' : (pct > 22 ? 'warn' : 'crit');
     timerBar.hidden = false;
     timerBar.className = 'timer-bar show ' + lvl;
-    timerBar.innerHTML = `<div class="tb-fill" style="width:${pct}%"></div><div class="tb-txt">⏱ ${esc(s.players[clock].name)} · ${Math.max(0, Math.ceil(remMs / 1000))}s</div>`;
+    timerBar.innerHTML = `<div class="tb-fill" style="width:${pct}%"></div><div class="tb-txt">⏱ ${esc(s.players[clock].name)} · ${Math.max(0, Math.min(m.timer.secs, Math.ceil(remMs / 1000)))}s</div>`;
     // enforce: the player on the clock fires at 0; the opponent fires after a 2s grace (covers a stalled/closed opponent)
     if (m.deadline === firedFor) return;
     if (me === clock ? remMs <= 0 : remMs <= -2000) { firedFor = m.deadline; fireTimeout(st, sub, clock, isTour); }
@@ -1352,13 +1355,14 @@ function renderStage(gameId) {
     if (!currentMatch || currentMatch.status !== 'active') return;
     // the host's chosen mode wins; tournaments fall back to a per-sub-game default if none was set
     const chosen = currentMatch.timer && currentMatch.timer.mode;
-    const mode = chosen || (isTour ? (((TIMER_GAMES[st.subId] || {}).skip) ? 'skip' : 'forfeit') : 'forfeit');
+    const def = isTour ? Games.byId(st.subId) : Games.byId(gameId);
+    let mode = chosen || (isTour ? (((TIMER_GAMES[st.subId] || {}).skip) ? 'skip' : 'forfeit') : 'forfeit');
+    if (mode !== 'skip' && def && def.skipOnly && def.skipOnly(sub)) mode = 'skip';   // e.g. still in match setup → never a free win
     const opp = 1 - clock;
     Store.Sound.bad();
     if (mode === 'skip') {
       // "Chance gone" — pass the turn cleanly. A game may define skipTurn(state, opp)
       // to reset its own mid-turn bits (e.g. Yahtzee's dice); else we just flip turn.
-      const def = isTour ? Games.byId(st.subId) : Games.byId(gameId);
       const flipped = (def && def.skipTurn) ? def.skipTurn(sub, opp) : Object.assign({}, sub, { turn: opp });
       isTour ? tourCommit(flipped, undefined) : commitMove(gameId, flipped, undefined);
     } else {
