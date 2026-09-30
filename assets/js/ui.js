@@ -540,7 +540,13 @@ function initNet() {
   Store.onCloud(() => {
     const me = Store.getIdentity();
     if (me != null) Store.Net.goOnline(me, Store.get().players[me].name);
-    Store.Net.watchPresence(p => { presence = p || {}; if (isLobby()) renderHome(); });
+    Store.Net.watchPresence(p => {
+      presence = p || {};
+      const k = [0, 1].map(i => (presence[i] && presence[i].online) ? 1 : 0).join('');
+      if (k === presenceKey) return;                    // a reconnect re-announcing the same status: nothing to show
+      presenceKey = k;
+      if (isLobby()) softRefresh(renderHome);
+    });
     Store.Net.watchMatch(m => {
       const prev = currentMatch, me = Store.getIdentity();
       if (!m && prev && prev.forfeitBy != null && prev.forfeitBy !== me && (me === 0 || me === 1)) {
@@ -549,7 +555,7 @@ function initNet() {
       }
       currentMatch = m;
       if (stageHook) stageHook(m);
-      else if (isLobby()) renderHome();
+      else if (isLobby()) softRefresh(renderHome);
     });
     setupNudgeWatch();
   });
@@ -651,7 +657,7 @@ function setupNudgeWatch() {
     const who = esc(nudge.name || Store.get().players[partnerSeat(me)].name);
     Notify.fire(`${nudge.name || 'Your partner'} wants to play! 💞`, 'Come online and pick a game.');
     showToast(`💞 <b>${who}</b> wants to play — come pick a game!`);
-    if (isLobby()) renderHome();
+    if (isLobby()) softRefresh(renderHome);
   });
 }
 async function sendNudge(me, partner) {
@@ -665,9 +671,27 @@ async function sendNudge(me, partner) {
 /* ============================================================
    ROUTER
    ============================================================ */
+// LIVE REFRESH (v79): sync / presence / match / nudge data re-render the SAME screen. Doing it like a
+// navigation wiped #view (the page collapsed, so the browser snapped scroll to the top) and replayed every
+// card's floatUp entrance → the "main screen flickers and jumps" report. softRefresh keeps the height while
+// rebuilding, restores the scroll and suppresses the entrance animations (.view.refresh in styles.css);
+// only a real navigation (Router.core) plays them.
+function softRefresh(fn) {
+  const view = document.getElementById('view');
+  if (!view) { fn(); return; }
+  const y = window.scrollY;
+  view.classList.add('refresh');
+  view.style.minHeight = view.offsetHeight + 'px';
+  // html has scroll-behavior:smooth — a plain scrollTo would visibly GLIDE back down; restore instantly
+  try { fn(); } finally { view.style.minHeight = ''; if (Math.abs(window.scrollY - y) > 1) window.scrollTo({ top: y, behavior: 'instant' }); }
+}
+// presence fires on every reconnect (mobile sockets drop whenever an app is backgrounded) — only an actual
+// online/offline change is worth a re-render
+let presenceKey = '';
 const Router = (() => {
   let lastHash = null;
   function core() {
+    const vw = document.getElementById('view'); if (vw) vw.classList.remove('refresh');   // real navigation: entrance animations play
     stageHook = null;
     if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
     if (reactUnsub) { reactUnsub(); reactUnsub = null; }
@@ -764,7 +788,7 @@ function renderHome() {
   if (inviteBanner) banners.append(inviteBanner);
   if (pendingNudge) banners.append(h('div', { class: 'banner nudge-in' },
     h('span', {}, `💞 ${esc(pendingNudge.name || s.players[partner].name)} wants to play!`),
-    h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { pendingNudge = null; renderHome(); } }, 'Got it')));
+    h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { pendingNudge = null; softRefresh(renderHome); } }, 'Got it')));
 
   // "come online & play" nudge
   const nudgeBtn = Store.Net.ready()
@@ -795,7 +819,7 @@ function renderHome() {
   const cats = ['All', 'Favorites', ...Games.categories().filter(c => c !== 'Tournament')];
   const chips = h('div', { class: 'chips' }, cats.map(c => h('button', {
     class: 'chip' + (homeFilter === c ? ' active' : ''),
-    onclick: () => { homeFilter = c; renderHome(); Store.Sound.tap(); },
+    onclick: () => { homeFilter = c; softRefresh(renderHome); Store.Sound.tap(); },
   }, c === 'Favorites' ? '★ Faves' : c)));
 
   const gridWrap = h('div', { class: 'grid', id: 'gameGrid' });
@@ -849,7 +873,7 @@ function gameCard(g, s, i) {
   const favBtn = h('button', {
     class: 'fav-btn' + (isFav ? ' on' : ''), title: isFav ? 'Remove from favourites' : 'Add to favourites',
     'aria-label': isFav ? 'Remove from favourites' : 'Add to favourites',
-    onclick: e => { e.preventDefault(); e.stopPropagation(); Store.toggleFav(g.id); Store.Sound.tap(); renderHome(); },
+    onclick: e => { e.preventDefault(); e.stopPropagation(); Store.toggleFav(g.id); Store.Sound.tap(); softRefresh(renderHome); },
   }, isFav ? '★' : '☆');
   const card = h('a', {
     class: 'gcard' + (isFav ? ' is-fav' : ''), href: 'javascript:void 0',
@@ -860,8 +884,8 @@ function gameCard(g, s, i) {
     h('span', { class: 'gicon', html: Icons.game(g.id) }), h('span', { class: 'gname' }, g.name), h('span', { class: 'gtag' }, tag),
   );
   let lp;
-  card.addEventListener('contextmenu', e => { e.preventDefault(); Store.toggleFav(g.id); renderHome(); });
-  card.addEventListener('touchstart', () => { lp = setTimeout(() => { Store.toggleFav(g.id); Store.Sound.good(); renderHome(); }, 550); }, { passive: true });
+  card.addEventListener('contextmenu', e => { e.preventDefault(); Store.toggleFav(g.id); softRefresh(renderHome); });
+  card.addEventListener('touchstart', () => { lp = setTimeout(() => { Store.toggleFav(g.id); Store.Sound.good(); softRefresh(renderHome); }, 550); }, { passive: true });
   card.addEventListener('touchend', () => clearTimeout(lp));
   card.addEventListener('touchmove', () => clearTimeout(lp));
   return card;

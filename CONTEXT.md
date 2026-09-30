@@ -538,3 +538,14 @@ Measured on the real app (390px, 4x CPU throttle; local copy with GATE=null, CLO
 - `h()` sets attributes via setAttribute: `disabled:false` still disables — pass null to omit an attribute.
 - Parking lot for a ui-level guard: a stale non-final write landing after the finish can revert the final board
   (status stays finished, nothing is double-recorded — cosmetic).
+
+## Gotcha — a live refresh is NOT a navigation (v79: "main screen lagging, flickering, jumping")
+Sync / presence / match / nudge updates re-rendered the whole screen exactly like a navigation: #view wiped
+and every card replayed its floatUp entrance (49 animations) — a visible flash + jump on both phones. Presence
+fired on EVERY Firebase reconnect (mobile sockets drop whenever the app is backgrounded), even with no status
+change. Now: `softRefresh(fn)` (ui.js) for every live re-render — keeps #view's height, restores scroll
+INSTANTLY (html has scroll-behavior:smooth, so a plain scrollTo glides), and `.view.refresh` suppresses the
+entrance animations; only Router.core (a real navigation) plays them. Presence re-renders only when someone's
+online flag actually changes. Measured: refresh → 0 floatUp animations (was 49); same-status reconnect → 0
+re-renders. Idle two-phone sync already caused 0 writes (no echo loop). RULE: never call a render function
+directly from a data callback — wrap it in softRefresh.

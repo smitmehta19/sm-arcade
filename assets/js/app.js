@@ -22,9 +22,10 @@ Gate.ready(function boot() {
   Store.subscribe(() => {
     paintChrome();
     const hash = location.hash || '#/';
-    if ((hash === '#/' || hash === '') && Store.getIdentity() != null) renderHome();
-    if (hash.startsWith('#/plans') && Store.getIdentity() != null) renderPlans(); // live calendar updates from the partner
-    if (hash.startsWith('#/story') && Store.getIdentity() != null) renderStory();
+    // live data → same screen: softRefresh keeps scroll and skips the entrance animations (v79 flicker fix)
+    if ((hash === '#/' || hash === '') && Store.getIdentity() != null) softRefresh(renderHome);
+    if (hash.startsWith('#/plans') && Store.getIdentity() != null) softRefresh(renderPlans); // live calendar updates from the partner
+    if (hash.startsWith('#/story') && Store.getIdentity() != null) softRefresh(renderStory);
   });
   paintChrome();
 

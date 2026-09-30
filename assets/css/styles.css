@@ -903,3 +903,6 @@ body.paused .mini-tally, body.paused .fx-stamp.fire{ animation-play-state:paused
    Keep real blur ONLY on fixed chrome (topbar, bottom nav, icon buttons, overlays), never on lists. */
 .gcard, .card, .chip, .stat, .lead-item, .lobby-strip, .banner, .mini-score, .board-frame, .vs-banner, .glass,
 .btn, .id-btn, .rules-btn{ -webkit-backdrop-filter:none; backdrop-filter:none; }
+
+/* ---------- v79: a live refresh is not a navigation — no entrance animations (see softRefresh in ui.js) ---------- */
+.view.refresh :is(.gcard, .hero, .hero h1, .vs-banner, .lobby-strip, .banner, .card, .lead-item, .id-gate){ animation:none; }
