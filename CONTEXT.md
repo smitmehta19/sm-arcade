@@ -504,11 +504,14 @@ Also v75 (ui.js): ordinary moves no longer send `status:'active'` — a move lan
 (e.g. a timer skip racing it) used to reopen a finished match and could record the result twice.
 
 ## Cup Pong (v76) — assets/js/games-cuppong.js (game 44)
-10 cups each, 2 throws a turn, balls back, bounce = 2 cups, one re-rack, "on fire" after 3 in a row, rebuttal
+10 cups each, 2 throws a turn, balls back, one re-rack, "on fire" after 3 in a row, rebuttal
 (clear them back = draw). Thrower simulates + commits input AND outcome first; partners replay from their own
 end of the table and snap to the committed cup. Watched throws persist (`sm_cp_seen` {k: match `mid`, id}) →
 no replay on reload. `clk` bumps on balls-back and each rebuttal throw → fresh turn clock. Fixed 60 Hz step,
 single guarded loop. Tests: scratchpad/cuppong (106 @60 Hz reduced-motion, 111 @120 Hz).
+v81 simpler rules (Smit: "touching the rim, then some other cup is removed"): the bounce bonus (2nd, back-most
+cup) is gone and ON FIRE is glow-only — new throws commit `f: 0` (normal cup size) + `gl` (glow). Old throws
+with `f: 1` / `out.x >= 0` still replay exactly as committed. One ball in = that one cup out, nothing else.
 
 ## Gotcha — menus lagged on both phones (v77): only animate opacity/transform, blur only on fixed chrome
 Measured on the real app (390px, 4x CPU throttle; local copy with GATE=null, CLOUD off):
@@ -549,3 +552,13 @@ entrance animations; only Router.core (a real navigation) plays them. Presence r
 online flag actually changes. Measured: refresh → 0 floatUp animations (was 49); same-status reconnect → 0
 re-renders. Idle two-phone sync already caused 0 writes (no echo loop). RULE: never call a render function
 directly from a data callback — wrap it in softRefresh.
+
+## Gotcha — monthly race stuck at 0-0 (v80): one calendar for both phones
+Meera's phone is on IST (+4.5 h). From 19:30 Irish time on the last day of a month her phone was in the NEXT
+month; `rollSeasons()` rolled whenever `cur.ym !== ymNow`, so the phones flipped the race back and forth on every
+emit — each result was archived as a junk `past` entry within one round trip (hero stuck at 0-0, all-time totals
+fine) and the room got thousands of writes (lag). Fix: `curYM()` uses Europe/Dublin (Intl formatToParts, local
+fallback); `rollSeasons` never rolls backwards (`cur.ym >= ymNow` → no roll); `repairSeasons()` folds duplicate /
+not-yet-finished `past` entries back (finished months → one entry each, this month → `cur`). Exact and idempotent.
+Harness: scratchpad/scores/tz-pingpong.js + tz-repair.js (real store.js in two vm contexts, one on a shifted calendar).
+Parked: `finishMatch` transaction can reject on a socket drop → that one result is not recorded (retry with a token).

@@ -4,12 +4,12 @@
    Rules (kept tight — the same text lives in GAME_RULES):
      · 10 cups each, racked in a triangle at your end of the table.
      · 2 throws a turn. Sink BOTH → "balls back" (one extra turn).
-     · A throw that bounces on the table and drops in counts 2: that
-       cup plus the back-most cup left.
+     · One ball in = that one cup out (the cup it ends up in). Nothing else is
+       ever removed; a ball that hits a rim and pops out is a miss.
      · One re-rack each per game, on your turn before your first throw:
        the cups you are aiming at snap into a tight shape.
-     · Sink 3 throws in a row → ON FIRE: your throws glow and the cups
-       are a little more forgiving until you miss.
+     · Sink 3 throws in a row → ON FIRE: your ball glows until you miss
+       (just for show — the cups stay the same size).
      · Clear your partner's cups → they get a REBUTTAL: they throw until
        they miss. If they clear all of yours, it's a draw.
 
@@ -105,6 +105,7 @@
      Pure arithmetic (+ − × ÷ sqrt) on the committed numbers only, so every phone
      computes bit-identical paths. Returns path points every SUB steps (1/60 s),
      events (table / rim / wall / in) and the outcome. */
+  // `fire` (bigger cup) is only ever 1 when replaying a throw committed before v81 — new throws pass 0
   function simulate(v, spin, fire, targets) {
     let x = REL[0], y = REL[1], z = REL[2], vx = +v[0] || 0, vy = +v[1] || 0, vz = +v[2] || 0;
     const R = fire ? CR * FIRE_K : CR, sp = +spin || 0;
@@ -222,7 +223,7 @@
       if (Lx.k === 'r') Lx.to = cleanCups(Lx.to);
       else {
         const vv = toArr(Lx.v); Lx.k = 't'; Lx.v = [0, 1, 2].map(i => +vv[i] || 0);
-        Lx.s = +Lx.s || 0; Lx.f = Lx.f ? 1 : 0; Lx.bb = Lx.bb ? 1 : 0; Lx.ig = Lx.ig ? 1 : 0; Lx.ev = Lx.ev || '';
+        Lx.s = +Lx.s || 0; Lx.f = Lx.f ? 1 : 0; Lx.gl = (Lx.gl || Lx.f) ? 1 : 0; Lx.bb = Lx.bb ? 1 : 0; Lx.ig = Lx.ig ? 1 : 0; Lx.ev = Lx.ev || '';
         const o = Lx.out && typeof Lx.out === 'object' ? Lx.out : {};
         const ee = toArr(o.e);
         Lx.out = { r: o.r === 'in' ? 'in' : 'miss', c: +o.c || 0, b: o.b ? 1 : 0, x: o.x === 0 || +o.x > 0 ? +o.x : -1, e: ee.length ? [0, 1, 2].map(i => +ee[i] || 0) : [], m: o.m || '' };
@@ -250,19 +251,16 @@
   function resolve(st0, seat, inp) {
     const s = cloneSt(st0), tgt = 1 - seat, prev = s.cups[tgt];
     const fire = s.streak[seat] >= ON_FIRE ? 1 : 0;
-    const sim = simulate(inp.v, inp.s, fire, toThrower(prev));
-    const o = sim.out, gone = [];
-    let extra = -1;
-    if (o.r === 'in') {
-      gone.push(o.c);
-      if (o.b) { const bm = backMost(prev.filter(c => c.i !== o.c)); if (bm) { extra = bm.i; gone.push(bm.i); } }
-    }
+    // simple rules (v81): one ball in = that one cup out; ON FIRE only glows (f = 0 → normal cup size)
+    const sim = simulate(inp.v, inp.s, 0, toThrower(prev));
+    const o = sim.out, gone = [], extra = -1;
+    if (o.r === 'in') gone.push(o.c);
     s.cups[tgt] = prev.filter(c => gone.indexOf(c.i) < 0);
     s.thr[seat]++;
     if (o.r === 'in') s.streak[seat]++; else s.streak[seat] = 0;
     s.n++;
-    const Lx = { id: s.n, k: 't', seat, target: tgt, v: inp.v.slice(), s: inp.s, f: fire, prev,
-      out: { r: o.r, c: o.r === 'in' ? o.c : 0, b: o.r === 'in' ? o.b : 0, x: extra, e: o.e, m: o.m || '' },
+    const Lx = { id: s.n, k: 't', seat, target: tgt, v: inp.v.slice(), s: inp.s, f: 0, gl: fire, prev,
+      out: { r: o.r, c: o.r === 'in' ? o.c : 0, b: 0, x: extra, e: o.e, m: o.m || '' },
       bb: 0, ev: '', ig: !fire && s.streak[seat] >= ON_FIRE ? 1 : 0 };
     let winner;
     if (s.phase === 'rebuttal') {
@@ -468,7 +466,7 @@
   }
   function aimPreview(a) {
     const st = S.st, me = S.ctx.me, inp = inputFrom(a.power, a.yaw, a.spin);
-    return simulate(inp.v, inp.s, st.streak[me] >= ON_FIRE, toThrower(st.cups[1 - me]));
+    return simulate(inp.v, inp.s, 0, toThrower(st.cups[1 - me]));
   }
 
   /* ---------------- actions ---------------- */
@@ -688,7 +686,7 @@
       }
       A.ball = ballAt(A);
       if (!A.done && S.tick % 2 === 0) { A.trail.push(A.ball.slice()); if (A.trail.length > 7) A.trail.shift(); }
-      if (A.L.f && !A.done && !S.calm) {
+      if (A.L.gl && !A.done && !S.calm) {
         for (let j = 0; j < 2; j++) S.parts.push({ k: 'flame', x: A.ball[0] + rnd(-.6, .6), y: A.ball[1] + rnd(-.4, .6), z: A.ball[2] + rnd(-.6, .6), vx: rnd(-.08, .08), vy: rnd(.1, .35), vz: rnd(-.08, .08), life: rnd(12, 22), max: 22, r: rnd(1.1, 2.2) });
       }
       if (A.done && A.tail >= TAIL + (A.final ? 40 : 0) && A.extraAt < 0 && (A.inCup == null || A.gone[A.inCup])) finishAnim();
@@ -949,11 +947,11 @@
     const inside = A && A.k === 't' && A.inCup != null ? A.inCup : null;      // the ball is in the drink
     if (A && A.k === 't' && inside == null) {
       const b = A.ball;
-      items.push({ d: depth(b[1], b[2]), k: 'ball', b, fire: !!A.L.f });
+      items.push({ d: depth(b[1], b[2]), k: 'ball', b, fire: !!A.L.gl });
       if (b[1] > -1 && b[0] > -TW / 2 && b[0] < TW / 2 && b[2] > 0 && b[2] < L) {    // its shadow on the table
         const h = Math.max(0, b[1]);
         ellipseAt(g, b[0], .05, b[2], BR * (1 + h / 70)); g.fillStyle = `rgba(0,0,0,${.5 * clamp(1 - h / 110, .15, 1)})`; g.fill();
-        if (A.L.f) { g.globalCompositeOperation = 'lighter'; ellipseAt(g, b[0], .05, b[2], BR * 4); g.fillStyle = `rgba(255,140,40,${.2 * clamp(1 - h / 80, 0, 1)})`; g.fill(); g.globalCompositeOperation = 'source-over'; }
+        if (A.L.gl) { g.globalCompositeOperation = 'lighter'; ellipseAt(g, b[0], .05, b[2], BR * 4); g.fillStyle = `rgba(255,140,40,${.2 * clamp(1 - h / 80, 0, 1)})`; g.fill(); g.globalCompositeOperation = 'source-over'; }
       }
     }
     // the partner's ball waiting at the far end (they're up)
@@ -1012,7 +1010,7 @@
     g.fillStyle = 'rgba(255,255,255,.35)'; const hl = P(cx - R * .25, lift + LIQ * sc + .02, cz + R * .2);
     g.beginPath(); g.ellipse(hl.x, hl.y, Math.max(.5, R * .22 * px), Math.max(.3, R * .08 * px), 0, 0, 7); g.fill();
     if (o.ball) { const bp = P(cx, lift + LIQ * sc + BR * .8, cz); drawBallAt(g, bp.x, bp.y, BR * bp.k * sc, false); }
-    if (o.ballIn) { const b = o.ballIn, bp = P(b[0], b[1], b[2]); drawBallAt(g, bp.x, bp.y, BR * bp.k, !!(S.anim && S.anim.L && S.anim.L.f)); }
+    if (o.ballIn) { const b = o.ballIn, bp = P(b[0], b[1], b[2]); drawBallAt(g, bp.x, bp.y, BR * bp.k, !!(S.anim && S.anim.L && S.anim.L.gl)); }
     // shade the near inner wall
     const sh = g.createLinearGradient(0, nea, 0, nea - (nea - far) * .55);
     sh.addColorStop(0, 'rgba(60,20,30,.35)'); sh.addColorStop(1, 'rgba(60,20,30,0)');
