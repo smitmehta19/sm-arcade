@@ -509,3 +509,16 @@ Also v75 (ui.js): ordinary moves no longer send `status:'active'` — a move lan
 end of the table and snap to the committed cup. Watched throws persist (`sm_cp_seen` {k: match `mid`, id}) →
 no replay on reload. `clk` bumps on balls-back and each rebuttal throw → fresh turn clock. Fixed 60 Hz step,
 single guarded loop. Tests: scratchpad/cuppong (106 @60 Hz reduced-motion, 111 @120 Hz).
+
+## Gotcha — menus lagged on both phones (v77): only animate opacity/transform, blur only on fixed chrome
+Measured on the real app (390px, 4x CPU throttle; local copy with GATE=null, CLOUD off):
+  - home idled at ~33-50 fps and dropped ~40-48 of every 90 frames while scrolling.
+  - ROOT CAUSE 1: two infinite hero loops animated `filter: drop-shadow` (neonBreath) and
+    `background-position` (marqueeShimmer) → full repaint every frame. Now opacity/transform only; the title
+    glow moved to .hero::before (an animated child INSIDE a filtered element would re-filter every frame).
+  - ROOT CAUSE 2: backdrop-filter blur(20px) on every repeated surface (43 game cards, chips, cards, buttons,
+    board frames) over the moving aurora → re-blur per element per frame. Now blur only on fixed chrome
+    (topbar, bottom nav, icon buttons, overlays); screenshots before/after are visually identical.
+  - After: ~58-61 fps idle, 4-5 slow frames per 90 while scrolling, no long tasks while idle, screen switches
+    ~50-150 ms at 4x throttle. RULE: never animate filter / background-position / box-shadow in an infinite
+    loop, and never put backdrop-filter on list items.

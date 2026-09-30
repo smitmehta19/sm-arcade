@@ -488,15 +488,25 @@ body::after{
 }
 body.light::after{ opacity:.025; }
 
-/* arcade marquee hero — breathing neon + a glowing closing rule */
-@keyframes neonBreath{ 0%,100%{ filter:drop-shadow(0 0 14px rgba(155,123,255,.25)); } 50%{ filter:drop-shadow(0 0 26px rgba(155,123,255,.5)); } }
-.hero h1{ animation:floatUp .6s var(--ease) both, neonBreath 5.5s ease-in-out 1s infinite; }
+/* arcade marquee hero — breathing neon + a glowing closing rule.
+   PERF: these loops may animate ONLY opacity / transform (GPU-composited). They used to animate
+   `filter: drop-shadow` and `background-position` — a full repaint every frame that kept the home
+   screen below 60 fps even while idle and made menus/scrolling lag on both phones (2026-09-30).
+   The glow lives on .hero::before, OUTSIDE the title's static filter: an animated child inside a
+   filtered element would force the filter to be recomputed every frame all over again. */
+.hero h1{ position:relative; z-index:1; filter:drop-shadow(0 0 16px rgba(155,123,255,.32)); animation:floatUp .6s var(--ease) both; }
+.hero::before{
+  content:""; position:absolute; left:50%; top:10px; width:min(88%,560px); height:120px; z-index:0; pointer-events:none;
+  background:radial-gradient(closest-side, rgba(155,123,255,.30), transparent 72%);
+  opacity:.4; transform:translateX(-50%) scale(.94); animation:neonBreath 5.5s ease-in-out 1s infinite;
+}
+@keyframes neonBreath{ 0%,100%{ opacity:.4; transform:translateX(-50%) scale(.94); } 50%{ opacity:1; transform:translateX(-50%) scale(1.06); } }
 .hero::after{
   content:""; display:block; width:128px; height:2px; margin:16px auto 0; border-radius:2px;
   background:linear-gradient(90deg, transparent, var(--cyan), var(--violet), var(--magenta), transparent);
-  background-size:220% 100%; box-shadow:0 0 16px rgba(155,123,255,.55); animation:marqueeShimmer 4.5s linear infinite;
+  box-shadow:0 0 16px rgba(155,123,255,.55); animation:marqueeShimmer 4.5s ease-in-out infinite;
 }
-@keyframes marqueeShimmer{ from{ background-position:0% 0; } to{ background-position:220% 0; } }
+@keyframes marqueeShimmer{ 0%,100%{ opacity:.55; transform:scaleX(.82); } 50%{ opacity:1; transform:scaleX(1); } }
 /* the live tally reads as a charged cyan→magenta filament */
 .mini-tally{
   background:linear-gradient(90deg, var(--cyan), var(--violet) 50%, var(--magenta));
@@ -884,3 +894,12 @@ body.paused .mini-tally, body.paused .fx-stamp.fire{ animation-play-state:paused
     left:calc(14px + env(safe-area-inset-left, 0px)); padding:6px 12px; font-size:11px;
     background:rgba(5,7,15,.62); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
 }
+
+/* ---------- PERF (2026-09-30): frosted-glass blur only on FIXED chrome ----------
+   Menus lagged on both phones. Measured (390px, 4x CPU): every REPEATED / scrolling surface below
+   carried backdrop-filter:blur(20px) — 43 game cards + chips + cards + buttons — over the drifting
+   aurora, so the phone re-blurred the backdrop of each one every frame. Removing it here roughly
+   thirds the dropped frames while scrolling and looks the same (the aurora is already a soft glow).
+   Keep real blur ONLY on fixed chrome (topbar, bottom nav, icon buttons, overlays), never on lists. */
+.gcard, .card, .chip, .stat, .lead-item, .lobby-strip, .banner, .mini-score, .board-frame, .vs-banner, .glass,
+.btn, .id-btn, .rules-btn{ -webkit-backdrop-filter:none; backdrop-filter:none; }
