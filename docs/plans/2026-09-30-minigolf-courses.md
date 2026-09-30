@@ -1,6 +1,6 @@
 # Mini Golf: simple turns + 2 new courses
 
-**Date:** 2026-09-30 · **Status:** approved 2026-09-30 · **File:** `assets/js/games-minigolf.js` only (+ rules text in ui.js by me)
+**Date:** 2026-09-30 · **Status:** shipped v82 2026-09-30 (independent review + mixed-version fix) · **File:** `assets/js/games-minigolf.js` only (+ rules text in ui.js by me)
 
 ## Why
 Smit: "check the turn system … add more levels and maps." Today's turn rule is real golf ("whoever is farther from the

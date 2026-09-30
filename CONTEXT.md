@@ -562,3 +562,11 @@ fallback); `rollSeasons` never rolls backwards (`cur.ym >= ymNow` → no roll); 
 not-yet-finished `past` entries back (finished months → one entry each, this month → `cur`). Exact and idempotent.
 Harness: scratchpad/scores/tz-pingpong.js + tz-repair.js (real store.js in two vm contexts, one on a shifted calendar).
 Parked: `finishMatch` transaction can reject on a socket drop → that one result is not recorded (retry with a token).
+
+## Mini Golf v82 — simple turns + course picker (Neon Garden / Candy Land / Space Station / Surprise me)
+State `v:2`, `phase` setup|play, `course`, `rule` alt|away, `host`, `last.g` (hole index across all 27). Saves without
+`v` = Neon Garden + the old "farther ball putts next" rule. `skipOnly` only in the picker; skipTurn there starts the
+match (never forfeits). clockGrace 10 s (hole-ending replay p95 7.7 s). MIXED VERSIONS: an old-code phone plays Garden
+geometry on a new course → norm() puts any ball outside the bound / inside a block back to where it was hit from (or
+the tee), and a v:2 stroke without a matching `last.g` shows "<partner> is on an older version — reopen the app".
+Tests: scratchpad/mg2 (mg-logic.js 602), scratchpad/mg-review/mix2.js (8).

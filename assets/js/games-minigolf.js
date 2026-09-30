@@ -1,19 +1,26 @@
 /* ============================================================
-   MINI GOLF — nine hand-built holes, two balls, one scorecard.
+   MINI GOLF — three courses of nine hand-built holes, two balls, one scorecard.
 
-   Both balls play the same hole. Whoever is AWAY (farther from the cup
-   by course distance, i.e. walking round the walls) putts next; on the
-   tee the player with the honour goes first. A ball in the cup is done;
-   a ball not holed after 6 strokes is picked up and scores 7. Water or
-   lava = +1 penalty stroke and the ball goes back to where it was hit
-   from. The balls don't collide with each other (kept simple on purpose).
+   Courses (the host picks before hole 1, the partner watches it live):
+   Neon Garden (the original nine), Candy Land, Space Station, or Surprise me.
+
+   Turns are plain alternation: you putt, then your partner, then you.
+   The player with the honour tees off first; a player who has holed out is
+   skipped until the hole ends. (Saves made before the course picker existed
+   carry no `rule` and keep the old "whoever is farther from the cup putts
+   next" rule, so a match in progress plays exactly as it did.)
+   A ball not holed after 6 strokes is picked up and scores 7. Water, lava,
+   chocolate or a black hole = +1 penalty stroke and the ball goes back to
+   where it was hit from. The balls don't collide with each other.
    Fewest total strokes after 9 holes wins; equal totals = draw.
 
    Determinism: a putt is a PURE function simulate(hole, x0, y0, angle,
    power, phase) run at a fixed 240 Hz step with sub-step-safe capsule
-   collisions. The windmill / sweeper phase is part of the committed
-   input (captured at release from the phase the committed state left
-   off at), never read from the clock during a replay. The putter
+   collisions. The stepping math is + - x / and sqrt; Math.cos / sin appear only
+   to decode the launch angle, the sweeper arms and a tunnel's exit turn (the
+   original engine's calls, none added). The windmill / sweeper phase is part of
+   the committed input (captured at release from the phase the committed
+   state left off at), never read from the clock during a replay. The putter
    commits input + resting spot + outcome FIRST, then animates; every
    phone replays the same input from `last` and SNAPS to the committed
    spot at the end, so engine float differences can't desync anything.
@@ -21,10 +28,10 @@
    Rendering follows Pocket Tanks / Fleabag: a MODULE-LEVEL canvas and
    loop (scene S) re-attached on every repaint, so a repaint can never
    restart or cut a roll. 2.5D top-down: raised walls with lit tops and
-   side faces, soft shadows, a ball shadow, cup + flag, five themes, a
-   camera that follows the ball, a flyover on every new hole, slow-mo
+   side faces, soft shadows, a ball shadow, cup + flag, a theme per course
+   area, a camera that follows the ball, a flyover on every new hole, slow-mo
    on the drop, particles for everything. The loop idles when nothing
-   moves (windmill holes keep turning).
+   moves (windmill and sweeper holes keep turning).
    ============================================================ */
 (function () {
   const css = `
@@ -54,6 +61,39 @@
   .mg-card .bir{ color:var(--gold); } .mg-card .par0{ color:var(--ink); } .mg-card .bog{ color:var(--ink-dim); }
   .mg-card .dbl{ color:#ff8a7a; } .mg-card .pick{ color:#ff5a6a; text-decoration:underline dotted; }
   .mg-card .live{ color:var(--ink-faint); font-style:italic; } .mg-card .none{ color:var(--ink-faint); opacity:.5; }
+  /* course picker (before hole 1): the host picks, the partner watches the same cards light up */
+  .mg-setup{ display:flex; flex-direction:column; gap:8px; }
+  .mg-sr{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  .mg-who{ font-size:13px; line-height:1.45; color:var(--ink-dim); text-align:center; padding:2px 6px 4px; }
+  .mg-who b{ color:var(--ink); }
+  .mg-courses{ display:flex; flex-direction:column; gap:8px; }
+  .mg-co{ --ca:#79f5b6; display:grid; grid-template-columns:104px minmax(0,1fr); align-items:center; gap:12px; width:100%; padding:6px 12px 6px 6px;
+    min-height:76px; border-radius:var(--r-2); background:var(--panel-2); border:1px solid var(--glass-brd); color:var(--ink); text-align:left;
+    font:inherit; touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+    transition:transform 140ms cubic-bezier(.23,1,.32,1); }   /* press feedback only: every sync rebuilds these cards */
+  .mg-co svg{ width:104px; height:auto; aspect-ratio:104/68; display:block; border-radius:10px; }
+  .mg-co .nm{ display:block; font-family:var(--font-display); font-weight:800; font-size:14px; letter-spacing:.3px; }
+  .mg-co .bl{ display:block; font-size:12px; line-height:1.35; color:var(--ink-dim); margin-top:3px; }
+  .mg-co .pr{ display:block; font-size:11px; font-weight:700; color:var(--ink-dim); margin-top:4px; font-variant-numeric:tabular-nums; }
+  .mg-co[aria-pressed=true]{ border-color:var(--ca); background:color-mix(in srgb, var(--ca) 11%, var(--panel-2)); }
+  .mg-co[aria-pressed=true] .nm{ color:var(--ca); }
+  body.light .mg-co[aria-pressed=true] .nm{ color:var(--ink); } body.light .mg-co[aria-pressed=true]{ border-width:2px; padding:5px 11px 5px 5px; }
+  .mg-co:not(.ro):active{ transform:scale(.975); }
+  .mg-co:focus-visible, .mg-go:focus-visible{ outline:2px solid var(--ca, var(--gold)); outline-offset:2px; }
+  .mg-co.ro{ cursor:default; }
+  .mg-co.sur{ grid-template-columns:52px minmax(0,1fr); min-height:60px; }
+  .mg-co.sur svg{ width:52px; aspect-ratio:1; }
+  .mg-foot{ position:sticky; bottom:0; z-index:2; padding:12px 0 calc(8px + var(--safe-b, 0px)); background:linear-gradient(to top, var(--bg) 66%, transparent); }
+  .mg-go{ width:100%; min-height:52px; padding:14px 8px; border:none; border-radius:var(--r-2); font-family:var(--font-display); font-weight:800; font-size:15px;
+    letter-spacing:.6px; color:#04140c; background:#79f5b6; touch-action:manipulation; transition:transform 120ms cubic-bezier(.23,1,.32,1); }
+  .mg-go:not(:disabled):active{ transform:scale(.97); }
+  .mg-go:disabled{ opacity:.45; }
+  .mg-wait{ display:flex; align-items:center; justify-content:center; gap:10px; min-height:52px; padding:12px; border-radius:var(--r-2);
+    background:var(--panel-2); border:1px solid var(--glass-brd); color:var(--ink); font-size:13.5px; font-weight:700; }
+  .mg-dots{ display:inline-flex; gap:4px; } .mg-dots i{ width:6px; height:6px; border-radius:50%; background:#79f5b6; animation:mgDot 1.2s ease-in-out infinite; }
+  .mg-dots i:nth-child(2){ animation-delay:.15s; } .mg-dots i:nth-child(3){ animation-delay:.3s; }
+  @keyframes mgDot{ 0%,80%,100%{ opacity:.25; transform:scale(.8); } 40%{ opacity:1; transform:scale(1); } }   /* compositor-only (v77 rule) */
+  @media (prefers-reduced-motion: reduce){ .mg-dots i{ animation:none; opacity:.7; } .mg-co, .mg-go{ transition:none; } }
   `;
   document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
 
@@ -61,10 +101,15 @@
   const DT = 1 / 240, MAX_STEPS = 240 * 20;
   const R = 7, CUP_R = 12, CAP_V = 360, STOP_V = 5, V_MAX = 980, V_CAP = 1250;
   const FR_GREEN = 330, DG_GREEN = .35, FR_SAND = 1600, DG_SAND = 3, FR_ICE = 90, DG_ICE = .15;
+  const FR_LOW = 140, DG_LOW = .18;                    // low gravity: the ball floats, so it is barely slowed (Space Station)
   const E_WALL = .7, MU = .12, E_BUMP = 1, BUMP_KICK = 230;
   const RAMP_F = 650, RAMP_H = 14, GZ = 1400, JUMP_K = .32;
   const PORT_R = 15, MILL_W = 1.5, MILL_GAP = .3, SPIN_W = 1.8, SPIN_HUB = 11;
   const MAX_STROKES = 6, PICKUP = 7, HOLES_N = 9;
+  // ms added to the next player's clock: their controls unlock only after the replay of the last putt. Measured over
+  // 10,800 putts on all 27 holes: replay + tail p95 2.8 s, max 5.4 s; a putt that ends the hole also waits for the
+  // summary card + the next flyover (p95 7.7 s, max 8.8 s). 10 s = that max + a margin for the network.
+  const CLOCK_GRACE = 10000;
   const VIEW_W = 430;                                  // world units across the canvas at zoom 1
   const TAU = Math.PI * 2;
 
@@ -83,8 +128,11 @@
 
   /* ---------------- the nine holes (data) ----------------
      wall: polylines; the FIRST is the closed course boundary. hw = half thickness (capsule).
-     solid:1 → a filled block. zone k: sand / ice / slope (f = push) / ramp (d = uphill dir) /
-     water / lava. bump: [x,y,r]. port: a → b tunnel. mill: windmill door. spin: rotating sweeper. */
+     solid:1 → a filled block. zone k: sand / ice / slope (f = push; a ball can rest on it) / belt (f = push
+     stronger than the green's friction, so a ball can never rest on it) / lowg (low gravity = low friction) /
+     ramp (d = uphill dir) / water / lava (water = chocolate river or black hole, by theme).
+     bump: [x,y,r]. port: a → b tunnel / airlock. mill: windmill door. spin: rotating sweeper.
+     Holes 0-8 are Neon Garden, 9-17 Candy Land, 18-26 Space Station (see COURSES). */
   const HOLES = [
     { name: 'Garden Gate', theme: 'garden', par: 2, tee: [200, 530], cup: [245, 125],
       wall: [
@@ -156,8 +204,112 @@
       spin: { x: 215, y: 480, len: 62 },
       zone: [{ k: 'sand', e: [95, 560, 46, 26] }, { k: 'slope', r: [46, 350, 308, 95], f: [-240, 0] }, { k: 'water', r: [298, 238, 56, 94] }] },
   ];
-  const PARS = HOLES.map(h => h.par), PAR_TOTAL = PARS.reduce((a, b) => a + b, 0);
 
+  /* ---------------- Candy Land: gumdrop bumpers, a chocolate river (water), sticky caramel (sand),
+     a lollipop windmill, candy-cane rails (every wall), a jelly jump (ramp) ---------------- */
+  const CANDY = [
+    { name: 'Sprinkle Start', theme: 'frosting', par: 2, tee: [200, 560], cup: [200, 125],
+      wall: [{ p: [[110, 620], [290, 620], [290, 110], [250, 60], [150, 60], [110, 110]], c: 1, hw: 6 }],
+      bump: [[165, 430, 15], [238, 330, 15], [170, 232, 14]], zone: [] },
+    { name: 'Gumdrop Garden', theme: 'frosting', par: 3, tee: [275, 600], cup: [120, 110],
+      wall: [{ p: [[70, 650], [340, 650], [340, 60], [70, 60]], c: 1, hw: 6 }, { p: [[70, 360], [250, 360]], hw: 8 }],
+      bump: [[150, 520, 14], [292, 250, 14], [205, 210, 13], [120, 300, 12]], zone: [] },
+    { name: 'Caramel Pit', theme: 'frosting', par: 3, tee: [200, 590], cup: [200, 105],
+      wall: [{ p: [[60, 640], [340, 640], [340, 40], [60, 40]], c: 1, hw: 6 }],
+      bump: [[135, 125, 12], [265, 125, 12]],
+      zone: [{ k: 'sand', e: [200, 350, 100, 46] }, { k: 'sand', e: [110, 490, 36, 24] }, { k: 'sand', e: [292, 490, 36, 24] },
+        { k: 'water', p: [[66, 190], [110, 200], [122, 250], [66, 262]] }, { k: 'water', p: [[334, 190], [290, 200], [278, 250], [334, 262]] }] },
+    { name: 'Chocolate River', theme: 'frosting', par: 3, tee: [150, 700], cup: [200, 120],
+      wall: [{ p: [[50, 750], [350, 750], [350, 40], [50, 40]], c: 1, hw: 6 }, { p: [[112, 470], [112, 540]], hw: 4 }, { p: [[188, 470], [188, 540]], hw: 4 }],
+      bump: [[330, 200, 12], [110, 200, 13]],
+      zone: [{ k: 'water', r: [44, 300, 270, 110] }, { k: 'ramp', r: [120, 470, 60, 50], d: [0, -1] }] },
+    { name: 'Candy Cane Lane', theme: 'gummy', par: 3, tee: [120, 690], cup: [120, 105],
+      wall: [{ p: [[65, 740], [175, 740], [175, 575], [335, 575], [335, 265], [175, 265], [175, 50], [65, 50], [65, 375], [225, 375], [225, 465], [65, 465]], c: 1, hw: 6 }],
+      bump: [[295, 522, 13], [295, 320, 13]], zone: [] },
+    { name: 'Lollipop Windmill', theme: 'frosting', par: 3, tee: [200, 670], cup: [200, 110],
+      wall: [
+        { p: [[60, 710], [340, 710], [340, 40], [60, 40]], c: 1, hw: 6 },
+        { p: [[118, 300], [165, 300], [165, 384], [118, 384]], c: 1, hw: 4, solid: 1 },
+        { p: [[235, 300], [282, 300], [282, 384], [235, 384]], c: 1, hw: 4, solid: 1 },
+        { p: [[60, 342], [118, 342]], hw: 7 }, { p: [[282, 342], [340, 342]], hw: 7 },
+        { p: [[165, 440], [165, 500]], hw: 4 }, { p: [[235, 440], [235, 500]], hw: 4 },
+      ],
+      bump: [[130, 190, 12], [270, 195, 12]],
+      mill: { x: 200, y: 324, len: 64, door: [165, 235, 384] },
+      zone: [{ k: 'water', r: [64, 440, 96, 60] }, { k: 'water', r: [240, 440, 96, 60] }] },
+    { name: 'Jelly Jump', theme: 'gummy', par: 3, tee: [200, 620], cup: [200, 105],
+      wall: [{ p: [[70, 680], [330, 680], [330, 40], [70, 40]], c: 1, hw: 6 }],
+      bump: [[130, 150, 12], [270, 150, 12], [120, 560, 11]],
+      zone: [{ k: 'water', r: [64, 220, 272, 150] }, { k: 'ramp', r: [160, 440, 80, 56], d: [0, -1] }] },
+    { name: 'Marshmallow Maze', theme: 'gummy', par: 4, tee: [110, 590], cup: [300, 100],
+      wall: [{ p: [[50, 640], [350, 640], [350, 40], [50, 40]], c: 1, hw: 6 }, { p: [[50, 500], [270, 500]], hw: 7 }, { p: [[130, 380], [350, 380]], hw: 7 }, { p: [[50, 260], [270, 260]], hw: 7 }],
+      bump: [[300, 440, 12], [90, 320, 12], [300, 200, 12]], zone: [{ k: 'sand', e: [200, 560, 50, 26] }] },
+    { name: 'Sugar Rush', theme: 'gummy', par: 4, tee: [100, 840], cup: [285, 115],
+      wall: [{ p: [[50, 890], [350, 890], [350, 40], [50, 40]], c: 1, hw: 6 }, { p: [[50, 660], [270, 660]], hw: 8 }, { p: [[130, 360], [350, 360]], hw: 8 }],
+      bump: [[300, 760, 14], [180, 770, 14], [100, 250, 13]],
+      spin: { x: 205, y: 510, len: 62 },
+      zone: [{ k: 'sand', e: [110, 760, 44, 26] }, { k: 'water', r: [160, 190, 110, 60] }] },
+  ];
+  /* ---------------- Space Station: low gravity (low friction), teleport airlocks, a satellite sweeper,
+     black holes (water), conveyor belts, meteor bumpers ---------------- */
+  const SPACE = [
+    { name: 'Launch Pad', theme: 'station', par: 2, tee: [200, 565], cup: [200, 120],
+      wall: [{ p: [[130, 620], [270, 620], [300, 560], [300, 140], [250, 60], [150, 60], [100, 140], [100, 560]], c: 1, hw: 6 }],
+      bump: [[200, 400, 16], [148, 280, 12], [252, 215, 12]], zone: [] },
+    { name: 'Airlock Alley', theme: 'station', par: 3, tee: [120, 640], cup: [250, 100],
+      wall: [{ p: [[50, 690], [350, 690], [350, 40], [50, 40]], c: 1, hw: 6 }, { p: [[50, 370], [350, 370]], hw: 8 }],
+      bump: [[200, 140, 13], [290, 200, 12]],
+      port: [{ a: [300, 470], b: [110, 250] }],
+      zone: [{ k: 'water', e: [130, 520, 42, 42] }] },
+    { name: 'Zero-G Corridor', theme: 'nebula', par: 3, tee: [200, 660], cup: [200, 110],
+      wall: [{ p: [[40, 720], [360, 720], [300, 40], [100, 40]], c: 1, hw: 6 }],
+      bump: [[150, 430, 14], [255, 340, 13], [175, 230, 12]],
+      zone: [{ k: 'lowg', r: [40, 40, 320, 680] }] },
+    { name: 'Conveyor Belt', theme: 'station', par: 3, tee: [100, 670], cup: [300, 100],
+      wall: [{ p: [[50, 720], [350, 720], [350, 40], [50, 40]], c: 1, hw: 6 }],
+      bump: [[200, 620, 12], [110, 430, 12]],
+      zone: [{ k: 'belt', r: [56, 520, 288, 90], f: [450, 0] }, { k: 'belt', r: [56, 330, 288, 90], f: [-450, 0] }, { k: 'belt', r: [240, 150, 100, 90], f: [0, 450] }] },
+    { name: 'Event Horizon', theme: 'nebula', par: 3, tee: [200, 620], cup: [200, 100],
+      wall: [{ p: [[50, 680], [350, 680], [350, 40], [50, 40]], c: 1, hw: 6 }],
+      bump: [[110, 180, 13], [290, 180, 13], [200, 560, 12]],
+      zone: [{ k: 'water', e: [200, 360, 50, 50] }, { k: 'slope', r: [150, 240, 100, 70], f: [0, 260] }, { k: 'slope', r: [150, 410, 100, 70], f: [0, -260] },
+        { k: 'slope', r: [84, 310, 66, 100], f: [260, 0] }, { k: 'slope', r: [250, 310, 66, 100], f: [-260, 0] }] },
+    { name: 'Satellite Sweep', theme: 'station', par: 3, tee: [200, 610], cup: [200, 100],
+      wall: [{ p: [[60, 670], [340, 670], [340, 40], [60, 40]], c: 1, hw: 6 }],
+      bump: [[130, 520, 12], [270, 520, 12]],
+      spin: { x: 200, y: 350, len: 62 },
+      zone: [{ k: 'belt', r: [66, 250, 54, 200], f: [0, -450] }, { k: 'belt', r: [280, 250, 54, 200], f: [0, -450] }] },
+    { name: 'Meteor Shower', theme: 'nebula', par: 3, tee: [200, 650], cup: [200, 100],
+      wall: [{ p: [[50, 710], [350, 710], [350, 40], [50, 40]], c: 1, hw: 6 }],
+      bump: [[110, 540, 14], [200, 540, 15], [290, 540, 14], [155, 440, 13], [245, 440, 13], [110, 340, 14], [200, 340, 15], [290, 340, 14], [155, 240, 13], [245, 240, 13]],
+      zone: [{ k: 'water', e: [100, 150, 28, 28] }, { k: 'water', e: [300, 150, 28, 28] }] },
+    { name: 'Docking Bay', theme: 'station', par: 3, tee: [200, 700], cup: [230, 110],
+      wall: [{ p: [[50, 760], [350, 760], [350, 40], [50, 40]], c: 1, hw: 6 }, { p: [[50, 520], [350, 520]], hw: 8 }, { p: [[50, 300], [350, 300]], hw: 8 }],
+      bump: [[210, 250, 12]],
+      port: [{ a: [120, 600], b: [280, 430] }, { a: [280, 360], b: [120, 190] }],
+      zone: [{ k: 'lowg', r: [50, 40, 300, 260] }] },
+    { name: 'Mission Control', theme: 'nebula', par: 4, tee: [100, 840], cup: [290, 115],
+      wall: [{ p: [[50, 890], [350, 890], [350, 40], [50, 40]], c: 1, hw: 6 }, { p: [[50, 650], [270, 650]], hw: 8 }, { p: [[130, 390], [350, 390]], hw: 8 }],
+      bump: [[110, 250, 13], [290, 330, 12], [300, 560, 12]],
+      spin: { x: 200, y: 520, len: 62 },
+      zone: [{ k: 'belt', r: [56, 720, 288, 80], f: [450, 0] }, { k: 'lowg', r: [50, 40, 300, 350] }, { k: 'water', e: [215, 250, 38, 38] }] },
+  ];
+  HOLES.push(...CANDY, ...SPACE);
+
+  /* ---------------- courses ---------------- */
+  const COURSES = {
+    garden: { id: 'garden', name: 'Neon Garden', base: 0, thumb: 1, ca: '#79f5b6', blurb: 'The original nine: bumpers, ice, lava and a windmill.' },
+    candy: { id: 'candy', name: 'Candy Land', base: 9, thumb: 3, ca: '#ff7ab8', blurb: 'Gumdrop bumpers, a chocolate river, sticky caramel and a lollipop windmill.' },
+    space: { id: 'space', name: 'Space Station', base: 18, thumb: 1, ca: '#56d6ff', blurb: 'Low gravity, airlocks, conveyor belts, black holes and a satellite sweeper.' },
+  };
+  const COURSE_IDS = ['garden', 'candy', 'space'];
+  COURSE_IDS.forEach(id => {
+    const C = COURSES[id]; C.holes = HOLES.slice(C.base, C.base + HOLES_N); C.pars = C.holes.map(h => h.par); C.par = C.pars.reduce((a, b) => a + b, 0);
+    C.holes.forEach((h, k) => { h.course = id; h.no = k + 1; });
+  });
+  const PARS = COURSES.garden.pars, PAR_TOTAL = COURSES.garden.par;     // the original course (kept for the tests)
+
+  const CANDY_COLS = ['#ff5fa2', '#ffd66b', '#6df0c2', '#b68cff', '#ff9a5c'];          // gumdrops / sprinkles
   const THEMES = {
     garden: { name: 'Neon Night Garden', bg: '#040b08', ground: ['#0b1d15', '#050e0a'], felt: ['#25935b', '#166a41'], slab: '#08251a',
       wall: { top: '#7f5eff', side: '#2a1a70', edge: '#e2d8ff', glow: '#9b7bff' }, lamp: '150,110,255', flag: '#ff4d9d', amb: 'fire' },
@@ -171,6 +323,18 @@
     castle: { name: 'Moonlit Castle', bg: '#06060c', ground: ['#1c1e2b', '#10111a'], felt: ['#2b9156', '#1b6a3c'], slab: '#1d1f2c',
       wall: { top: '#a9abbd', side: '#474a5d', edge: '#f1f2ff', glow: '#ffd66b' }, lamp: '255,190,90', flag: '#ff4d9d', amb: '',
       water: ['#4f8ff0', '#1f4a9a', '#0e2256'] },
+    frosting: { name: 'Frosting Fields', skin: 'candy', bg: '#1a0d20', ground: ['#3a1a48', '#1a0c24'], felt: ['#73e6c4', '#3fbf9e'], slab: '#4a2358',
+      wall: { top: '#fff7fb', side: '#c2457a', edge: '#ffe6f2', glow: '#ff7ab8', stripe: '#ff3d7f' }, lamp: '255,150,205', flag: '#ff4d6d', amb: 'sprinkle',
+      water: ['#d79a66', '#7a4426', '#3d1d10'] },
+    gummy: { name: 'Gummy Grotto', skin: 'candy', bg: '#0f0a24', ground: ['#2b1a5e', '#120a2a'], felt: ['#a488f0', '#7a5cd6'], slab: '#331d6e',
+      wall: { top: '#fff7fb', side: '#36b38f', edge: '#e6fff5', glow: '#6df0c2', stripe: '#ff5fa2' }, lamp: '140,255,210', flag: '#ffd66b', amb: 'sprinkle',
+      water: ['#d79a66', '#7a4426', '#3d1d10'] },
+    station: { name: 'Orbital Deck', skin: 'space', bg: '#040814', ground: ['#0b1632', '#050a1a'], felt: ['#43587a', '#2d3d5c'], slab: '#16233f',
+      wall: { top: '#cfdaf0', side: '#3a4a70', edge: '#a6eeff', glow: '#56d6ff', stripe: '#ffb84a' }, lamp: '110,200,255', flag: '#ffb84a', amb: 'stars',
+      water: ['#b48cff', '#3a1a78', '#04020c'] },
+    nebula: { name: 'Nebula Rim', skin: 'space', bg: '#080512', ground: ['#22113f', '#090518'], felt: ['#56598a', '#3b3e66'], slab: '#221543',
+      wall: { top: '#ddd0ff', side: '#4a3a8c', edge: '#ffc9f4', glow: '#c48bff', stripe: '#7dffd2' }, lamp: '190,140,255', flag: '#7dffd2', amb: 'stars',
+      water: ['#b48cff', '#3a1a78', '#04020c'] }
   };
 
   /* ---------------- geometry helpers (pure) ---------------- */
@@ -220,7 +384,7 @@
     const bb = { x0: Math.min(...bound.map(q => q[0])), x1: Math.max(...bound.map(q => q[0])), y0: Math.min(...bound.map(q => q[1])), y1: Math.max(...bound.map(q => q[1])) };
     const cxw = (bb.x0 + bb.x1) / 2, half = Math.max(235, (bb.x1 - bb.x0) / 2 + 90);
     const H = PREP[hi] = {
-      i: hi, def: d, par: d.par, name: d.name, theme: d.theme, tee: d.tee, cup: d.cup,
+      i: hi, no: d.no, course: d.course, def: d, par: d.par, name: d.name, theme: d.theme, tee: d.tee, cup: d.cup,
       segs, bound, solids: d.wall.filter(w => w.solid).map(w => w.p), walls: d.wall,
       zones: zones.filter(z => z.k !== 'water' && z.k !== 'lava'), haz: zones.filter(z => z.k === 'water' || z.k === 'lava'), allZones: zones,
       bumps: d.bump || [], ports: d.port || [], mill: d.mill || null, spin: d.spin || null,
@@ -285,7 +449,8 @@
         const zn = H.zones[k]; if (!inZone(zn, b.x, b.y)) continue;
         if (zn.k === 'sand') { fr = FR_SAND; dg = DG_SAND; s2 = 'sand'; }
         else if (zn.k === 'ice') { fr = FR_ICE; dg = DG_ICE; s2 = 'ice'; }
-        else if (zn.k === 'slope') { fx += zn.f[0]; fy += zn.f[1]; }
+        else if (zn.k === 'lowg') { fr = FR_LOW; dg = DG_LOW; s2 = 'lowg'; }
+        else if (zn.k === 'slope' || zn.k === 'belt') { fx += zn.f[0]; fy += zn.f[1]; }
         else if (zn.k === 'ramp') { onRamp = zn; fx -= zn.d[0] * RAMP_F; fy -= zn.d[1] * RAMP_F; }
       }
       if (s2 !== surf) { if (s2 === 'sand') mark('sand'); surf = s2; }
@@ -411,11 +576,20 @@
   }
 
   /* ---------------- rules (pure) ---------------- */
+  const cbase = st => (COURSES[st && st.course] || COURSES.garden).base;
+  const G = st => cbase(st) + ((st.hole | 0) || 0);                   // absolute hole id (index into HOLES) of the hole being played
+  const parsOf = st => (COURSES[st && st.course] || COURSES.garden).pars;
   const teeBall = hi => ({ x: HOLES[hi].tee[0], y: HOLES[hi].tee[1], s: 0, done: 0 });
   function norm(st) {
     if (!st || typeof st !== 'object') return st;
+    // A save made before the course picker existed has no phase / course / rule: it is a match in progress on
+    // Neon Garden with the old "whoever is away" turn rule, and it plays exactly as it always did.
+    st.phase = st.phase === 'setup' ? 'setup' : 'play';
+    st.course = COURSES[st.course] ? st.course : (st.phase === 'setup' && st.course === 'surprise' ? 'surprise' : 'garden');
+    st.rule = st.rule === 'alt' ? 'alt' : 'away';
+    st.host = st.host === 1 ? 1 : 0;
     st.hole = clamp(st.hole | 0, 0, HOLES_N - 1);
-    const tb = teeBall(st.hole), bs = Array.isArray(st.balls) ? st.balls : [];
+    const tb = teeBall(G(st)), bs = Array.isArray(st.balls) ? st.balls : [];
     st.balls = [0, 1].map(i => { const b = bs[i] || {}; return { x: isFinite(+b.x) && b.x !== null && b.x !== '' ? +b.x : tb.x, y: isFinite(+b.y) && b.y !== null && b.y !== '' ? +b.y : tb.y, s: b.s | 0, done: b.done ? 1 : 0 }; });
     const cs = Array.isArray(st.cards) ? st.cards : [];
     st.cards = [0, 1].map(i => { const c = cs[i]; const out = []; for (let k = 0; k < HOLES_N; k++) out.push((c && +c[k]) || 0); return out; });
@@ -423,17 +597,64 @@
     st.honor = st.honor === 1 ? 1 : 0; if (st.turn !== 0 && st.turn !== 1) st.turn = st.honor;
     if (!st.seed) st.seed = 1;
     if (!st.last || typeof st.last !== 'object') st.last = null;
-    else { const L = st.last; L.pv = Array.isArray(L.pv) ? L.pv : [0, 0]; L.ps = Array.isArray(L.ps) ? L.ps : [0, 0]; L.id = L.id | 0; L.hole = L.hole | 0; L.seat = L.seat === 1 ? 1 : 0; }
+    else {
+      const L = st.last; L.pv = Array.isArray(L.pv) ? L.pv : [0, 0]; L.ps = Array.isArray(L.ps) ? L.ps : [0, 0]; L.id = L.id | 0; L.hole = L.hole | 0; L.seat = L.seat === 1 ? 1 : 0;
+      L.g = L.g !== undefined && L.g !== null && isFinite(+L.g) ? (L.g | 0) : cbase(st) + L.hole;   // old saves: the hole number is the id
+    }
+    // A phone still running the pre-course code (open since before the update) plays Neon Garden geometry and
+    // tees up on Garden coordinates, so on Candy Land / Space Station its ball can land outside the course or
+    // inside a block. Contain it: an impossible ball goes back to where it was last hit from (when that was on
+    // this hole and is a real spot), else to the tee. Every spot this code (or any old save) produces is valid,
+    // so nothing else ever moves. A ball with no strokes yet is always on this hole's tee (the old code tees up
+    // the next hole on Garden coordinates, which may even be a valid spot here).
+    if (st.phase === 'play') {
+      const gi = G(st), L = st.last, tee = HOLES[gi].tee;
+      st.balls.forEach((b, p) => {
+        if (!b.done && b.s === 0) { b.x = tee[0]; b.y = tee[1]; return; }
+        if (b.done || restOk(gi, b.x, b.y)) return;
+        if (b.s > 0 && L && L.seat === p && L.g === gi && isFinite(+L.x0) && isFinite(+L.y0) && restOk(gi, +L.x0, +L.y0)) { b.x = +L.x0; b.y = +L.y0; }
+        else { b.x = tee[0]; b.y = tee[1]; }
+      });
+    }
     return st;
   }
+  // can a ball rest at (x, y) on hole gi? On the green, not in a block, a wall, a bumper or a hazard
+  // (a resting ball may touch a wall or bumper, hence the 1.5-unit tolerance)
+  function restOk(gi, x, y) {
+    const H = hole(gi);
+    if (!isFinite(x) || !isFinite(y) || !pip(H.bound, x, y)) return false;
+    for (const q of H.solids) if (pip(q, x, y)) return false;
+    for (const g of H.segs) if (segDist(g.ax, g.ay, g.bx, g.by, x, y) < g.hw + R - 1.5) return false;
+    for (const b of H.bumps) { const dx = x - b[0], dy = y - b[1]; if (Math.sqrt(dx * dx + dy * dy) < b[2] + R - 1.5) return false; }
+    for (const z of H.haz) if (inZone(z, x, y)) return false;
+    return true;
+  }
+  // The last stroke was made by a phone on the pre-course code: a new match (v 2) whose `last` has no hole id,
+  // or one that doesn't match this course. Checked on the RAW state (norm fills `g` in). → the seat, else -1.
+  function oldClientSeat(raw) {
+    if (!raw || typeof raw !== 'object' || raw.v !== 2 || !raw.last || typeof raw.last !== 'object') return -1;
+    const L = raw.last, g = L.g;
+    const bad = g === undefined || g === null || !isFinite(+g) || (+g | 0) !== cbase(raw) + (L.hole | 0);
+    return bad ? (L.seat === 1 ? 1 : 0) : -1;
+  }
   const totals = st => [0, 1].map(p => st.cards[p].reduce((a, v) => a + v, 0) + (st.balls[p].done ? 0 : st.balls[p].s));
+  // Plain alternation (every match made since the course picker): the other player putts next; a player who has
+  // holed out is skipped until the hole ends. The tee order is the honour, then simply taking turns.
+  function altTurn(st, justPlayed) {
+    const live = [0, 1].filter(p => !st.balls[p].done);
+    if (!live.length) return st.turn;
+    if (live.length === 1) return live[0];
+    return justPlayed === 0 || justPlayed === 1 ? 1 - justPlayed : st.honor;
+  }
   function nextTurn(st, justPlayed) {
+    if (st.rule === 'alt') return altTurn(st, justPlayed);
+    // the old rule (saves from before the course picker): whoever is farther from the cup putts next
     const live = [0, 1].filter(p => !st.balls[p].done);
     if (!live.length) return st.turn;
     if (live.length === 1) return live[0];
     const unteed = live.filter(p => st.balls[p].s === 0);             // everyone tees off first, honour first
     if (unteed.length) return unteed.includes(st.honor) ? st.honor : unteed[0];
-    const d0 = away(st.hole, st.balls[0].x, st.balls[0].y), d1 = away(st.hole, st.balls[1].x, st.balls[1].y);
+    const gi = G(st), d0 = away(gi, st.balls[0].x, st.balls[0].y), d1 = away(gi, st.balls[1].x, st.balls[1].y);
     if (Math.abs(d0 - d1) < .5) return justPlayed === 0 || justPlayed === 1 ? 1 - justPlayed : st.honor;
     return d0 > d1 ? 0 : 1;
   }
@@ -443,33 +664,54 @@
     const hi = s.hole, c0 = s.cards[0][hi], c1 = s.cards[1][hi];
     if (c0 !== c1) s.honor = c0 < c1 ? 0 : 1;
     if (hi >= HOLES_N - 1) { s.over = 1; s.turn = s.honor; return winnerOf(s); }
-    s.hole = hi + 1; s.balls = [teeBall(s.hole), teeBall(s.hole)]; s.turn = s.honor;
+    s.hole = hi + 1; s.balls = [teeBall(G(s)), teeBall(G(s))]; s.turn = s.honor;
     return undefined;
   }
   const clone = o => JSON.parse(JSON.stringify(o));
+  /* ---- the course picker (phase 'setup'): the host chooses, the partner watches it live ---- */
+  // "Surprise me" is drawn from the match seed and the pick count, so every phone (and a timeout) agrees on it
+  const surpriseCourse = st => COURSE_IDS[(((st.seed | 0) + (st.n | 0) * 7) >>> 0) % COURSE_IDS.length];
+  function pickCourse(st0, id) {
+    const s = norm(clone(st0));
+    if (s.phase !== 'setup' || (!COURSES[id] && id !== 'surprise')) return s;
+    s.course = id; s.n += 1; s.clk = s.n;                              // a fresh clock for the host on every pick
+    return s;
+  }
+  // the pick becomes the match: hole 1 of the chosen course, the host tees first, plain alternation from here on
+  function beginMatch(st0) {
+    const s = norm(clone(st0));
+    if (s.phase !== 'setup') return s;
+    s.course = s.course === 'surprise' ? surpriseCourse(s) : s.course;
+    s.phase = 'play'; s.rule = 'alt'; s.hole = 0; s.over = 0; s.ph = 0; s.last = null;
+    s.balls = [teeBall(G(s)), teeBall(G(s))]; s.cards = [Array(HOLES_N).fill(0), Array(HOLES_N).fill(0)];
+    s.honor = s.host; s.turn = s.host; s.n += 1; s.clk = s.n;          // `clk` changes → the turn clock restarts
+    return s;
+  }
   // One putt, fully resolved into the next state. Pure apart from the `at` timestamp.
   function applyStroke(st0, seat, ang, pow, ph, res) {
-    const st = norm(clone(st0)), s = clone(st), hi = s.hole, b = s.balls[seat];
-    const r = res || simulate(hi, b.x, b.y, ang, pow, ph, false);
+    const st = norm(clone(st0)), s = clone(st), gi = G(s), hi = s.hole, b = s.balls[seat];
+    const r = res || simulate(gi, b.x, b.y, ang, pow, ph, false);
     const pv = totals(st), ps = [st.balls[0].s, st.balls[1].s], x0 = b.x, y0 = b.y;
     b.s += r.out === 'water' ? 2 : 1;                                     // penalty stroke
     let pick = 0;
-    if (r.out === 'cup') { b.done = 1; b.x = HOLES[hi].cup[0]; b.y = HOLES[hi].cup[1]; s.cards[seat][hi] = b.s; }
+    if (r.out === 'cup') { b.done = 1; b.x = HOLES[gi].cup[0]; b.y = HOLES[gi].cup[1]; s.cards[seat][hi] = b.s; }
     else {
       if (r.out === 'rest') { b.x = r2(r.x); b.y = r2(r.y); }             // water: back where it was hit from
       if (b.s >= MAX_STROKES) { b.done = 1; pick = 1; s.cards[seat][hi] = PICKUP; }
     }
-    s.n = st.n + 1; s.clk = s.n;
-    const w = phaseSpeed(hi); s.ph = w ? r4(normAng(ph + w * r.steps * DT)) : st.ph;
-    s.last = { id: s.n, seat, hole: hi, x0, y0, ang, pow, ph, out: r.out, x: b.x, y: b.y, s: b.s, pick, pv, ps, at: Date.now() };
+    s.n = st.n + 1; s.clk = s.n;                                          // every stroke gives the next player a fresh turn clock
+    const w = phaseSpeed(gi); s.ph = w ? r4(normAng(ph + w * r.steps * DT)) : st.ph;
+    s.last = { id: s.n, seat, hole: hi, g: gi, x0, y0, ang, pow, ph, out: r.out, x: b.x, y: b.y, s: b.s, pick, pv, ps, at: Date.now() };
     let winner;
     if (s.balls[0].done && s.balls[1].done) winner = endHole(s);
     else s.turn = nextTurn(s, seat);
     return { s, winner, res: r };
   }
-  // the timer ran out: the stroke counts, the ball doesn't move, and the turn passes if it can
+  // the timer ran out: the stroke counts, the ball doesn't move, and the turn passes if it can.
+  // In the course picker a timeout must never forfeit: the match simply starts with what is picked.
   function skipState(st0, opp) {
     const s = norm(clone(st0)), me = 1 - opp;
+    if (s.phase === 'setup') return beginMatch(s);
     if (s.over) return s;
     const b = s.balls[me], hi = s.hole;
     if (b.done) { s.turn = nextTurn(s, me); return s; }
@@ -477,7 +719,7 @@
     b.s += 1; let pick = 0;
     if (b.s >= MAX_STROKES) { b.done = 1; pick = 1; s.cards[me][hi] = PICKUP; }
     s.n += 1; s.clk = s.n;
-    s.last = { id: s.n, seat: me, hole: hi, skip: 1, out: 'skip', x0: b.x, y0: b.y, x: b.x, y: b.y, s: b.s, pick, pv, ps, at: Date.now() };
+    s.last = { id: s.n, seat: me, hole: hi, g: G(s), skip: 1, out: 'skip', x0: b.x, y0: b.y, x: b.x, y: b.y, s: b.s, pick, pv, ps, at: Date.now() };
     if (s.balls[0].done && s.balls[1].done) endHole(s);                  // may set over=1 → settled in render
     else s.turn = s.balls[opp].done ? me : opp;
     return s;
@@ -509,7 +751,7 @@
   function resetScene(st) {
     S.seed = st.seed; S.doneId = 0; S.sentN = 0; S.anim = null; S.intro = null; S.summary = null; S.parts = []; S.floats = [];
     S.shake = 0; S.shownHole = -1; S.layer = null; S.fin = false; S.bflash = {}; S.overview = false; S.lastPh = null; S.settleKey = '';
-    S.phBase = st.ph; S.phT0 = performance.now();
+    S.phBase = st.ph; S.phT0 = performance.now(); S.lastSay = ''; S.focusId = ''; S.oldWarn = 0;
   }
 
   function ensureCanvas() {
@@ -577,7 +819,7 @@
   }
 
   /* ---------------- putting ---------------- */
-  const curHole = () => S.shownHole >= 0 ? S.shownHole : (S.ctx && S.ctx.state ? S.ctx.state.hole | 0 : 0);
+  const curHole = () => S.shownHole >= 0 ? S.shownHole : (S.ctx && S.ctx.state ? G(S.ctx.state) : 0);     // an index into HOLES (all courses)
   function dispPhase() { const w = phaseSpeed(curHole()); return S.phBase + w * (performance.now() - S.phT0) / 1000; }
   function putt(ang, pow) {
     const c = S.ctx; if (!canAct()) return;
@@ -597,20 +839,26 @@
     if (!L || L.id <= S.doneId || (S.anim && S.anim.id === L.id)) return;
     if (S.anim) finishAnim(true);                                  // a newer stroke arrived: settle the old one
     const fresh = S.doneId === 0 && !S.anim;
-    if (L.skip || (fresh && !(Math.abs(Date.now() - (L.at || 0)) < 60000))) {       // stale on open → don't replay
-      S.doneId = L.id;
+    // stale on open, or this phone already started it before a reload (`sm_mg_seen`) → don't replay
+    if (L.skip || S.oldId === L.id || (fresh && (!(Math.abs(Date.now() - (L.at || 0)) < 60000) || seenId(st.seed) >= L.id))) {
+      S.doneId = L.id; markSeen(st.seed, L.id);
       if (L.skip && !fresh) { try { S.ctx.msg(`⏱ ${S.ctx.players[L.seat].name} ran out of time — the stroke counts`); S.ctx.sound.bad(); } catch (e) {} }
       return;
     }
-    const r = simulate(L.hole, L.x0, L.y0, L.ang, L.pow, L.ph, true);
+    const r = simulate(L.g, L.x0, L.y0, L.ang, L.pow, L.ph, true);
     const len = r.path.length / 3 - 1;
     const endX = r.path[len * 3], endY = r.path[len * 3 + 1];
     S.anim = { id: L.id, L, r, len, clock: 0, ei: 0, tail: 0, tailMax: L.out === 'cup' ? 80 : L.out === 'water' ? 70 : 34,
       dx: L.out === 'rest' ? L.x - endX : 0, dy: L.out === 'rest' ? L.y - endY : 0, started: false, dropT: 0, lastV: 0 };
-    if (S.shownHole !== L.hole) { S.shownHole = L.hole; S.layer = null; S.intro = null; S.summary = null; }
+    if (S.shownHole !== L.g) { S.shownHole = L.g; S.layer = null; S.intro = null; S.summary = null; }
     S.phBase = L.ph; S.phT0 = performance.now();
+    markSeen(st.seed, L.id);                                          // a reload from here on snaps to the rest spot
     if (L.seat !== S.ctx.me) { try { S.ctx.sound.place(); } catch (e) {} }
   }
+  // the last stroke this phone has started replaying, per match seed (so a reload never replays it)
+  const SEEN_KEY = 'sm_mg_seen';
+  function seenId(seed) { try { const o = JSON.parse(localStorage.getItem(SEEN_KEY) || 'null'); return o && o.k === seed ? o.id | 0 : 0; } catch (e) { return 0; } }
+  function markSeen(seed, id) { try { if (seenId(seed) < id) localStorage.setItem(SEEN_KEY, JSON.stringify({ k: seed, id })); } catch (e) {} }
   function ballAt(A, i) {
     const k = Math.max(0, Math.min(A.len, Math.floor(i))) * 3, p = A.r.path;
     const f = clamp((i - (A.len - 40)) / 40, 0, 1);                  // ease onto the committed spot
@@ -622,14 +870,14 @@
     const c = S.ctx, L = A.L, st = c.state;
     S.phBase = st.ph; S.phT0 = performance.now();
     if (!quiet) {
-      const nm = c.players[L.seat].name, par = HOLES[L.hole].par;
+      const nm = c.players[L.seat].name, par = HOLES[L.g].par, sk = THEMES[HOLES[L.g].theme].skin;
       let txt;
       if (L.out === 'cup') txt = `⛳ ${nm} holed out — <b>${label(L.s, par)}</b> (${L.s})`;
-      else if (L.out === 'water') txt = `💦 ${HOLES[L.hole].theme === 'lava' ? 'Into the lava' : 'Splash'}! +1 penalty — ${nm} plays again from the same spot`;
+      else if (L.out === 'water') txt = `💦 ${HOLES[L.g].theme === 'lava' ? 'Into the lava' : sk === 'candy' ? 'Into the chocolate' : sk === 'space' ? 'Lost in the black hole' : 'Splash'}! +1 penalty — ${nm}'s ball goes back to where it was hit from`;
       else txt = `${nm}'s ball stops · ${L.s} stroke${L.s === 1 ? '' : 's'}`;
       if (L.pick) txt += ` · <b>picked up (7)</b>`;
       try { c.msg(txt); } catch (e) {}
-      if (L.hole !== st.hole || st.over) startSummary(L.hole);
+      if (L.hole !== st.hole || st.over) startSummary(L.g);
     }
     rerender();
   }
@@ -644,11 +892,12 @@
   // which hole is on screen, and whether it deserves a flyover
   function syncHole(st) {
     if (S.anim || S.summary) return;
-    if (S.shownHole !== st.hole) {
+    const gi = G(st);
+    if (S.shownHole !== gi) {
       const first = S.shownHole === -1;
-      S.shownHole = st.hole; S.layer = null; S.parts = [];
+      S.shownHole = gi; S.layer = null; S.parts = [];
       const fresh = st.balls[0].s === 0 && st.balls[1].s === 0 && !st.over;
-      if (fresh && !(first && S.ctx.status === 'finished')) startIntro(st.hole);
+      if (fresh && !(first && S.ctx.status === 'finished')) startIntro(gi);
       else snapCam();
     }
   }
@@ -689,7 +938,7 @@
     }
     if (S.summary) return clampCam({ x: H.cup[0], y: H.cup[1] + 20, z: 1.1 }, hi);
     const st = S.ctx.state;
-    if (st.hole !== hi || st.over) return clampCam({ x: H.cup[0], y: H.cup[1] + 30, z: 1.05 }, hi);
+    if (G(st) !== hi || st.over) return clampCam({ x: H.cup[0], y: H.cup[1] + 30, z: 1.05 }, hi);
     const b = activeBall(), dx = H.cup[0] - b.x, dy = H.cup[1] - b.y, d = Math.sqrt(dx * dx + dy * dy) || 1, k = Math.min(150, d * .38) / d;
     return clampCam({ x: b.x + dx * k, y: b.y + dy * k, z: 1 }, hi);
   }
@@ -699,7 +948,7 @@
     const f = dtms / 16.667; S.tick += f;
     const c = S.ctx; if (!c || !c.state) return;
     const st = c.state;
-    const H = hole(S.shownHole >= 0 ? S.shownHole : st.hole), th = THEMES[H.theme];
+    const H = hole(curHole()), th = THEMES[H.theme];
     // --- intro flyover ---
     if (S.intro) {
       const I = S.intro; I.t += dtms;
@@ -751,7 +1000,7 @@
       S.summary.t += dtms;
       if (S.summary.t >= S.summary.max) {
         S.summary = null;
-        if (st.hole !== S.shownHole && !st.over) { S.shownHole = st.hole; S.layer = null; S.parts = []; startIntro(st.hole); }
+        if (G(st) !== S.shownHole && !st.over) { S.shownHole = G(st); S.layer = null; S.parts = []; startIntro(G(st)); }
         rerender();
       }
     }
@@ -781,7 +1030,8 @@
     // ambient weather (only drawn while the loop is awake)
     if (th.amb && S.amb.length < 26 && Math.random() < .3 * f) {
       const v = viewSize(S.cam.z);
-      S.amb.push({ x: S.cam.x + rnd(-v.w / 2, v.w / 2), y: S.cam.y + rnd(-v.h / 2, v.h / 2), ph: rnd(0, 6.28), life: rnd(160, 320), max: 320, vx: rnd(-6, 6), vy: th.amb === 'snow' ? rnd(10, 22) : th.amb === 'ember' ? rnd(-26, -12) : rnd(-5, 5) });
+      S.amb.push({ x: S.cam.x + rnd(-v.w / 2, v.w / 2), y: S.cam.y + rnd(-v.h / 2, v.h / 2), ph: rnd(0, 6.28), life: rnd(160, 320), max: 320, vx: rnd(-6, 6),
+        vy: th.amb === 'snow' ? rnd(10, 22) : th.amb === 'sprinkle' ? rnd(8, 16) : th.amb === 'ember' ? rnd(-26, -12) : th.amb === 'stars' ? rnd(-2, 2) : rnd(-5, 5), c: (Math.random() * 5) | 0 });
     }
     S.amb = S.amb.filter(a => { a.life -= f; a.x += (a.vx + Math.sin(S.tick * .03 + a.ph) * 6) * dt; a.y += a.vy * dt; return a.life > 0; });
   }
@@ -807,14 +1057,20 @@
     } else if (e.k === 'sand') {
       for (let i = 0; i < 9; i++) S.parts.push({ k: 'puff', x: e.x + rnd(-6, 6), y: e.y + rnd(-4, 4), r: rnd(4, 8), gr: .35, life: rnd(40, 60), max: 60, c: '236,206,150' });
       for (let i = 0; i < 12; i++) S.parts.push({ k: 'fleck', x: e.x, y: e.y, z: 1, vx: rnd(-60, 60), vy: rnd(-60, 60), vz: rnd(60, 140), life: 36, max: 36, c: '#f0d59a', s: rnd(1, 1.8) });
+    } else if (e.k === 'water' && th.skin === 'space') {           // swallowed: rings collapse inward, no splash
+      for (let i = 0; i < 3; i++) S.parts.push({ k: 'ring', x: e.x, y: e.y, r0: 34 + i * 12, r1: 3, life: 30 + i * 8, max: 30 + i * 8, c: '190,150,255', flat: 1 });
+      for (let i = 0; i < 16; i++) { const a = rnd(0, 6.28), d = rnd(18, 40); S.parts.push({ k: 'spark', x: e.x + Math.cos(a) * d, y: e.y + Math.sin(a) * d, vx: -Math.cos(a) * d * 2.2, vy: -Math.sin(a) * d * 2.2, life: 26, max: 26, c: '210,180,255', s: rnd(1, 1.8) }); }
+      A.sink = { x: e.x, y: e.y, t: 0 };
+      S.shake = Math.max(S.shake, 3); snd('bad'); haptic([30, 30, 50]);
+      S.floats.push({ text: 'LOST IN SPACE! +1', x: e.x, y: e.y - 26, c: '#d4b8ff', life: 80, max: 80, big: 1 });
     } else if (e.k === 'water' || e.k === 'lava') {
-      const lava = e.k === 'lava', c1 = lava ? '255,150,60' : '190,240,255';
+      const lava = e.k === 'lava', choc = th.skin === 'candy', c1 = lava ? '255,150,60' : choc ? '230,170,120' : '190,240,255';
       for (let i = 0; i < 3; i++) S.parts.push({ k: 'ring', x: e.x, y: e.y, r0: 4, r1: 30 + i * 14, life: 30 + i * 10, max: 30 + i * 10, c: c1, flat: 1 });
-      for (let i = 0; i < 26; i++) S.parts.push({ k: 'drop', x: e.x, y: e.y, z: 2, vx: rnd(-80, 80), vy: rnd(-80, 80), vz: rnd(120, 260), life: 60, max: 60, c: lava ? (Math.random() < .5 ? '#ffb14a' : '#ff5a1f') : (Math.random() < .5 ? '#bff4ff' : '#5fd6ee'), s: rnd(1.2, 2.4) });
+      for (let i = 0; i < 26; i++) S.parts.push({ k: 'drop', x: e.x, y: e.y, z: 2, vx: rnd(-80, 80), vy: rnd(-80, 80), vz: rnd(120, 260), life: 60, max: 60, c: lava ? (Math.random() < .5 ? '#ffb14a' : '#ff5a1f') : choc ? (Math.random() < .5 ? '#8a4a24' : '#c98a52') : (Math.random() < .5 ? '#bff4ff' : '#5fd6ee'), s: rnd(1.2, 2.4) });
       if (lava) for (let i = 0; i < 6; i++) S.parts.push({ k: 'puff', x: e.x + rnd(-6, 6), y: e.y - rnd(0, 8), vx: rnd(-8, 8), vy: rnd(-26, -10), r: rnd(6, 10), gr: .3, life: 70, max: 70, c: '70,60,70' });
       A.sink = { x: e.x, y: e.y, t: 0 };
       S.shake = Math.max(S.shake, 4); snd('bad'); haptic([30, 30, 50]);
-      S.floats.push({ text: lava ? 'SIZZLE! +1' : 'SPLASH! +1', x: e.x, y: e.y - 26, c: lava ? '#ffb468' : '#8fe9ff', life: 80, max: 80, big: 1 });
+      S.floats.push({ text: lava ? 'SIZZLE! +1' : choc ? 'SPLOSH! +1' : 'SPLASH! +1', x: e.x, y: e.y - 26, c: lava ? '#ffb468' : choc ? '#ffc98f' : '#8fe9ff', life: 80, max: 80, big: 1 });
     } else if (e.k === 'port' || e.k === 'portOut') {
       for (let i = 0; i < 18; i++) { const a = rnd(0, 6.28), v = rnd(40, 150); S.parts.push({ k: 'spark', x: e.x, y: e.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(18, 32), max: 32, c: '170,140,255', s: rnd(1, 2.2) }); }
       S.parts.push({ k: 'ring', x: e.x, y: e.y, r0: 6, r1: 34, life: 22, max: 22, c: '190,160,255' });
@@ -870,7 +1126,7 @@
   function draw() {
     const g = S.g, c = S.ctx; if (!g || !c || !c.state) return;
     if (!S.W) { fit(); if (!S.W) return; }
-    const hi = S.shownHole >= 0 ? S.shownHole : c.state.hole, H = hole(hi), th = THEMES[H.theme];
+    const hi = curHole(), H = hole(hi), th = THEMES[H.theme];
     if (!S.layer || S.layer.hi !== hi) buildLayer(hi);
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
     g.fillStyle = th.bg; g.fillRect(0, 0, S.W, S.H);
@@ -934,13 +1190,30 @@
       for (let k = 0; k < 2; k++) { const a = th2 + k * Math.PI; g.save(); g.translate(4, 7); g.rotate(a); rr(g, 0, -4.5, sp.len + 2, 9, 4.5); g.fill(); g.restore(); }
       for (let k = 0; k < 2; k++) {
         const a = th2 + k * Math.PI; g.save(); g.rotate(a);
+        if (th.skin === 'candy') {                                    // candy-cane arms
+          g.fillStyle = '#fff6fb'; rr(g, 0, -4.5, sp.len, 8, 4); g.fill();
+          g.save(); rr(g, 0, -4.5, sp.len, 8, 4); g.clip(); g.fillStyle = th.wall.stripe || '#ff3d7f';
+          for (let x = 4; x < sp.len; x += 11) { g.beginPath(); g.moveTo(x, -5); g.lineTo(x + 5, -5); g.lineTo(x + 1, 5); g.lineTo(x - 4, 5); g.closePath(); g.fill(); }
+          g.restore(); g.restore(); continue;
+        }
+        if (th.skin === 'space') {                                    // solar-panel wings on a boom
+          g.fillStyle = '#9aa6bf'; g.fillRect(0, -1.5, sp.len, 3);
+          g.fillStyle = '#1b3a7a'; g.fillRect(16, -8, sp.len - 18, 16);
+          g.strokeStyle = 'rgba(140,200,255,.55)'; g.lineWidth = .8; g.beginPath();
+          for (let x = 16; x <= sp.len - 2; x += 7) { g.moveTo(x, -8); g.lineTo(x, 8); } g.moveTo(16, 0); g.lineTo(sp.len - 2, 0); g.stroke();
+          g.strokeStyle = '#cfd8ea'; g.lineWidth = 1; g.strokeRect(16, -8, sp.len - 18, 16);
+          g.restore(); continue;
+        }
         g.fillStyle = '#5a3a1e'; rr(g, 0, -4, sp.len + 2, 9, 4.5); g.fill();
         const gr = g.createLinearGradient(0, -4.5, 0, 4.5); gr.addColorStop(0, '#e2c08a'); gr.addColorStop(1, '#8a5a2c');
         g.fillStyle = gr; rr(g, 0, -4.5, sp.len, 8, 4); g.fill();
         g.fillStyle = th.flag; g.fillRect(sp.len - 14, -4.5, 8, 8);
         g.restore();
       }
-      const hub = g.createRadialGradient(-3, -4, 1, 0, 0, SPIN_HUB + 2); hub.addColorStop(0, '#fff3cf'); hub.addColorStop(1, '#b2863c');
+      const hub = g.createRadialGradient(-3, -4, 1, 0, 0, SPIN_HUB + 2);
+      if (th.skin === 'space') { hub.addColorStop(0, '#f2f6ff'); hub.addColorStop(1, '#6f7d9c'); }
+      else if (th.skin === 'candy') { hub.addColorStop(0, '#fff'); hub.addColorStop(1, '#ff7ab8'); }
+      else { hub.addColorStop(0, '#fff3cf'); hub.addColorStop(1, '#b2863c'); }
       g.fillStyle = hub; g.beginPath(); g.arc(0, 0, SPIN_HUB, 0, TAU); g.fill();
       g.strokeStyle = 'rgba(0,0,0,.4)'; g.lineWidth = 1.2; g.stroke();
       g.restore();
@@ -977,7 +1250,7 @@
       }
       // resting balls (not the one rolling)
       if (A && A.L.hole !== st.hole) continue;              // that hole's other ball was already in
-      if (S.shownHole !== st.hole) continue;
+      if (S.shownHole !== G(st)) continue;
       const b = st.balls[p]; if (b.done) continue;
       const mine = st.turn === p && c.status === 'active' && !A && !S.intro && !S.summary && !st.over;
       if (mine) {                                            // whose putt: a breathing ring
@@ -988,7 +1261,7 @@
       drawBall(g, b.x, b.y, 0, col, 1, 1, S.roll[p], mine);
     }
     // balls already in the cup: little coloured glints on the rim
-    if (S.shownHole === st.hole) [0, 1].forEach(p => {
+    if (S.shownHole === G(st)) [0, 1].forEach(p => {
       if (!st.balls[p].done || st.cards[p][st.hole] === PICKUP) return;
       if (A && A.L.seat === p) return;
       const a = -Math.PI / 2 + (p ? .7 : -.7);
@@ -1025,7 +1298,7 @@
     // is a ball close? then the flag fades so it never hides the putt
     let near = false;
     if (S.anim) { const p = ballAt(S.anim, S.anim.clock); near = Math.abs(p.x - cx) < 34 && p.y < cy + 10 && p.y > cy - 70; }
-    else if (st.hole === S.shownHole) near = st.balls.some(b => !b.done && Math.abs(b.x - cx) < 30 && b.y < cy + 8 && b.y > cy - 64);
+    else if (G(st) === S.shownHole) near = st.balls.some(b => !b.done && Math.abs(b.x - cx) < 30 && b.y < cy + 8 && b.y > cy - 64);
     const A = S.anim, drop = A && A.L.out === 'cup' && A.clock >= A.len ? Math.max(0, 1 - A.tail / 40) : 0;
     const wig = Math.sin(S.tick * .11) * 2.4 + drop * Math.sin(A ? A.tail * .8 : 0) * 5;
     const top = cy - 50;
@@ -1038,7 +1311,7 @@
     g.quadraticCurveTo(cx + 12, top + 10 + wig * .8, cx + 1, top + 15); g.closePath(); g.fill();
     g.fillStyle = 'rgba(255,255,255,.25)'; g.beginPath(); g.moveTo(cx + 1, top); g.quadraticCurveTo(cx + 12, top + 2 + wig, cx + 25, top + 7 + wig * .6); g.lineTo(cx + 1, top + 5); g.closePath(); g.fill();
     g.fillStyle = '#fff'; g.font = '800 7.5px Orbitron, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(String(H.i + 1), cx + 9, top + 7.5 + wig * .3);
+    g.fillText(String(H.no), cx + 9, top + 7.5 + wig * .3);
     g.fillStyle = '#ffd66b'; g.beginPath(); g.arc(cx, top - 1, 2, 0, TAU); g.fill();
     g.restore();
   }
@@ -1051,9 +1324,16 @@
     g.save(); g.globalCompositeOperation = 'lighter';
     const dg = g.createRadialGradient(0, 54, 2, 0, 54, 30); dg.addColorStop(0, blocked ? 'rgba(255,80,80,.3)' : 'rgba(120,255,160,.28)'); dg.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = dg; g.beginPath(); g.arc(0, 54, 30, 0, TAU); g.fill(); g.restore();
+    const candy = th.skin === 'candy';
     for (let k = 0; k < 4; k++) {
       const a = a0 + k * Math.PI / 2;
       g.save(); g.rotate(a);
+      if (candy) {                                                    // lollipop sails: a stick and a swirl disc
+        g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 4; g.beginPath(); g.moveTo(6, 3); g.lineTo(M.len - 12, 3); g.stroke();
+        g.strokeStyle = '#fff6fb'; g.lineWidth = 3; g.beginPath(); g.moveTo(4, 0); g.lineTo(M.len - 14, 0); g.stroke();
+        lollipop(g, M.len - 12, 0, 12, CANDY_COLS[k % CANDY_COLS.length]);
+        g.restore(); continue;
+      }
       g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(8, -3, M.len - 8, 12);               // sail shadow on the facade
       g.strokeStyle = '#4a2e18'; g.lineWidth = 3; g.beginPath(); g.moveTo(4, 0); g.lineTo(M.len, 0); g.stroke();
       const cl = g.createLinearGradient(0, -10, 0, 0); cl.addColorStop(0, '#fff6e0'); cl.addColorStop(1, '#d8c8a8');
@@ -1134,6 +1414,8 @@
       const al = Math.min(1, a.life / 40, (a.max - a.life) / 40);
       if (th.amb === 'fire') { const tw = .5 + .5 * Math.sin(S.tick * .12 + a.ph); g.fillStyle = `rgba(200,255,140,${al * (.25 + tw * .55)})`; g.beginPath(); g.arc(a.x, a.y, 1.3 + tw, 0, TAU); g.fill(); }
       else if (th.amb === 'snow') { g.fillStyle = `rgba(235,248,255,${al * .7})`; g.beginPath(); g.arc(a.x, a.y, 1.4, 0, TAU); g.fill(); }
+      else if (th.amb === 'sprinkle') { g.save(); g.globalCompositeOperation = 'source-over'; g.globalAlpha = al * .8; g.translate(a.x, a.y); g.rotate(a.ph + S.tick * .02); g.fillStyle = CANDY_COLS[a.c]; g.fillRect(-2.2, -.7, 4.4, 1.4); g.restore(); }
+      else if (th.amb === 'stars') { const tw = .5 + .5 * Math.sin(S.tick * .08 + a.ph); g.fillStyle = `rgba(220,235,255,${al * (.2 + tw * .7)})`; g.beginPath(); g.arc(a.x, a.y, .7 + tw * .8, 0, TAU); g.fill(); }
       else if (th.amb === 'ember') { g.fillStyle = `rgba(255,${140 + Math.round(60 * Math.sin(a.ph + S.tick * .1))},60,${al * .8})`; g.beginPath(); g.arc(a.x, a.y, 1.2, 0, TAU); g.fill(); }
     });
     g.restore();
@@ -1155,12 +1437,13 @@
     g.textBaseline = 'middle';
     pill(g, 10, 10, 112, 30);
     g.textAlign = 'left'; g.fillStyle = '#eaf0ff'; g.font = '800 13px Orbitron, system-ui, sans-serif';
-    g.fillText(`HOLE ${H.i + 1}`, 22, 25.5);
+    g.fillText(`HOLE ${H.no}`, 22, 25.5);
     g.fillStyle = 'rgba(234,240,255,.55)'; g.font = '700 10.5px "Chakra Petch", system-ui, sans-serif';
     g.fillText(`PAR ${H.par}`, 84, 26);
     // strokes on this hole, per player (pre-putt while a roll replays)
-    const on = A ? A.L.ps : (st.hole === H.i ? [st.balls[0].s, st.balls[1].s] : [st.cards[0][H.i], st.cards[1][H.i]]);
-    const done = [0, 1].map(p => A ? (A.L.hole !== st.hole || st.balls[p].done) && A.L.seat !== p : (st.hole === H.i ? st.balls[p].done : 1));
+    const here = G(st) === H.i, k = H.no - 1;
+    const on = A ? A.L.ps : (here ? [st.balls[0].s, st.balls[1].s] : [st.cards[0][k], st.cards[1][k]]);
+    const done = [0, 1].map(p => A ? (A.L.hole !== st.hole || st.balls[p].done) && A.L.seat !== p : (here ? st.balls[p].done : 1));
     const bw = 92; pill(g, W - bw - 10, 10, bw, 30);
     [0, 1].forEach(p => {
       const x = W - bw - 10 + 14 + p * 44;
@@ -1186,9 +1469,9 @@
     g.fillStyle = 'rgba(5,7,15,.5)'; rr(g, W / 2 - 130, y - 58 + rise, 260, 116, 22); g.fill();
     g.strokeStyle = hexA(th.wall.glow, .45); g.lineWidth = 1.2; g.stroke();
     g.fillStyle = hexA(th.wall.glow, .95); g.font = '700 10.5px Orbitron, system-ui, sans-serif';
-    g.fillText(th.name.toUpperCase(), W / 2, y - 36 + rise);
+    g.fillText((COURSES[H.course] || COURSES.garden).name.toUpperCase(), W / 2, y - 36 + rise);
     g.fillStyle = '#ffffff'; g.font = '900 34px Orbitron, system-ui, sans-serif';
-    g.shadowColor = th.wall.glow; g.shadowBlur = 14; g.fillText(`HOLE ${H.i + 1}`, W / 2, y - 6 + rise); g.shadowBlur = 0;
+    g.shadowColor = th.wall.glow; g.shadowBlur = 14; g.fillText(`HOLE ${H.no}`, W / 2, y - 6 + rise); g.shadowBlur = 0;
     g.fillStyle = 'rgba(234,240,255,.8)'; g.font = '600 14px "Chakra Petch", system-ui, sans-serif';
     g.fillText(`${H.name}  ·  Par ${H.par}`, W / 2, y + 26 + rise);
     g.fillStyle = 'rgba(234,240,255,.45)'; g.font = '600 10px "Chakra Petch", system-ui, sans-serif';
@@ -1196,7 +1479,7 @@
     g.restore();
   }
   function drawSummary(g, W, Hh) {
-    const Sm = S.summary, c = S.ctx, st = c.state, hi = Sm.hi, par = HOLES[hi].par;
+    const Sm = S.summary, c = S.ctx, st = c.state, hi = HOLES[Sm.hi].no - 1, par = HOLES[Sm.hi].par;   // Sm.hi indexes HOLES, hi the scorecard
     const a = Math.max(0, Math.min(1, Sm.t / 260, (Sm.max - Sm.t) / 300)); if (a <= 0) return;
     g.save(); g.globalAlpha = a; g.textAlign = 'center'; g.textBaseline = 'middle';
     const y = Hh * .52, w = 250;
@@ -1281,12 +1564,57 @@
       }
       g.restore();
       for (let i = 0; i < 5; i++) { const x = rx(), y = ry(); if (!out(x, y)) continue; lavaBlob(g, x, y, 14 + r() * 16, r, ls); }
+    } else if (th.skin === 'candy') {
+      for (let i = 0; i < 16; i++) {                                     // cotton-candy clouds
+        const x = rx(), y = ry(), s2 = 30 + r() * 50, c = r() < .5 ? '255,160,210' : '170,220,255';
+        const gg = g.createRadialGradient(x, y, 0, x, y, s2); gg.addColorStop(0, `rgba(${c},.2)`); gg.addColorStop(1, `rgba(${c},0)`); g.fillStyle = gg; g.beginPath(); g.arc(x, y, s2, 0, TAU); g.fill();
+      }
+      for (let i = 0; i < 260; i++) {                                    // sprinkles
+        const x = rx(), y = ry(); if (!out(x, y)) continue;
+        g.save(); g.translate(x, y); g.rotate(r() * TAU); g.fillStyle = CANDY_COLS[i % CANDY_COLS.length]; rr(g, -3, -1, 6, 2, 1); g.fill(); g.restore();
+      }
+      for (let i = 0; i < 12; i++) { const x = rx(), y = ry(); if (!out(x, y) || !out(x, y + 26)) continue; lollipop(g, x, y, 11 + r() * 8, CANDY_COLS[i % CANDY_COLS.length]); }
+      for (let i = 0; i < 18; i++) { const x = rx(), y = ry(); if (!out(x, y)) continue; gumdrop(g, x, y, 6 + r() * 6, CANDY_COLS[(i + 2) % CANDY_COLS.length], ls); }
+    } else if (th.skin === 'space') {
+      for (let i = 0; i < 420; i++) {                                    // a star field
+        const x = rx(), y = ry(), b = r(); g.fillStyle = `rgba(${b < .15 ? '255,220,180' : b < .3 ? '180,210,255' : '255,255,255'},${.25 + r() * .7})`;
+        g.beginPath(); g.arc(x, y, .4 + r() * (b < .05 ? 1.6 : .9), 0, TAU); g.fill();
+      }
+      g.save(); g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 5; i++) {                                      // nebula glow
+        const x = rx(), y = ry(), s2 = 70 + r() * 90, c = th.lamp;
+        const gg = g.createRadialGradient(x, y, 0, x, y, s2); gg.addColorStop(0, `rgba(${c},.12)`); gg.addColorStop(1, `rgba(${c},0)`); g.fillStyle = gg; g.beginPath(); g.arc(x, y, s2, 0, TAU); g.fill();
+      }
+      g.restore();
+      for (let i = 0; i < 3; i++) { const x = rx(), y = ry(); if (!out(x, y)) continue; planet(g, x, y, 18 + r() * 22, r); }
     } else {                                                                 // castle flagstones
       for (let y = B.y0; y < B.y1; y += 26) {
         let x = B.x0 - r() * 30;
         while (x < B.x1) { const w = 26 + r() * 30, v = 26 + Math.round(r() * 12); g.fillStyle = `rgb(${v},${v + 2},${v + 12})`; rr(g, x + 1.5, y + 1.5, w - 3, 23, 3); g.fill(); g.fillStyle = 'rgba(255,255,255,.04)'; g.fillRect(x + 2, y + 2, w - 4, 2); if (r() < .15) { g.fillStyle = 'rgba(80,140,70,.25)'; g.beginPath(); g.arc(x + r() * w, y + 20, 3 + r() * 4, 0, TAU); g.fill(); } x += w; }
       }
     }
+  }
+  function lollipop(g, x, y, s, col) {
+    g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = 3; g.beginPath(); g.moveTo(x + 3, y + 3); g.lineTo(x + 3, y + s * 2.3); g.stroke();
+    g.strokeStyle = '#fff6fb'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + s * 2.2); g.stroke();
+    g.fillStyle = col; g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = s * .22; g.beginPath();
+    for (let a = 0; a < TAU * 2.2; a += .2) { const d = s * .88 * a / (TAU * 2.2); a ? g.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d) : g.moveTo(x, y); }
+    g.stroke();
+    g.fillStyle = 'rgba(255,255,255,.4)'; g.beginPath(); g.ellipse(x - s * .35, y - s * .4, s * .28, s * .16, -.6, 0, TAU); g.fill();
+  }
+  function gumdrop(g, x, y, s, col, ls) {
+    g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(x + 2, y + s * .5 + 2, s, s * .45, 0, 0, TAU); g.fill();
+    const gg = g.createRadialGradient(x - s * .3, y - s * .5, 1, x, y, s * 1.2); gg.addColorStop(0, lighten(col, .55)); gg.addColorStop(1, col);
+    g.fillStyle = gg; g.beginPath(); g.moveTo(x - s, y + s * .5); g.quadraticCurveTo(x - s, y - s, x, y - s); g.quadraticCurveTo(x + s, y - s, x + s, y + s * .5); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.55)'; for (let k = 0; k < 5; k++) g.fillRect(x - s * .6 + k * s * .3, y - s * .3 + (k % 2) * s * .4, .9, .9);   // sugar
+  }
+  function planet(g, x, y, s, r) {
+    const hue = r() < .5 ? ['#ffb86b', '#b8541e'] : ['#8fd0ff', '#2c4f9a'];
+    const gg = g.createRadialGradient(x - s * .4, y - s * .4, 1, x, y, s); gg.addColorStop(0, hue[0]); gg.addColorStop(1, hue[1]);
+    g.fillStyle = gg; g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.arc(x + s * .25, y + s * .2, s * .95, 0, TAU); g.arc(x, y, s, 0, TAU, true); g.fill('evenodd');
+    g.strokeStyle = 'rgba(255,235,200,.55)'; g.lineWidth = 1.6; g.beginPath(); g.ellipse(x, y, s * 1.7, s * .42, -.35, 0, TAU); g.stroke();
   }
   function palm(g, x, y, s, r) {
     g.fillStyle = 'rgba(0,0,0,.28)'; g.beginPath(); g.ellipse(x + 10, y + 12, s * 1.1, s * .8, 0, 0, TAU); g.fill();
@@ -1329,8 +1657,15 @@
     const fg = g.createLinearGradient(0, H.bb.y0, 0, H.bb.y1); fg.addColorStop(0, th.felt[0]); fg.addColorStop(1, th.felt[1]);
     g.fillStyle = fg; g.fillRect(H.bb.x0 - 10, H.bb.y0 - 10, H.bb.x1 - H.bb.x0 + 20, H.bb.y1 - H.bb.y0 + 20);
     g.save(); g.translate((H.bb.x0 + H.bb.x1) / 2, (H.bb.y0 + H.bb.y1) / 2); g.rotate(-.5);
-    for (let k = -30; k < 30; k++) { g.fillStyle = k % 2 ? 'rgba(255,255,255,.035)' : 'rgba(0,0,0,.05)'; g.fillRect(-700, k * 26, 1400, 26); }
+    if (th.skin !== 'space') for (let k = -30; k < 30; k++) { g.fillStyle = k % 2 ? 'rgba(255,255,255,.035)' : 'rgba(0,0,0,.05)'; g.fillRect(-700, k * 26, 1400, 26); }
     g.restore();
+    if (th.skin === 'space') {                                        // riveted deck plates instead of mowing stripes
+      g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 1.2;
+      for (let x = Math.floor(H.bb.x0 / 48) * 48; x < H.bb.x1; x += 48) { g.beginPath(); g.moveTo(x, H.bb.y0); g.lineTo(x, H.bb.y1); g.stroke(); }
+      for (let y = Math.floor(H.bb.y0 / 48) * 48; y < H.bb.y1; y += 48) { g.beginPath(); g.moveTo(H.bb.x0, y); g.lineTo(H.bb.x1, y); g.stroke(); }
+      g.fillStyle = 'rgba(255,255,255,.14)';
+      for (let x = Math.floor(H.bb.x0 / 48) * 48; x < H.bb.x1; x += 48) for (let y = Math.floor(H.bb.y0 / 48) * 48; y < H.bb.y1; y += 48) { g.fillRect(x + 4, y + 4, 1.4, 1.4); g.fillRect(x + 43, y + 4, 1.4, 1.4); }
+    }
     for (let i = 0; i < 1600; i++) { const x = H.bb.x0 + r() * (H.bb.x1 - H.bb.x0), y = H.bb.y0 + r() * (H.bb.y1 - H.bb.y0); g.fillStyle = r() < .5 ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.08)'; g.fillRect(x, y, 1, 1.6); }
     // zones
     H.allZones.forEach(z => drawZone(g, z, th, r, ls));
@@ -1353,10 +1688,21 @@
     g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 1.4; g.beginPath(); g.arc(cx, cy, CUP_R + .6, 0, TAU); g.stroke();
     g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, CUP_R + 2.6, 0, TAU); g.stroke();
     // bumpers (cylinders)
-    H.bumps.forEach(q => cylinder(g, q[0], q[1], q[2], th, ls));
+    H.bumps.forEach((q, i) => th.skin === 'space' ? meteor(g, q[0], q[1], q[2], th, ls, i) : cylinder(g, q[0], q[1], q[2], th, ls, th.skin === 'candy' ? CANDY_COLS[i % CANDY_COLS.length] : null));
     if (H.spin) { g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.arc(H.spin.x + 3, H.spin.y + 5, SPIN_HUB + 4, 0, TAU); g.fill(); }
     // tunnel mouths
     H.ports.forEach(P => [P.a, P.b].forEach((q, j) => {
+      if (th.skin === 'space') {                                     // an airlock hatch: octagonal, hazard-ringed
+        const oct = []; for (let k = 0; k < 8; k++) { const a = k / 8 * TAU + Math.PI / 8; oct.push([q[0] + Math.cos(a) * (PORT_R + 4), q[1] + Math.sin(a) * (PORT_R + 4)]); }
+        g.fillStyle = 'rgba(0,0,0,.45)'; g.save(); g.translate(2, 3); polyPath(g, oct, true); g.fill(); g.restore();
+        g.fillStyle = '#39445e'; polyPath(g, oct, true); g.fill();
+        g.save(); polyPath(g, oct, true); g.clip(); g.strokeStyle = j ? '#7dffd2' : '#ffb84a'; g.lineWidth = 4; g.setLineDash([4, 4]); g.beginPath(); g.arc(q[0], q[1], PORT_R + 2, 0, TAU); g.stroke(); g.restore();
+        const hg = g.createRadialGradient(q[0], q[1], 1, q[0], q[1], PORT_R - 1); hg.addColorStop(0, '#000'); hg.addColorStop(1, j ? '#0a3a33' : '#3a2408');
+        g.fillStyle = hg; g.beginPath(); g.arc(q[0], q[1], PORT_R - 1, 0, TAU); g.fill();
+        g.fillStyle = 'rgba(255,255,255,.75)'; g.font = '700 7px Orbitron, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(j ? 'OUT' : 'IN', q[0], q[1] + PORT_R + 11);
+        return;
+      }
       g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.arc(q[0] + 2, q[1] + 3, PORT_R + 3, 0, TAU); g.fill();
       const pg = g.createRadialGradient(q[0], q[1], 1, q[0], q[1], PORT_R + 2); pg.addColorStop(0, '#000'); pg.addColorStop(.75, j ? '#0a2a2a' : '#1a0f33'); pg.addColorStop(1, j ? '#3fe0c0' : '#9b7bff');
       g.fillStyle = pg; g.beginPath(); g.arc(q[0], q[1], PORT_R + 2, 0, TAU); g.fill();
@@ -1384,6 +1730,12 @@
       g.strokeStyle = Wt.top; g.fillStyle = Wt.top; g.lineWidth = 2 * hw; wallPath(w); g.stroke();
       if (w.solid) solidTop(g, w, H, th, r, ls);
       g.save(); g.translate(-.5, -.8); g.strokeStyle = 'rgba(255,255,255,.28)'; g.lineWidth = Math.max(1, hw * .7); wallPath(w); g.stroke(); g.restore();
+      if (th.skin === 'candy') {                                     // candy-cane rails
+        g.save(); g.strokeStyle = Wt.stripe; g.lineWidth = 2 * hw - 1.5; g.lineCap = 'butt'; g.setLineDash([6, 6]); wallPath(w); g.stroke(); g.restore();
+      } else if (th.skin === 'space') {                              // hull plating with marker lights
+        g.save(); g.strokeStyle = 'rgba(40,50,80,.45)'; g.lineWidth = 1; g.setLineDash([14, 3]); wallPath(w); g.stroke();
+        g.strokeStyle = Wt.stripe; g.lineWidth = 2.2; g.setLineDash([1.5, 22]); wallPath(w); g.stroke(); g.restore();
+      }
       if (H.theme === 'castle') {                                     // brick courses on the stone tops
         g.save(); g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = .7; g.setLineDash([.6, 7]); g.lineWidth = 2 * hw - 2; wallPath(w); g.stroke(); g.restore();
       }
@@ -1395,10 +1747,14 @@
     if (H.mill) {
       const M = H.mill;
       g.save(); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 10 * ls; g.shadowOffsetY = 6 * ls;
-      const tg = g.createLinearGradient(M.x - 40, 0, M.x + 40, 0); tg.addColorStop(0, '#6b5a4a'); tg.addColorStop(.5, '#b99a78'); tg.addColorStop(1, '#5a4636');
+      const cdy = th.skin === 'candy', tg = g.createLinearGradient(M.x - 40, 0, M.x + 40, 0);
+      if (cdy) { tg.addColorStop(0, '#8a4a2a'); tg.addColorStop(.5, '#d7925a'); tg.addColorStop(1, '#7a3e20'); }       // a gingerbread tower
+      else { tg.addColorStop(0, '#6b5a4a'); tg.addColorStop(.5, '#b99a78'); tg.addColorStop(1, '#5a4636'); }
       g.fillStyle = tg; g.beginPath(); g.moveTo(M.x - 34, M.y + 50); g.lineTo(M.x - 26, M.y - 30); g.lineTo(M.x + 26, M.y - 30); g.lineTo(M.x + 34, M.y + 50); g.closePath(); g.fill();
       g.restore();
-      const rf = g.createLinearGradient(M.x - 34, 0, M.x + 34, 0); rf.addColorStop(0, '#6a1f2c'); rf.addColorStop(.5, '#c23a4e'); rf.addColorStop(1, '#5a1824');
+      const rf = g.createLinearGradient(M.x - 34, 0, M.x + 34, 0);
+      if (cdy) { rf.addColorStop(0, '#f3a6c8'); rf.addColorStop(.5, '#fff0f7'); rf.addColorStop(1, '#e98bb5'); }       // an icing roof
+      else { rf.addColorStop(0, '#6a1f2c'); rf.addColorStop(.5, '#c23a4e'); rf.addColorStop(1, '#5a1824'); }
       g.fillStyle = rf; g.beginPath(); g.moveTo(M.x - 34, M.y - 26); g.lineTo(M.x, M.y - 62); g.lineTo(M.x + 34, M.y - 26); g.closePath(); g.fill();
       g.fillStyle = '#0b0d14'; rr(g, M.x - 16, M.y + 22, 32, 36, 14); g.fill();                         // the door (tunnel)
       g.strokeStyle = 'rgba(255,214,107,.5)'; g.lineWidth = 1.2; rr(g, M.x - 16, M.y + 22, 32, 36, 14); g.stroke();
@@ -1447,6 +1803,10 @@
       g.fillStyle = cg; g.fillRect(x0, y0, x1 - x0, y1 - y0);
       g.strokeStyle = 'rgba(20,20,30,.35)'; g.lineWidth = 1;
       for (let y = y0, row = 0; y < y1; y += 9, row++) { g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); for (let x = x0 + (row % 2) * 8; x < x1; x += 16) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 9); g.stroke(); } }
+    } else if (th.skin === 'candy') {                               // iced cake blocks with sprinkles
+      const bg = g.createLinearGradient(0, y0, 0, y1); bg.addColorStop(0, '#ffd3e6'); bg.addColorStop(1, '#f59ac2');
+      g.fillStyle = bg; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+      for (let i = 0; i < (x1 - x0) * (y1 - y0) / 60; i++) { g.save(); g.translate(x0 + 4 + r() * (x1 - x0 - 8), y0 + 4 + r() * (y1 - y0 - 8)); g.rotate(r() * TAU); g.fillStyle = CANDY_COLS[i % CANDY_COLS.length]; rr(g, -2.5, -.8, 5, 1.6, .8); g.fill(); g.restore(); }
     } else {
       const bg = g.createLinearGradient(0, y0, 0, y1); bg.addColorStop(0, lighten(th.wall.top, .08)); bg.addColorStop(1, darken(th.wall.top, .12));
       g.fillStyle = bg; g.fillRect(x0, y0, x1 - x0, y1 - y0);
@@ -1454,18 +1814,46 @@
     g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(x0, y0, x1 - x0, 3);
     g.restore();
   }
-  function cylinder(g, x, y, r, th, ls) {
-    const h = 8;
+  // a bumper post; `gum` (Candy Land) makes it a sugared gumdrop of that colour
+  function cylinder(g, x, y, r, th, ls, gum) {
+    const h = 8, side = gum ? toHex(darken(gum, .25)) : th.wall.side, top = gum || th.wall.top;
     g.save(); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 8 * ls; g.shadowOffsetX = 3 * ls; g.shadowOffsetY = (h + 2) * ls;
     g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); g.restore();
-    for (let k = h; k >= 1; k--) { g.fillStyle = mix(th.wall.side, darken(th.wall.side, .5), k / h); g.beginPath(); g.arc(x, y + k, r, 0, TAU); g.fill(); }
-    const tg = g.createRadialGradient(x - r * .35, y - r * .4, 1, x, y, r); tg.addColorStop(0, lighten(th.wall.top, .45)); tg.addColorStop(1, th.wall.top);
+    for (let k = h; k >= 1; k--) { g.fillStyle = mix(side, darken(side, .5), k / h); g.beginPath(); g.arc(x, y + k, r, 0, TAU); g.fill(); }
+    if (gum) {
+      const tg2 = g.createRadialGradient(x - r * .35, y - r * .45, 1, x, y, r); tg2.addColorStop(0, lighten(gum, .6)); tg2.addColorStop(1, gum);
+      g.fillStyle = tg2; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(255,255,255,.7)'; for (let k = 0; k < 9; k++) { const a = k * 2.4, d = r * (.25 + (k % 3) * .22); g.fillRect(x + Math.cos(a) * d, y + Math.sin(a) * d, 1.1, 1.1); }
+      g.fillStyle = 'rgba(255,255,255,.5)'; g.beginPath(); g.ellipse(x - r * .35, y - r * .42, r * .3, r * .18, -.6, 0, TAU); g.fill();
+      return;
+    }
+    const tg = g.createRadialGradient(x - r * .35, y - r * .4, 1, x, y, r); tg.addColorStop(0, lighten(top, .45)); tg.addColorStop(1, top);
     g.fillStyle = tg; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
     g.save(); g.shadowColor = th.wall.glow; g.shadowBlur = 8 * ls; g.strokeStyle = hexA(th.wall.edge, .9); g.lineWidth = 1.6; g.beginPath(); g.arc(x, y, r - 2.5, 0, TAU); g.stroke(); g.restore();
     g.fillStyle = hexA(th.wall.glow, .9); g.beginPath(); g.arc(x, y, r * .28, 0, TAU); g.fill();
   }
+  // a meteor bumper (Space Station): a lumpy lit rock with craters
+  function meteor(g, x, y, r, th, ls, i) {
+    const rr3 = rng(i * 131 + 7), pts = []; for (let k = 0; k < 11; k++) { const a = k / 11 * TAU; pts.push([x + Math.cos(a) * r * (.88 + rr3() * .2), y + Math.sin(a) * r * (.88 + rr3() * .2)]); }
+    g.save(); g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowBlur = 8 * ls; g.shadowOffsetX = 3 * ls; g.shadowOffsetY = 9 * ls;
+    g.fillStyle = '#2a2632'; polyPath(g, pts, true); g.fill(); g.restore();
+    const mg = g.createRadialGradient(x - r * .4, y - r * .45, 1, x, y, r * 1.1); mg.addColorStop(0, '#b3aabb'); mg.addColorStop(.6, '#6e6578'); mg.addColorStop(1, '#3a3442');
+    g.fillStyle = mg; polyPath(g, pts, true); g.fill();
+    for (let k = 0; k < 3; k++) { const a = rr3() * TAU, d = rr3() * r * .5, cr = r * (.14 + rr3() * .12), cx = x + Math.cos(a) * d, cy = y + Math.sin(a) * d;
+      g.fillStyle = 'rgba(30,24,38,.45)'; g.beginPath(); g.arc(cx, cy, cr, 0, TAU); g.fill(); g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = .8; g.beginPath(); g.arc(cx, cy, cr, .6 * Math.PI, 1.6 * Math.PI); g.stroke(); }
+    g.save(); g.shadowColor = th.wall.glow; g.shadowBlur = 6 * ls; g.strokeStyle = hexA(th.wall.glow, .55); g.lineWidth = 1; polyPath(g, pts, true); g.stroke(); g.restore();
+  }
   function drawZone(g, z, th, r, ls) {
-    if (z.k === 'sand') {
+    if (z.k === 'sand' && th.skin === 'candy') {                    // sticky caramel: glossy, no rake lines
+      g.save(); zonePath(g, z); g.clip();
+      const cg = g.createRadialGradient(z.x0 + (z.x1 - z.x0) * .35, z.y0 + (z.y1 - z.y0) * .3, 2, (z.x0 + z.x1) / 2, (z.y0 + z.y1) / 2, Math.max(z.x1 - z.x0, z.y1 - z.y0) * .7);
+      cg.addColorStop(0, '#f7c46a'); cg.addColorStop(.6, '#d98a2b'); cg.addColorStop(1, '#9a5214'); g.fillStyle = cg; g.fillRect(z.x0 - 4, z.y0 - 4, z.x1 - z.x0 + 8, z.y1 - z.y0 + 8);
+      g.strokeStyle = 'rgba(255,236,190,.45)'; g.lineWidth = 2; g.lineCap = 'round';
+      for (let i = 0; i < 5; i++) { const x = z.x0 + r() * (z.x1 - z.x0), y = z.y0 + r() * (z.y1 - z.y0), w = 10 + r() * 18; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + w / 2, y - 4, x + w, y + 1); g.stroke(); }
+      zonePath(g, z); g.strokeStyle = 'rgba(90,40,5,.45)'; g.lineWidth = 7; g.stroke();
+      g.restore();
+      zonePath(g, z); g.strokeStyle = 'rgba(255,220,160,.6)'; g.lineWidth = 1.4; g.stroke();
+    } else if (z.k === 'sand') {
       g.save(); zonePath(g, z); g.clip();
       const sg = g.createRadialGradient(z.x0 + (z.x1 - z.x0) * .4, z.y0 + (z.y1 - z.y0) * .35, 2, (z.x0 + z.x1) / 2, (z.y0 + z.y1) / 2, Math.max(z.x1 - z.x0, z.y1 - z.y0) * .7);
       sg.addColorStop(0, '#f1d8a0'); sg.addColorStop(1, '#c79d5c'); g.fillStyle = sg; g.fillRect(z.x0 - 4, z.y0 - 4, z.x1 - z.x0 + 8, z.y1 - z.y0 + 8);
@@ -1503,6 +1891,15 @@
       for (let k = -6; k <= 6; k++) { const ox = cx + ux * k * 22, oy = cy + uy * k * 22; g.beginPath(); g.moveTo(ox - uy * 400, oy + ux * 400); g.lineTo(ox + uy * 400, oy - ux * 400); g.stroke(); }
       zonePath(g, z, 16); g.strokeStyle = hexA(th.felt[1], .5); g.lineWidth = 10; g.stroke();     // feathered edge
       g.restore();
+    } else if (z.k === 'water' && th.skin === 'space') {             // a black hole: a dark well ringed by its glowing disc
+      const cx = (z.x0 + z.x1) / 2, cy = (z.y0 + z.y1) / 2, rad = Math.max(z.x1 - z.x0, z.y1 - z.y0) / 2;
+      g.save(); zonePath(g, z); g.clip();
+      const bg2 = g.createRadialGradient(cx, cy, 0, cx, cy, rad); bg2.addColorStop(0, '#000'); bg2.addColorStop(.55, '#05020c'); bg2.addColorStop(.8, '#2a1060'); bg2.addColorStop(1, '#b48cff');
+      g.fillStyle = bg2; g.fillRect(z.x0 - 2, z.y0 - 2, z.x1 - z.x0 + 4, z.y1 - z.y0 + 4);
+      g.lineWidth = 1.3;
+      for (let k = 0; k < 7; k++) { const a0 = r() * TAU, rr4 = rad * (.45 + k * .07); g.strokeStyle = `rgba(${k % 2 ? '200,170,255' : '255,190,120'},${.25 + r() * .3})`; g.beginPath(); g.arc(cx, cy, rr4, a0, a0 + 1.4 + r() * 1.6); g.stroke(); }
+      g.restore();
+      g.save(); g.shadowColor = '#b48cff'; g.shadowBlur = 10 * ls; zonePath(g, z); g.strokeStyle = 'rgba(210,180,255,.8)'; g.lineWidth = 1.6; g.stroke(); g.restore();
     } else if (z.k === 'water') {
       const wc = th.water || ['#46e0e6', '#1592b0', '#0b5373'];
       g.save(); zonePath(g, z); g.clip();
@@ -1516,7 +1913,7 @@
       g.restore();
       zonePath(g, z); g.strokeStyle = 'rgba(0,0,0,.4)'; g.lineWidth = 10; g.stroke();            // the bank drops away
       g.restore();
-      zonePath(g, z); g.strokeStyle = 'rgba(230,255,255,.6)'; g.lineWidth = 1.8; g.stroke();       // foam line
+      zonePath(g, z); g.strokeStyle = th.skin === 'candy' ? 'rgba(255,225,190,.6)' : 'rgba(230,255,255,.6)'; g.lineWidth = 1.8; g.stroke();       // foam line (a cocoa sheen on chocolate)
     } else if (z.k === 'lava') {
       g.save(); g.shadowColor = 'rgba(255,90,20,.95)'; g.shadowBlur = 18 * ls;
       zonePath(g, z); const lg = g.createRadialGradient((z.x0 + z.x1) / 2, (z.y0 + z.y1) / 2, 4, (z.x0 + z.x1) / 2, (z.y0 + z.y1) / 2, Math.max(z.x1 - z.x0, z.y1 - z.y0) * .6);
@@ -1526,6 +1923,39 @@
       zonePath(g, z); g.strokeStyle = 'rgba(40,10,5,.6)'; g.lineWidth = 8; g.stroke();
       g.restore();
       zonePath(g, z); g.strokeStyle = 'rgba(255,220,120,.7)'; g.lineWidth = 1.4; g.stroke();
+    } else if (z.k === 'belt') {                                     // a conveyor belt: rubber, rollers, chevrons in the push direction
+      const [x, y, w, h] = z.r, [fx, fy] = z.f, m = Math.sqrt(fx * fx + fy * fy) || 1, ux = fx / m, uy = fy / m;
+      g.save(); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 6 * ls; g.shadowOffsetY = 3 * ls; g.fillStyle = '#161c2c'; rr(g, x, y, w, h, 6); g.fill(); g.restore();
+      g.save(); rr(g, x, y, w, h, 6); g.clip();
+      g.strokeStyle = 'rgba(255,255,255,.06)'; g.lineWidth = 1;
+      if (Math.abs(ux) > Math.abs(uy)) for (let xx = x + 6; xx < x + w; xx += 9) { g.beginPath(); g.moveTo(xx, y); g.lineTo(xx, y + h); g.stroke(); }
+      else for (let yy = y + 6; yy < y + h; yy += 9) { g.beginPath(); g.moveTo(x, yy); g.lineTo(x + w, yy); g.stroke(); }
+      g.strokeStyle = hexA(th.wall.stripe || '#ffb84a', .85); g.lineWidth = 3; g.lineCap = 'round'; g.lineJoin = 'round';
+      const cx = x + w / 2, cy = y + h / 2, span = Math.abs(ux) > Math.abs(uy) ? w : h, px = -uy * 9, py = ux * 9;
+      for (let d = -span / 2 + 18; d < span / 2 - 8; d += 30) { const ax = cx + ux * d, ay = cy + uy * d; g.beginPath(); g.moveTo(ax - ux * 6 + px, ay - uy * 6 + py); g.lineTo(ax + ux * 4, ay + uy * 4); g.lineTo(ax - ux * 6 - px, ay - uy * 6 - py); g.stroke(); }
+      g.restore();
+      g.strokeStyle = 'rgba(160,190,240,.35)'; g.lineWidth = 1.2; rr(g, x, y, w, h, 6); g.stroke();
+      g.fillStyle = '#5a6a8a'; const rl = Math.abs(ux) > Math.abs(uy);                               // rollers at both ends
+      if (rl) { g.fillRect(x - 2, y + 2, 4, h - 4); g.fillRect(x + w - 2, y + 2, 4, h - 4); } else { g.fillRect(x + 2, y - 2, w - 4, 4); g.fillRect(x + 2, y + h - 2, w - 4, 4); }
+    } else if (z.k === 'lowg') {                                     // low gravity: a faint field of floating rings
+      g.save(); zonePath(g, z); g.clip();
+      g.fillStyle = 'rgba(120,230,255,.1)'; g.fillRect(z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0);
+      g.strokeStyle = 'rgba(160,240,255,.26)'; g.lineWidth = 1;
+      for (let y = z.y0 + 30; y < z.y1; y += 60) for (let x = z.x0 + 30 + ((y / 60) % 2) * 30; x < z.x1; x += 60) { g.beginPath(); g.arc(x, y, 7, 0, TAU); g.stroke(); g.beginPath(); g.arc(x, y, 2, 0, TAU); g.stroke(); }
+      g.restore();
+      g.save(); g.setLineDash([6, 6]); zonePath(g, z); g.strokeStyle = 'rgba(150,235,255,.45)'; g.lineWidth = 1.4; g.stroke(); g.restore();
+      g.fillStyle = 'rgba(190,245,255,.7)'; g.font = '700 8px Orbitron, system-ui, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'bottom';
+      g.fillText('LOW GRAVITY', z.x0 + 14, z.y1 - 12);                  // lower-left: the HUD pills sit over the top corners
+    } else if (z.k === 'ramp' && th.skin === 'candy') {              // the jelly jump: a wobbly translucent block
+      const [x, y, w, h] = z.r;
+      g.save(); g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = 8 * ls; g.shadowOffsetY = 6 * ls;
+      const jg = g.createLinearGradient(0, y + h, 0, y); jg.addColorStop(0, '#c2306e'); jg.addColorStop(1, '#ff9fcb');
+      g.fillStyle = jg; rr(g, x, y, w, h, 8); g.fill(); g.restore();
+      g.fillStyle = 'rgba(255,255,255,.35)'; rr(g, x + 5, y + 4, w - 10, 5, 2.5); g.fill();
+      g.fillStyle = 'rgba(255,255,255,.18)'; for (let k = 0; k < 6; k++) { g.beginPath(); g.arc(x + 10 + (k * 37 % (w - 20)), y + 14 + (k * 23 % (h - 20)), 2 + k % 2, 0, TAU); g.fill(); }
+      g.fillStyle = '#ffe1f0'; g.fillRect(x + 4, y - 2, w - 8, 3);
+      g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 2.2; g.lineCap = 'round';
+      const mx = x + w / 2; g.beginPath(); g.moveTo(mx - 9, y + h * .62); g.lineTo(mx, y + h * .32); g.lineTo(mx + 9, y + h * .62); g.stroke();
     } else if (z.k === 'ramp') {
       const [x, y, w, h] = z.r;
       g.save(); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 8 * ls; g.shadowOffsetY = 6 * ls;
@@ -1569,16 +1999,16 @@
     const hd = h('tr', { class: 'hd' }, h('th', {}, 'HOLE'));
     for (let k = 0; k < HOLES_N; k++) hd.append(h('th', { class: k === hi && !st.over ? 'cur' : '' }, String(k + 1)));
     hd.append(h('th', {}, 'TOT'));
-    const par = h('tr', { class: 'par' }, h('th', {}, 'Par'));
-    PARS.forEach((p, k) => par.append(h('td', { class: k === hi && !st.over ? 'cur' : '' }, String(p))));
-    par.append(h('td', {}, String(PAR_TOTAL)));
+    const par = h('tr', { class: 'par' }, h('th', {}, 'Par')), pars = parsOf(st);
+    pars.forEach((p, k) => par.append(h('td', { class: k === hi && !st.over ? 'cur' : '' }, String(p))));
+    par.append(h('td', {}, String(pars.reduce((a, b) => a + b, 0))));
     tbl.append(hd, par);
     [0, 1].forEach(p => {
       const row = h('tr', { class: 'p' + p }, h('th', {}, ctx.players[p].name));
       let tot = 0;
       for (let k = 0; k < HOLES_N; k++) {
         const s = cards[p][k], cur = k === hi && !st.over ? ' cur' : '';
-        if (s) { tot += s; row.append(h('td', { class: cls(s, PARS[k]) + cur }, String(s))); }
+        if (s) { tot += s; row.append(h('td', { class: cls(s, pars[k]) + cur }, String(s))); }
         else if (k === hi && live[p] != null && live[p] > 0) { tot += live[p]; row.append(h('td', { class: 'live' + cur }, String(live[p]))); }
         else row.append(h('td', { class: 'none' + cur }, '·'));
       }
@@ -1599,10 +2029,95 @@
     }, first ? 0 : 2500);
   }
 
+  /* ---------------- the course picker (phase 'setup') ----------------
+     The host picks; every pick is one committed write, so the partner's phone repaints the same cards live.
+     Each card shows a real hole of that course, drawn from its own geometry in its own palette. */
+  const THUMB = {};
+  function thumb(id) {
+    if (THUMB[id]) return THUMB[id];
+    const f = v => Math.round(v * 10) / 10;
+    if (!COURSES[id]) {                                              // Surprise me
+      return (THUMB[id] = `<svg viewBox="0 0 52 52" aria-hidden="true"><rect width="52" height="52" rx="10" fill="#0b1020"/>`
+        + `<circle cx="17" cy="19" r="7.5" fill="#79f5b6"/><circle cx="35" cy="19" r="7.5" fill="#ff7ab8"/><circle cx="26" cy="34" r="7.5" fill="#56d6ff"/></svg>`);   // one of the three
+    }
+    const C = COURSES[id], H = hole(C.base + C.thumb), th = THEMES[H.theme];
+    // the hole lies on its side: tee on the left, cup on the right (x' = bb.y1 - y, y' = x)
+    const bb = H.bb, w = bb.y1 - bb.y0, hh = bb.x1 - bb.x0, VW = 104, VH = 68, k = Math.min((VW - 10) / w, (VH - 10) / hh);
+    const ox = (VW - w * k) / 2, oy = (VH - hh * k) / 2;
+    const XY = (x, y) => [f(ox + (bb.y1 - y) * k), f(oy + (x - bb.x0) * k)];
+    const poly = (p, c) => 'M' + p.map(q => XY(q[0], q[1]).join(' ')).join('L') + (c ? 'Z' : '');
+    let s = `<svg viewBox="0 0 ${VW} ${VH}" aria-hidden="true"><rect width="${VW}" height="${VH}" fill="${th.bg}"/>`;
+    if (th.skin === 'space') { const r = rng(7); for (let i = 0; i < 26; i++) s += `<circle cx="${f(r() * VW)}" cy="${f(r() * VH)}" r="${f(.3 + r() * .6)}" fill="#fff" opacity="${f(.3 + r() * .6)}"/>`; }
+    s += `<path d="${poly(H.bound, 1)}" fill="${th.felt[0]}"/>`;
+    const zc = { sand: th.skin === 'candy' ? '#e0a24e' : '#e9cf94', ice: '#bfeefc', water: (th.water || ['', '#1592b0'])[1], lava: '#ff8a2a', ramp: th.skin === 'candy' ? '#ff9fcb' : '#c89456',
+      belt: '#1c2438', lowg: 'rgba(120,230,255,.28)', slope: 'rgba(0,0,0,.14)' };
+    H.allZones.forEach(z => {
+      const c = zc[z.k] || 'none';
+      if (z.r) { const [x, y, ww, h2] = z.r; s += `<path d="${poly([[x, y], [x + ww, y], [x + ww, y + h2], [x, y + h2]], 1)}" fill="${c}"/>`; }
+      else if (z.e) { const q = XY(z.e[0], z.e[1]); s += `<ellipse cx="${q[0]}" cy="${q[1]}" rx="${f(z.e[3] * k)}" ry="${f(z.e[2] * k)}" fill="${c}"/>`; }
+      else s += `<path d="${poly(z.p, 1)}" fill="${c}"/>`;
+    });
+    const dash = th.skin === 'candy' ? ' stroke-dasharray="3 3"' : th.skin === 'space' ? ' stroke-dasharray="1 4"' : '';
+    H.walls.forEach(wl => {
+      const sw = f(Math.max(1.6, 2 * (wl.hw || 6) * k)), d = poly(wl.p, wl.c);
+      s += `<path d="${d}" fill="${wl.solid ? th.wall.top : 'none'}" stroke="${th.wall.top}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
+      if (dash) s += `<path d="${d}" fill="none" stroke="${th.wall.stripe}" stroke-width="${sw}"${dash} stroke-linejoin="round"/>`;
+    });
+    const bc = th.skin === 'candy' ? CANDY_COLS : th.skin === 'space' ? ['#8b8397'] : [th.wall.glow];
+    H.bumps.forEach((b, i) => { const q = XY(b[0], b[1]); s += `<circle cx="${q[0]}" cy="${q[1]}" r="${f(Math.max(1.8, b[2] * k))}" fill="${bc[i % bc.length]}"/>`; });
+    H.ports.forEach(pt => [pt.a, pt.b].forEach((q0, j) => { const q = XY(q0[0], q0[1]); s += `<circle cx="${q[0]}" cy="${q[1]}" r="${f(Math.max(2.2, PORT_R * k))}" fill="#05060c" stroke="${j ? '#7dffd2' : '#ffb84a'}" stroke-width="1"/>`; }));
+    const t = XY(H.tee[0], H.tee[1]), c = XY(H.cup[0], H.cup[1]);
+    s += `<circle cx="${t[0]}" cy="${t[1]}" r="2.2" fill="#fff"/><circle cx="${c[0]}" cy="${c[1]}" r="2.6" fill="#05060c" stroke="#fff" stroke-width=".8"/>`;
+    s += `<path d="M${c[0]} ${c[1]}v-9" stroke="#fff" stroke-width=".9"/><path d="M${c[0]} ${f(c[1] - 9)}l6 1.8l-6 1.8z" fill="${th.flag}"/></svg>`;
+    return (THUMB[id] = s);
+  }
+  const escH = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function setupPick(ctx, id) {
+    const st = norm(clone(ctx.state));
+    if (st.phase !== 'setup' || ctx.status !== 'active' || ctx.me !== st.host || S.starting === st.seed || st.course === id) return;
+    try { ctx.sound.tap(); } catch (e) {}
+    ctx.commit(pickCourse(st, id));
+  }
+  function setupStart(ctx) {
+    const st = norm(clone(ctx.state));
+    if (st.phase !== 'setup' || ctx.status !== 'active' || ctx.me !== st.host || S.starting === st.seed) return;
+    S.starting = st.seed;                                            // one tap = one start, however fast the thumb
+    try { ctx.sound.place(); } catch (e) {}
+    ctx.commit(beginMatch(st));
+  }
+  function renderSetup(ctx, st, oldTxt) {
+    const me = ctx.me, hs = st.host, isHost = me === hs, hn = escH(ctx.players[hs].name), pn = escH(ctx.players[1 - hs].name);
+    const live = ctx.status === 'active', edit = isHost && live && S.starting !== st.seed, h = ctx.h;
+    if (!S.live) {
+      S.live = document.createElement('div'); S.live.className = 'mg-sr'; S.live.setAttribute('role', 'status'); S.live.setAttribute('aria-live', 'polite'); document.body.append(S.live);
+      document.addEventListener('focusin', e => { const t = e.target; S.focusId = (t && t.closest && t.closest('.mg-setup') && t.getAttribute('data-id')) || ''; });
+    }
+    const card = (id, cls, inner, label) => h('button', Object.assign({ class: 'mg-co' + cls + (edit ? '' : ' ro'), type: 'button', 'data-id': id,
+      'aria-pressed': String(st.course === id), 'aria-label': label, style: '--ca:' + (COURSES[id] ? COURSES[id].ca : '#ffd66b'),
+      onclick: () => setupPick(ctx, id) }, edit ? {} : { tabindex: '-1', 'aria-disabled': 'true' }), inner);
+    const cards = COURSE_IDS.map(id => {
+      const C = COURSES[id];
+      return card(id, '', [h('span', { html: thumb(id) }), h('span', {}, [h('span', { class: 'nm' }, C.name), h('span', { class: 'bl' }, C.blurb), h('span', { class: 'pr' }, `9 holes, par ${C.par}`)])],
+        `${C.name}. ${C.blurb} 9 holes, par ${C.par}.`);
+    });
+    cards.push(card('surprise', ' sur', [h('span', { html: thumb('surprise') }), h('span', {}, [h('span', { class: 'nm' }, 'Surprise me'), h('span', { class: 'bl' }, 'A random course, revealed on the first tee.')])],
+      'Surprise me. A random course, revealed on the first tee.'));
+    const busy = S.starting === st.seed;
+    const foot = !live ? h('div', { class: 'mg-foot' }, h('div', { class: 'mg-wait' }, 'This match has ended'))
+      : isHost ? h('div', { class: 'mg-foot' }, h('button', { class: 'mg-go', type: 'button', disabled: !live || busy ? '' : null, onclick: () => setupStart(ctx) }, busy ? 'Starting…' : 'Tee off'))
+      : h('div', { class: 'mg-foot' }, h('div', { class: 'mg-wait' }, [h('span', { class: 'mg-dots', 'aria-hidden': 'true' }, [h('i'), h('i'), h('i')]), `Waiting for ${ctx.players[hs].name} to tee off`]));
+    ctx.root.append(ctx.turnBar({ scores: [0, 0] }), h('div', { class: 'mg-setup' },
+      h('div', { class: 'mg-who', html: oldTxt || (isHost ? `Pick a course. <b>${pn}</b> sees your pick live.` : `<b>${hn}</b> is picking the course. Their pick lights up here.`) }),
+      h('div', { class: 'mg-courses', role: 'group', 'aria-label': 'Course' }, cards), foot));
+    const pick = st.course === 'surprise' ? 'Surprise me' : (COURSES[st.course] || COURSES.garden).name;
+    if (!isHost && S.lastSay !== pick) { S.lastSay = pick; S.live.textContent = `${ctx.players[hs].name} picked ${pick}`; }
+    if (S.focusId) { const el = ctx.root.querySelector(`[data-id="${S.focusId}"]`); if (el) { try { el.focus({ preventScroll: true }); } catch (e) {} } }   // every sync rebuilds this DOM
+  }
+
   /* ---------------- registration ---------------- */
   const DEF = {
     id: 'mini-golf', name: 'Mini Golf', emoji: '⛳', category: 'Arcade', accent: '#79f5b6',
-    tagline: '9 wild holes · bumpers, ice, lava & a windmill · fewest strokes wins.',
+    tagline: 'Three courses of 9 holes: neon garden, candy land, space station.',
     // the last putt may still be rolling when the match finishes — hold the result card for it
     resultDelay: () => {
       const A = S.anim;
@@ -1610,23 +2125,35 @@
       if (S.summary) return Math.min(4500, Math.max(0, S.summary.max - S.summary.t) + 200);
       return 0;
     },
-    // timer ran out: the stroke counts, the ball stays put, and the turn passes
+    // a timeout before hole 1 (the course picker) must never forfeit: nobody has putted yet
+    skipOnly: st => !!st && st.phase === 'setup',
+    // the next player's controls unlock only after the partner-side replay of the last putt (see CONTEXT)
+    clockGrace: CLOCK_GRACE,
+    // timer ran out: the stroke counts, the ball stays put, and the turn passes;
+    // in the picker the match simply starts with what is picked
     skipTurn: (st, opp) => skipState(st, opp),
     init: host => ({
-      v: 1, seed: ((Math.random() * 2147483646) | 0) + 1, hole: 0, turn: host, honor: host,
+      v: 2, seed: ((Math.random() * 2147483646) | 0) + 1, host: host === 1 ? 1 : 0, phase: 'setup', course: 'garden', rule: 'alt',
+      hole: 0, turn: host, honor: host,
       balls: [teeBall(0), teeBall(0)], cards: [Array(HOLES_N).fill(0), Array(HOLES_N).fill(0)],
       n: 0, clk: 0, ph: 0, over: 0, last: null,
     }),
-    test: { HOLES, THEMES, hole, simulate, applyStroke, skipState, nextTurn, totals, norm, away, grid, endHole, winnerOf, label,
+    test: { HOLES, COURSES, COURSE_IDS, THEMES, hole, simulate, applyStroke, skipState, nextTurn, totals, norm, away, grid, endHole, winnerOf, label,
+      pickCourse, beginMatch, surpriseCourse, G, parsOf, altTurn, CLOCK_GRACE, restOk, oldClientSeat,
       pip, inZone, segDist, millBlocked, speedOf, R, CUP_R, CAP_V, DT, MAX_STEPS, MAX_STROKES, PICKUP, PORT_R, S,
       putt: (a, p) => putt(a, p), canAct: () => canAct(),
       replay: () => ({ id: S.anim ? S.anim.id : 0, clock: S.anim ? S.anim.clock : 0, len: S.anim ? S.anim.len : 0, doneId: S.doneId }) },
 
     render(ctx) {
+      const oldSeat = oldClientSeat(ctx.state);                       // before norm fills `last.g` in
       const st = norm(ctx.state), me = ctx.me, foe = 1 - me;
       S.ctx = ctx;
       ensureCanvas();
       if (st.seed !== S.seed) resetScene(st);
+      S.oldId = oldSeat >= 0 && st.last ? st.last.id : 0;
+      const oldTxt = oldSeat >= 0 ? `<b>${escH(ctx.players[oldSeat].name)}</b> is on an older version — ask them to close and reopen the app` : '';
+      if (oldTxt && S.oldWarn !== S.oldId) { S.oldWarn = S.oldId; try { ctx.msg(oldTxt, '#ffd66b'); ctx.sound.bad(); } catch (e) {} }
+      if (st.phase === 'setup') { renderSetup(ctx, st, oldTxt); return; }   // the course picker: no canvas, no loop
       maybeReplay(st);
       if (!S.anim && S.lastPh !== st.ph) { S.phBase = st.ph; S.phT0 = performance.now(); }
       S.lastPh = st.ph;
@@ -1644,19 +2171,24 @@
       draw(); ensureLoop();
 
       const nm = i => `<b>${ctx.players[i].name}</b>`;
-      const H = HOLES[st.hole], mine = st.balls[me], theirs = st.balls[foe];
+      const H = HOLES[G(st)], mine = st.balls[me], theirs = st.balls[foe], C = COURSES[st.course] || COURSES.garden;
       let hint;
       if (ctx.status === 'finished' || st.over) {
         const t = totals(st), w = winnerOf(st);
-        hint = w === 'draw' ? `All square on <b>${t[0]}</b> — a draw!` : `${nm(w)} wins <b>${t[w]}</b> to ${t[1 - w]} · par ${PAR_TOTAL}`;
+        hint = w === 'draw' ? `All square on <b>${t[0]}</b> — a draw!` : `${nm(w)} wins <b>${t[w]}</b> to ${t[1 - w]} · par ${C.par}`;
       } else if (A) hint = A.L.seat === me ? 'Rolling…' : `${nm(A.L.seat)} putted — watch it roll…`;
-      else if (S.intro) hint = `Hole <b>${st.hole + 1}</b> · ${H.name} · Par <b>${H.par}</b>`;
-      else if (S.summary) hint = `Hole <b>${S.summary.hi + 1}</b> done — next up: <b>${HOLES[st.hole].name}</b>`;
-      else if (ctx.isMyTurn && st.turn === me && !mine.done) {
+      else if (S.intro) hint = `${C.name} · hole <b>${st.hole + 1}</b> · ${H.name} · Par <b>${H.par}</b>`;
+      else if (S.summary) hint = `Hole <b>${HOLES[S.summary.hi].no}</b> done — next up: <b>${H.name}</b>`;
+      else if (st.rule === 'alt') {                                    // plain alternation: say whose turn it is, nothing more
+        if (ctx.isMyTurn && st.turn === me && !mine.done) hint = `<b>Your turn.</b> Drag back anywhere, release to putt`;
+        else if (mine.done) hint = `You're in the cup. ${nm(foe)} keeps putting`;
+        else hint = `${nm(st.turn)}'s turn`;
+      } else if (ctx.isMyTurn && st.turn === me && !mine.done) {       // an old save: the "away" rule, worded as before
         const why = mine.s === 0 ? (theirs.s === 0 ? 'you have the honour' : 'your tee shot') : (!theirs.done ? 'you\'re away' : 'finish the hole');
         hint = `Your putt (${why}) · <b>drag back</b> anywhere, release to hit`;
       } else if (mine.done) hint = `You're done here · ${nm(foe)} to finish hole ${st.hole + 1}`;
       else hint = `${nm(st.turn)} is lining up${st.balls[st.turn] && st.balls[st.turn].s ? '' : ' the tee shot'}…`;
+      if (oldTxt && !(ctx.status === 'finished' || st.over)) hint = oldTxt;   // the one thing that matters until they update
       const hintEl = ctx.h('div', { class: 'mg-hint', html: hint });
       const ovBtn = ctx.h('button', { class: 'mg-btn' + (S.overview ? ' on' : ''), type: 'button',
         onclick: () => { S.overview = !S.overview; try { ctx.sound.tap(); } catch (e) {} ovBtn.classList.toggle('on', S.overview); ovBtn.textContent = S.overview ? '◉ Follow ball' : '◎ See whole hole'; ensureLoop(); } },
