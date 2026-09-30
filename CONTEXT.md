@@ -570,3 +570,15 @@ match (never forfeits). clockGrace 10 s (hole-ending replay p95 7.7 s). MIXED VE
 geometry on a new course → norm() puts any ball outside the bound / inside a block back to where it was hit from (or
 the tee), and a v:2 stroke without a matching `last.g` shows "<partner> is on an older version — reopen the app".
 Tests: scratchpad/mg2 (mg-logic.js 602), scratchpad/mg-review/mix2.js (8).
+
+## Game-id variants (v83): how to ship a new save format that OLD apps can't corrupt
+A phone left open across a deploy keeps running the old JS (sw.js is network-first, but only on load). For Knockout 2.0,
+patching the stored state could not stop the old code from playing a new match to the end under its old rules.
+Fix: new matches use a NEW gameId the old app has no def for. ui.js support:
+  - `hidden: true`: left out of Games.all(), so no menus, stats lists, random "next game" or tournament pool;
+  - `launchAs` on the visible def: startMatch/createMatch go through `launchId()`;
+  - `statsId` on the hidden def: `baseId()` for recordResult, icon, GAME_RULES and TIMER_GAMES.
+An old app shows no invite and "Game not found" for an unknown id, so it makes 0 writes.
+Knockout: 'knockout' (visible, launchAs 'knockout2') = legacy classic Sumo for old saves, old-app matches and
+tournament subs; 'knockout2' (hidden, statsId 'knockout') = setup, squads, power-ups, Hill, Hockey. The b-key/cfg
+guard also stays inside knockout2. Tests: scratchpad/ko3 (logic3 45,812, mixed2 671, legacy 1,171), ko-review.

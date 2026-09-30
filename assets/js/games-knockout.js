@@ -115,6 +115,47 @@
   @media (hover:hover) and (pointer:fine){ .ko-ar:not(.ko-ro):hover,.ko-roul:not(.ko-ro):hover,.ko-mode:not(:disabled):not(.ko-ro):hover{ border-color:var(--ka); } }
   .ko-ar:not(.ko-ro):active,.ko-roul:not(.ko-ro):active,.ko-mode:not(:disabled):not(.ko-ro):active{ transform:scale(.97); }
   @media (prefers-reduced-motion: reduce){ .ko-dots i{ animation:none; opacity:.7; } .ko-ar,.ko-roul,.ko-mode,.ko-sw::after{ transition:none; } }
+  /* squad pick: the formation row (what you are building) over the type list (what you can pick from) */
+  .ko-slots{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
+  .ko-slot{ min-height:76px; border-radius:var(--r-2); background:var(--panel-2); border:1px solid var(--glass-brd); color:var(--ink); display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:3px; padding:6px 2px 6px;
+    font-size:10.5px; font-weight:700; line-height:1.15; touch-action:manipulation; transition:transform var(--dur-1) var(--spring), border-color var(--dur-2), box-shadow var(--dur-2); }
+  .ko-slot svg{ width:32px; height:40px; display:block; }
+  .ko-slot[aria-pressed=true]{ border-color:var(--kc); box-shadow:0 0 0 1px var(--kc), 0 0 16px -6px var(--kc); }
+  .ko-slot:disabled{ opacity:1; }
+  .ko-slot:not(:disabled):active,.ko-type:not(:disabled):active{ transform:scale(.97); }
+  .ko-slot.pop svg{ animation:koPop .2s cubic-bezier(.23,1,.32,1); }
+  @keyframes koFade{ from{ opacity:.5; } to{ opacity:1; } }
+  @keyframes koPop{ from{ transform:scale(.92); opacity:.5; } to{ transform:scale(1); opacity:1; } }   /* the slot is rebuilt on every pick, so a keyframe (not a transition) is the only way in */
+  .ko-types{ display:flex; flex-direction:column; border-radius:var(--r-2); background:var(--panel-2); border:1px solid var(--glass-brd); overflow:hidden; }
+  .ko-type{ display:grid; grid-template-columns:40px minmax(0,1fr) 92px; align-items:center; gap:10px; min-height:64px; padding:7px 10px; background:transparent; border:0; border-top:1px solid var(--glass-brd); color:var(--ink); text-align:left; touch-action:manipulation;
+    transition:transform var(--dur-1) var(--spring), background var(--dur-2); }
+  .ko-type:first-child{ border-top:0; }
+  .ko-type[aria-pressed=true]{ background:rgba(127,216,255,.1); box-shadow:inset 3px 0 0 var(--kc); }
+  .ko-type:disabled{ opacity:1; }
+  .ko-type .ico svg{ width:34px; height:42px; display:block; }
+  .ko-type .tx b{ display:block; font-size:13px; }
+  .ko-type .tx small{ display:block; font-size:10.5px; line-height:1.3; color:var(--ink-dim); margin-top:1px; }
+  .ko-type .st{ display:flex; flex-direction:column; gap:3px; }
+  .ko-st{ display:flex; align-items:center; justify-content:space-between; font-size:9.5px; font-weight:700; color:var(--ink-dim); gap:6px; }
+  .ko-st span{ display:inline-flex; gap:2px; }
+  .ko-st i{ width:7px; height:7px; border-radius:2px; background:rgba(127,140,180,.3); }
+  .ko-st i.on{ background:var(--kc); }
+  .ko-fs{ display:flex; align-items:center; justify-content:center; gap:8px; font-size:12px; color:var(--ink-dim); min-height:20px; }
+  .ko-fs b{ color:var(--kf); }
+  .ko-fs.rdy{ color:var(--ink); }
+  .ko-ghost{ min-height:44px; padding:10px 8px; border-radius:var(--r-2); background:var(--panel-2); border:1px solid var(--glass-brd); color:var(--ink); font-weight:700; font-size:12.5px; touch-action:manipulation; transition:transform var(--dur-1) var(--spring); }
+  .ko-ghost:not(:disabled):active{ transform:scale(.97); }
+  .ko-ghost:disabled{ opacity:.4; }
+  .ko-slot:focus-visible,.ko-type:focus-visible,.ko-ghost:focus-visible{ outline:2px solid var(--ka,#7fd8ff); outline-offset:2px; }
+  .ko-rev{ display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .ko-rev>div{ display:flex; align-items:center; gap:6px; min-height:34px; padding:3px 8px; border-radius:var(--r-2); background:var(--panel-2); border:1px solid var(--glass-brd); font-size:11px; font-weight:700; color:var(--ink-dim); }
+  .ko-rev b{ color:var(--kc); font-size:11px; }
+  .ko-rev svg{ width:16px; height:20px; display:block; }
+  .ko-rev .ic{ display:inline-flex; gap:1px; margin-left:auto; }
+  .ko-pen .tn{ position:absolute; left:4px; top:3px; font-size:8.5px; font-weight:800; line-height:1; letter-spacing:.3px; color:var(--ink-dim); }
+  .ko-pen .ef{ position:absolute; right:3px; bottom:8px; font-size:11px; line-height:1; }
+  .ko-pen.anch svg{ opacity:.55; }
+  @media (prefers-reduced-motion: reduce){ .ko-slot.pop svg{ animation:koFade .15s ease; } .ko-slot,.ko-type,.ko-ghost{ transition:none; } }
   `;
   document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
 
@@ -124,9 +165,33 @@
   const MAXA = 160, MINA = 18;                           // aim arrow length on the ice (world units)
   const START = [[-120, 150], [-42, 186], [42, 186], [120, 150]];
   const FALLBACK_MS = 2500, RESEND_MS = 1500;
+  /* Knockout 2.0: modes, penguin types, power-ups */
+  const HK_ROUNDS = 10, GOAL_TO = 3;                     // Fish Hockey: first to 3 goals, 10-round cap
+  const ZR = 75;                                         // King of the Hill: radius of the glowing centre zone
+  const HW = 200, HL = 260, GW = 78;                     // the rink: half-width, half-length (goal lines), goal-mouth half-width
+  const PK_M = .6, PK_R = 17, PK_F = 340, PK_V = 820, PK_E = .97;   // the fish: light, slippery, lively
+  const SPR_E = 1.3, IR = 15;                            // a Spring penguin's restitution (super-elastic); an item's pickup radius
+  const MODE_IDS = ['sumo', 'koth', 'hockey'];
+  const KOTH_ARENAS = ['floe', 'bumper', 'ice', 'current'];   // arenas that still make sense when the ice does not shrink
+  // Penguin types: mass (x Classic), body radius, max launch (x Classic). Only these three things differ.
+  // Balanced by simulated type-vs-type matches under six different AI players (every pairing 37-62%, no type ahead of
+  // all three others on average). Mass is by far the strongest lever in Sumo (a 10% heavier squad wins ~70% of
+  // matches), so weight differs only a little; size and reach carry the character.
+  const TYPES = [
+    { id: 'classic', name: 'Classic', m: 1, r: PR, cap: 1, blurb: 'Balanced. No surprises.', wt: 2, rc: 2, sz: 3 },
+    { id: 'emperor', name: 'Emperor', m: 1.08, r: 28, cap: .74, blurb: 'Big and a bit heavier. Hard to shift, short push.', wt: 3, rc: 1, sz: 5 },
+    { id: 'rock', name: 'Rockhopper', m: .98, r: 20, cap: 1.36, blurb: 'Slim. Launches much further, so it can overshoot.', wt: 2, rc: 4, sz: 2 },
+    { id: 'chick', name: 'Chick', m: 1, r: 13, cap: 1.12, blurb: 'Tiny, so hard to hit. Launches a bit further.', wt: 2, rc: 3, sz: 1 },
+  ];
+  // Power-ups (1 heavy, 2 shield, 3 spring, 4 anchor): grabbed in round n, active in round n+1
+  const IK = [null,
+    { id: 'heavy', name: 'Heavy', ico: '🏋️', col: '#ffb347', txt: 'double weight' },
+    { id: 'shield', name: 'Shield', ico: '🛡️', col: '#6fe3ff', txt: 'bounces back off the water once' },
+    { id: 'spring', name: 'Spring', ico: '🌀', col: '#7dff9a', txt: 'extra bouncy hits' },
+    { id: 'anchor', name: 'Anchor', ico: '⚓', col: '#ff8c5a', txt: 'can’t move or launch' }];
   /* ---------------- view constants (logical canvas px) ---------------- */
   const VW = 400, VH = 450, CX = 200, CY = 268, SC = 0.6, TILT = 0.56, TH = 15, HOR = 118;
-  const REVEAL = 850, CRACK_MS = 420, SHRINK_MS = 1150, SWAP_MS = 950, PRE_MS = 520, ENTRY_MS = 700, FALL_SLIDE = 240, FALL_DROP = 460, FALL_MS = 760;
+  const GOAL_HOLD = 1100, RS_MS = 620, SCORE_MS = 1000, REVEAL = 850, CRACK_MS = 420, SHRINK_MS = 1150, SWAP_MS = 950, PRE_MS = 520, ENTRY_MS = 700, FALL_SLIDE = 240, FALL_DROP = 460, FALL_MS = 760;
 
   /* ---------------- arenas: pure geometry (identical on every phone) ---------------- */
   // Trig is precomputed here as rounded constants (a unit vector every 5°): the slide never calls sin/cos/pow.
@@ -141,6 +206,10 @@
     { id: 'current', name: 'Current', icon: '🌊', blurb: 'A sea current drags everything. It turns each round, and the floe shrinks a little.', hint: 'the current drags everything the way the badge points; the floe shrinks a little after this round' },
   ];
   const ARENA_IDS = ARENAS.map(a => a.id);
+  const KOTH_BLURB = { floe: 'The original round floe, full size all match.', bumper: 'Rubber bumpers all round the rim bounce you back. None pop in this mode.', ice: 'A floe of tiles with the corners missing. No tiles fall in this mode.', current: 'A sea current drags everything and turns each round. The floe keeps its size.' };
+  const RINK = { id: 'rink', name: 'Fish Rink', icon: '🐟', blurb: 'A rink with a goal at each end. The fish bounces off the edge; penguins do not.', hint: 'knock the fish through the far goal' };
+  const arenaInfo = id => id === 'rink' ? RINK : ARENAS.find(a => a.id === id) || ARENAS[0];
+  const ARENA_SETS = { sumo: ARENA_IDS, koth: KOTH_ARENAS, hockey: ['rink'] };     // which arenas each mode offers
   function seeded(seed) {
     let a = seed >>> 0;
     return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -208,37 +277,47 @@
       const dead = iceDead(mid, lv), pk = icePicks(mid), doom = [pk[lv], TN * TN - 1 - pk[lv]];
       return { ext: TO, dead, doom, in: (x, y) => { const ix = Math.floor((x + TO) / TS), iy = Math.floor((y + TO) / TS); return ix >= 0 && ix < TN && iy >= 0 && iy < TN && dead[iy * TN + ix] === 0; } };
     },
-    current: (lv, mid) => {
-      const R = RCT[lv], R2 = R * R, dir = curSeq(mid)[lv % 8], u = uv(9 * dir);
-      return { R, ext: R, dir, cur: [u[0] * CUR_V, u[1] * CUR_V], in: (x, y) => x * x + y * y <= R2 };
+    current: (lv, mid, R, dl) => {                         // dl: King of the Hill keeps the floe size but still turns the current every round
+      const Rr = RCT[lv], R2 = Rr * Rr, dir = curSeq(mid)[(dl != null ? dl : lv) % 8], u = uv(9 * dir);
+      return { R: Rr, ext: Rr, dir, cur: [u[0] * CUR_V, u[1] * CUR_V], in: (x, y) => x * x + y * y <= R2 };
     },
+    rink: () => ({ R: HL, ext: HL, ex: HW, ey: HL, hw: HW, hl: HL, gw: GW, in: (x, y) => x >= -HW && x <= HW && y >= -HL && y <= HL }),
   };
   const GCACHE = new Map();
-  function geoFor(id, lv, mid, R) {
+  function geoFor(id, lv, mid, R, dl) {
     if (!BUILD[id]) id = 'floe';
     lv = Math.max(0, Math.min(9, lv | 0));
-    const key = id + ':' + lv + ':' + (id === 'floe' ? R : mid);
+    const key = id + ':' + lv + ':' + (id === 'floe' ? R : mid) + (dl != null ? ':' + dl : '');
     let g = GCACHE.get(key);
-    if (!g) { g = BUILD[id](lv, mid, R); g.id = id; g.lv = lv; g.mid = mid; if (GCACHE.size > 80) GCACHE.clear(); GCACHE.set(key, g); }
+    if (!g) { g = BUILD[id](lv, mid, R, dl); g.id = id; g.lv = lv; g.mid = mid; if (GCACHE.size > 80) GCACHE.clear(); GCACHE.set(key, g); }
     return g;
   }
-  // the ice of round (st.round + dr) in arena `id`; a classic floe follows st.R (old saves, hand-set test radii)
-  const geoOf = (id, st, dr) => geoFor(id, st.round - 1 + dr, st.mid, dr ? nextR(st.R) : st.R);
-  function arenaAfter(st) {                                // roulette: a different arena each round (seeded by match + round)
-    if (!st.roulette) return st.arena;
+  // The ice of round `round`. Sumo: it tightens every round (a classic floe follows R: old saves, hand-set test radii).
+  // King of the Hill / Fish Hockey: the ice never shrinks (level 0 every round; only the current still turns).
+  function geoAt(md, id, round, mid, R) {
+    if (md === 'hockey') return geoFor('rink', 0, mid);
+    if (md === 'koth') return id === 'current' ? geoFor('current', 0, mid, 0, round - 1) : geoFor(id, 0, mid, R_START);
+    return geoFor(id, round - 1, mid, R);
+  }
+  const geoOf = (id, st, dr) => geoAt(st.mode, id, st.round + dr, st.mid, dr ? nextR(st.R) : st.R);
+  const maxRounds = st => st.mode === 'hockey' ? HK_ROUNDS : MAX_ROUNDS;
+  function arenaAfter(st) {                                // roulette (Sumo only): a different arena each round (seeded by match + round)
+    if (!st.roulette || st.mode !== 'sumo') return st.arena;
     const c = ARENA_IDS.filter(a => a !== st.arena);
     return pick1(seeded(hashStr(st.mid + ':' + (st.round + 1) + ':arena')), c);
   }
-  const surpriseArena = mid => pick1(seeded(hashStr(mid + ':surprise')), ARENA_IDS);
+  const surpriseArena = (mid, md) => pick1(seeded(hashStr(mid + ':surprise')), md === 'koth' ? KOTH_ARENAS : ARENA_IDS);
   // seat 0's four start slots on this ice (seat 1 is the same turned 180°); level 0 is the original layout
-  function slotsFor(g) {
+  // rmax: the biggest body in play (a squad of Emperors needs its start slots further apart than Classics do)
+  function slotsFor(g, rmax) {
     const lv = g.lv, id = g.id, sc = (pts, s) => pts.map(p => [r2(p[0] * s), r2(p[1] * s)]);
-    if (id === 'floe' || id === 'bumper' || id === 'current') return sc(START, Math.max(g.R / R_START, .62));   // never tighter than 62% (keeps them 50 apart)
+    if (id === 'floe' || id === 'bumper' || id === 'current') return sc(START, Math.max(g.R / R_START, .62, rmax > PR ? (2 * rmax + 2) / 84 : 0));   // never tighter than 62% (keeps Classics 50 apart; the closest START slots are 84 apart)
     if (id === 'donut') return lv === 0 ? START : sc(START, (g.HR + RO) / 2 / 191.4);
     if (id === 'twin') {
       const s = g.ir / 130, o = [[-35, 55], [45, 70], [-45, 70], [35, 55]], c = [-IC, -IC, IC, IC];
       return o.map((p, k) => [r2(c[k] + p[0] * s), r2(p[1] * s)]);
     }
+    if (id === 'rink') return [[-120, 165], [-42, 200], [42, 200], [120, 165]];
     if (lv === 0) return START;                            // ice: tile centres, alive ones first
     const cand = [[-150, 150], [-50, 150], [50, 150], [150, 150], [-150, 50], [-50, 50], [50, 50], [150, 50], [-150, 250], [-50, 250], [50, 250], [150, 250]], out = [];
     cand.forEach(p => { if (out.length < NP && g.in(p[0], p[1]) && g.in(-p[0], -p[1])) out.push(p); });
@@ -252,54 +331,154 @@
 
   /* ---------------- pure rules (identical on every phone) ---------------- */
   // Firebase strips nulls / empty containers (and old saves may lack fields) → re-default on read
+  const Z8 = () => [0, 0, 0, 0, 0, 0, 0, 0];
+  const cleanSq = v => Array.isArray(v) && v.length === NP ? v.map(t => { t |= 0; return t >= 0 && t < TYPES.length ? t : 0; }) : [0, 0, 0, 0];
+  /* Mixed app versions. A phone still running the v78 app (open since before an update) normalises a match its own way
+     (mode -> sumo, phase squad -> play, arena rink -> floe) and writes the WHOLE state back when it commits. So a new-format
+     match (v >= 3) keeps: its aims under b0/b1 (the old app only reads a0/a1, so it never sees both sides ready and never
+     resolves); `cfg` = {mode, arena, phase}, which the old app leaves alone, so any overwrite is undone on read; and a
+     stored phase the old app understands (squad pick is stored as 'setup': its timer then only skips, never forfeits).
+     Old saves (no v, or v < 3) keep the old a0/a1 keys and play exactly as before. */
+  const V3 = st => (+st.v || 0) >= 3;
+  const AK = st => V3(st) ? 'b' : 'a';                       // the aims key prefix
+  const PHASES = ['setup', 'squad', 'play'], mirrorPh = ph => ph === 'play' ? 'play' : 'setup';
+  const cfgSync = st => { if (V3(st)) st.cfg = { mode: st.mode, arena: st.arena, phase: st.phase }; return st; };
+  // what actually gets written: cfg refreshed, the phase stored in a form the older app can't misread
+  function seal(st) { delete st.hx; if (V3(st)) { cfgSync(st); st.phase = mirrorPh(st.phase); } return st; }
   function norm(st) {
     st = st && typeof st === 'object' ? st : {};
-    st.phase = st.phase === 'setup' ? 'setup' : 'play';      // old saves have no phase: they are mid-match Sumo on the Classic Floe
-    st.mode = 'sumo';                                        // King of the Hill / Fish Hockey are "coming soon"
-    st.roulette = st.roulette ? 1 : 0;
-    st.arena = ARENA_IDS.indexOf(st.arena) >= 0 || (st.phase === 'setup' && st.arena === 'surprise') ? st.arena : 'floe';
+    if (V3(st)) st.hx = 0; else delete st.hx;                // hx: an older app overwrote mode / arena / phase (new-format matches only)
+    const c = V3(st) && st.cfg && typeof st.cfg === 'object' && PHASES.indexOf(st.cfg.phase) >= 0 ? st.cfg : null;
+    if (c) {                                                 // an older app wrote over it: take mode / arena / phase back from cfg
+      if (st.mode !== c.mode || st.arena !== c.arena || (st.phase !== c.phase && st.phase !== mirrorPh(c.phase))) st.hx = 1;
+      if (st.hx && c.phase !== 'play') { st.pens = null; st.round = 1; st.R = R_START; }   // its "start" rewrote the line-up
+      st.mode = c.mode; st.arena = c.arena; st.phase = c.phase;
+    }
+    const leg = !V3(st);                                     // a 'knockout' match (old saves, old apps, tournaments): classic Sumo, exactly as v78
+    st.phase = st.phase === 'setup' || (st.phase === 'squad' && !leg) ? st.phase : 'play';   // old saves have no phase: they are mid-match Sumo on the Classic Floe
+    st.mode = !leg && MODE_IDS.indexOf(st.mode) >= 0 ? st.mode : 'sumo';
+    st.pw = st.pw && !leg ? 1 : 0;                           // power-ups: new matches only (old saves = none)
+    st.roulette = st.roulette && st.mode === 'sumo' ? 1 : 0;
+    const sup = ARENA_SETS[st.mode];
+    st.arena = sup.indexOf(st.arena) >= 0 || (st.phase === 'setup' && st.arena === 'surprise' && st.mode !== 'hockey') ? st.arena : sup[0];
     const def = startPens(st.arena === 'surprise' ? 'floe' : st.arena);
     const pens = Array.isArray(st.pens) && st.pens.length === 2 * NP ? st.pens : def;
     st.pens = pens.map((p, i) => Array.isArray(p) ? [+p[0] || 0, +p[1] || 0, p[2] ? 1 : 0] : def[i]);
     st.aims = st.aims && typeof st.aims === 'object' && !Array.isArray(st.aims) ? st.aims : {};
+    st.sqs = st.sqs && typeof st.sqs === 'object' && !Array.isArray(st.sqs) ? st.sqs : {};       // submitted squads (hidden until both are in)
+    st.sq = Array.isArray(st.sq) && st.sq.length === 2 ? [cleanSq(st.sq[0]), cleanSq(st.sq[1])] : [[0, 0, 0, 0], [0, 0, 0, 0]];   // old saves: 4 Classic each
+    st.ef = Array.isArray(st.ef) && st.ef.length === 2 * NP ? st.ef.map(v => { v |= 0; return v >= 0 && v <= 4 ? v : 0; }) : Z8();   // power-up active on each penguin this round
+    st.pts = Array.isArray(st.pts) && st.pts.length === 2 ? [Math.max(0, +st.pts[0] | 0), Math.max(0, +st.pts[1] | 0)] : [0, 0];
+    st.fish = Array.isArray(st.fish) && st.fish.length === 2 ? [+st.fish[0] || 0, +st.fish[1] || 0] : [0, 0];
     st.round = +st.round || 1; st.R = +st.R || R_START; st.mid = st.mid || 'ko'; st.n = +st.n || 0;
     if (st.turn !== 0 && st.turn !== 1) st.turn = st.host === 1 ? 1 : 0;
     if (st.res && (!Array.isArray(st.res.init) || !Array.isArray(st.res.L) || !Array.isArray(st.res.fin))) delete st.res;
+    if ((st.oldc === 0 || st.oldc === 1) && (realAims(st, st.oldc) || realSq(st, st.oldc))) delete st.oldc;   // they updated: a real new-format move
+    if (st.oldc !== 0 && st.oldc !== 1) delete st.oldc;
+    if (V3(st) && !c) cfgSync(st);
     return st;
   }
+  // the seat whose phone runs an older app (-1: none; 2: "the partner", when an overwrite can't say whose)
+  function oldSeat(st) {
+    if (!V3(st)) return -1;
+    if (st.oldc === 0 || st.oldc === 1) return st.oldc;
+    for (let s = 0; s < 2; s++) { const a = st.aims && st.aims['a' + s]; if (a && typeof a.r === 'number' && !realAims(st, s)) return s; }
+    return st.hx ? 2 : -1;
+  }
   // a seat's submitted aims for THIS round ({r, v:[[vx,vy]×4], skip?}), or null
-  function aimsOf(st, seat) { const a = st.aims && st.aims['a' + seat]; return a && a.r === st.round && Array.isArray(a.v) ? a : null; }
+  function aimsOf(st, seat) { const a = st.aims && st.aims[AK(st) + seat]; return a && a.r === st.round && Array.isArray(a.v) ? a : null; }
   const realAims = (st, seat) => { const a = aimsOf(st, seat); return a && !a.skip ? a : null; };
+  // a seat's submitted squad ({v:[type×4], skip?}) during the squad phase, or null
+  function sqOf(st, seat) { const a = st.sqs && st.sqs['a' + seat]; return a && Array.isArray(a.v) && a.v.length === NP ? a : null; }
+  const realSq = (st, seat) => { const a = sqOf(st, seat); return a && !a.skip ? a : null; };
   const aliveCount = (pens, seat) => { let n = 0; for (let k = 0; k < NP; k++) if (pens[seat * NP + k][2]) n++; return n; };
-  function cleanVec(v) {
+  const tyOf = st => st.sq[0].concat(st.sq[1]);
+  const seatOf = i => i < NP ? 0 : 1;
+  // a clamped launch vector; `cap` = the penguin type's max launch (x Classic)
+  function cleanVec(v, cap) {
     if (!Array.isArray(v)) return [0, 0];
     let x = Math.round(+v[0] || 0), y = Math.round(+v[1] || 0);
-    const l2 = x * x + y * y;
-    if (l2 > VMAX * VMAX) { const k = VMAX / Math.sqrt(l2); x = Math.trunc(x * k); y = Math.trunc(y * k); }
+    const lim = cap ? VMAX * cap : VMAX, l2 = x * x + y * y;
+    if (l2 > lim * lim) { const k = lim / Math.sqrt(l2); x = Math.trunc(x * k); y = Math.trunc(y * k); }
     return [x, y];
   }
-  // the 8 launch vectors; penguins without an arrow (or already swimming) stay put
+  // the 8 launch vectors; penguins without an arrow (or already swimming, or anchored) stay put
   function launches(st) {
-    const L = [];
+    const L = [], ty = tyOf(st);
     for (let s = 0; s < 2; s++) {
       const a = aimsOf(st, s);
-      for (let k = 0; k < NP; k++) { const i = s * NP + k; L.push(st.pens[i][2] && a ? cleanVec(a.v[k]) : [0, 0]); }
+      for (let k = 0; k < NP; k++) { const i = s * NP + k; L.push(st.pens[i][2] && a && st.ef[i] !== 4 ? cleanVec(a.v[k], TYPES[ty[i]].cap) : [0, 0]); }
     }
     return L;
   }
+  /* ----- power-ups: 1–2 items per round at SEEDED spots (match id + round): every phone derives the same ones ----- */
+  function roomy(g, x, y, m) {                             // a point with some ice all round it
+    if (!g.in(x, y)) return false;
+    for (let k = 0; k < 72; k += 9) { const u = UV[k]; if (!g.in(x + u[0] * m, y + u[1] * m)) return false; }
+    return true;
+  }
+  // One item sits on the midline (equally near both sides), two are a mirrored pair of the same kind: never unfair to a seat.
+  function spawnItems(mid, round, g, pens) {
+    const rng = seeded(hashStr(mid + ':' + round + ':it')), two = rng() < .5, kind = [1, 1, 2, 2, 3, 3, 4][Math.floor(rng() * 7)], ex = g.ex || g.ext, ey = g.ey || g.ext, out = [];
+    const free = (x, y) => {
+      if (x * x + y * y < 3025) return false;              // the middle stays clear (King of the Hill zone, the fish)
+      for (let i = 0; i < 2 * NP; i++) { const p = pens[i]; if (!p[2]) continue; const dx = p[0] - x, dy = p[1] - y; if (dx * dx + dy * dy < 2500) return false; }
+      return true;
+    };
+    for (let a = 0; a < 220 && !out.length; a++) {
+      const m = a < 80 ? 34 : a < 150 ? 22 : 12;           // prefer open ice; on a nearly gone floe settle for less
+      if (two) { const x = r2((rng() * 2 - 1) * ex), y = r2((rng() * 2 - 1) * ey); if (roomy(g, x, y, m) && roomy(g, -x, -y, m) && free(x, y) && free(-x, -y)) out.push([kind, x, y], [kind, -x, -y]); }
+      else { const x = r2((rng() * 2 - 1) * ex * .95); if (roomy(g, x, 0, m) && free(x, 0)) out.push([kind, x, 0]); }
+    }
+    if (!out.length) {                                     // a very broken floe: scan for any mirrored pair that fits (from a seeded start)
+      const pts = []; for (let x = -ex; x <= ex; x += 20) for (let y = -ey; y <= ey; y += 20) pts.push([x, y]);
+      const off = Math.floor(rng() * pts.length);
+      for (let i = 0; i < pts.length && !out.length; i++) { const q = pts[(off + i) % pts.length]; if (roomy(g, q[0], q[1], 12) && roomy(g, -q[0], -q[1], 12) && free(q[0], q[1]) && free(-q[0], -q[1])) out.push([kind, q[0], q[1]], [kind, -q[0], -q[1]]); }
+    }
+    return out;
+  }
+  const itemsFor = (st, g) => st.pw && st.phase === 'play' ? spawnItems(st.mid, st.round, g, st.pens) : [];
+  /* ----- bodies: per-penguin mass / radius / bounce / friction from its type and power-up (+ the fish in Fish Hockey) ----- */
+  // The fish is a 9th body. Rails bounce it off the rink edge (except in the goal mouths); crossing a goal line is a goal.
+  function rinkHook(ev) {
+    const P = 2 * NP, lo = -HW + PK_R, hi = HW - PK_R, ey = HL - PK_R;
+    return (step, x, y, vx, vy, live) => {
+      if (!live[P]) return;
+      const s2 = vx[P] * vx[P] + vy[P] * vy[P];
+      if (s2 > PK_V * PK_V) { const k = PK_V / Math.sqrt(s2); vx[P] *= k; vy[P] *= k; }
+      if (x[P] >= -GW && x[P] <= GW && (y[P] <= -HL || y[P] >= HL)) { ev.push({ k: 'goal', step, seat: y[P] <= -HL ? 0 : 1, x: x[P], y: y[P] }); live[P] = false; return; }   // seat 0 scores at the far (−y) goal
+      if (x[P] < lo) { x[P] = lo; if (vx[P] < 0) vx[P] = -vx[P] * PK_E; } else if (x[P] > hi) { x[P] = hi; if (vx[P] > 0) vx[P] = -vx[P] * PK_E; }
+      if (x[P] < -GW || x[P] > GW) {
+        if (y[P] < -ey) { y[P] = -ey; if (vy[P] < 0) vy[P] = -vy[P] * PK_E; } else if (y[P] > ey) { y[P] = ey; if (vy[P] > 0) vy[P] = -vy[P] * PK_E; }
+      }
+    };
+  }
+  function makeBd(ty, ef, items, md) {
+    const hk = md === 'hockey', m = [], r = [], e = [], fr = [], fx = [], sh = [];
+    for (let i = 0; i < 2 * NP; i++) {
+      const T = TYPES[ty[i]] || TYPES[0], f = ef[i] | 0;
+      m[i] = f === 1 ? T.m * 2 : T.m; r[i] = T.r; e[i] = f === 3 ? SPR_E : REST; fr[i] = FRIC; fx[i] = f === 4 ? 1 : 0; sh[i] = f === 2 ? 1 : 0;
+    }
+    const bd = { m, r, e, fr, fx, sh, items: items || [], grab: 2 * NP, ev: [] };
+    if (hk) { m[2 * NP] = PK_M; r[2 * NP] = PK_R; e[2 * NP] = PK_E; fr[2 * NP] = PK_F; fx[2 * NP] = 0; sh[2 * NP] = 0; bd.onStep = rinkHook(bd.ev); }
+    return bd;
+  }
   // The slide. ONLY + − × ÷ and √ (all correctly rounded by IEEE-754), fixed order, fixed step:
   // the same inputs give bit-identical output on iOS Safari and Chrome. `geo` is a geoFor() result (or, for old
-  // callers, a bare floe radius); `bd` optionally gives each body its own mass / radius / restitution
-  // (default: every body is a Classic penguin) and an onStep hook for later items / a puck.
+  // callers, a bare floe radius); `bd` optionally gives each body its own mass / radius / restitution / friction
+  // (default: every body is a Classic penguin), anchors (`fx`: immovable), one-shot shields (`sh`), items on the ice
+  // (`items`: [[kind,x,y]], grabbed by bodies 0..grab-1) and an onStep hook (the fish's rails and goals).
   function simulate(init, L, geo, bd) {
     if (typeof geo === 'number') geo = geoFor('floe', 0, '', geo);
-    const n = init.length, x = [], y = [], vx = [], vy = [], live = [], m = [], rad = [], rest = [];
+    const n = init.length, x = [], y = [], vx = [], vy = [], live = [], m = [], rad = [], rest = [], fr = [];
+    const fx = bd && bd.fx, sh = bd && bd.sh ? bd.sh.slice() : null, items = bd && bd.items && bd.items.length ? bd.items : null, ng = bd && bd.grab || 0;
     for (let i = 0; i < n; i++) {
       x[i] = +init[i][0]; y[i] = +init[i][1]; live[i] = !!init[i][2];
-      vx[i] = live[i] ? +L[i][0] : 0; vy[i] = live[i] ? +L[i][1] : 0;
-      m[i] = bd && bd.m ? bd.m[i] : 1; rad[i] = bd && bd.r ? bd.r[i] : PR; rest[i] = bd && bd.e ? bd.e[i] : REST;
+      vx[i] = live[i] && !(fx && fx[i]) ? +L[i][0] : 0; vy[i] = live[i] && !(fx && fx[i]) ? +L[i][1] : 0;
+      m[i] = bd && bd.m ? bd.m[i] : 1; rad[i] = bd && bd.r ? bd.r[i] : PR; rest[i] = bd && bd.e ? bd.e[i] : REST; fr[i] = bd && bd.fr ? bd.fr[i] : FRIC;
     }
-    const frames = [], hits = [], outs = [], bumps = [], onIce = geo.in, walls = geo.walls, cur = geo.cur;
+    const frames = [], hits = [], outs = [], bumps = [], got = [], shields = [], onIce = geo.in, walls = geo.walls, cur = geo.cur;
+    const taken = items ? items.map(() => 0) : null, lx = x.slice(), ly = y.slice();
     const snap = () => { const f = new Array(n * 2); for (let i = 0; i < n; i++) { f[i * 2] = x[i]; f[i * 2 + 1] = y[i]; } frames.push(f); };
     snap();
     let step = 0;
@@ -307,11 +486,11 @@
       let wx = 0, wy = 0;
       if (cur) { const f = step < CUR_S1 ? 1 : step < CUR_S2 ? (CUR_S2 - step) / (CUR_S2 - CUR_S1) : 0; wx = cur[0] * f; wy = cur[1] * f; }
       for (let i = 0; i < n; i++) {
-        if (!live[i]) continue;
+        if (!live[i] || (fx && fx[i])) continue;
         if (cur) {                                         // friction acts on the speed relative to the water
           const rx = vx[i] - wx, ry = vy[i] - wy, s2 = rx * rx + ry * ry;
           if (s2 > 0) {
-            const sp = Math.sqrt(s2), ns = sp - FRIC * DT;
+            const sp = Math.sqrt(s2), ns = sp - fr[i] * DT;
             if (ns <= 0) { vx[i] = wx; vy[i] = wy; } else { const k = ns / sp; vx[i] = wx + rx * k; vy[i] = wy + ry * k; }
           }
           if (vx[i] !== 0 || vy[i] !== 0) { x[i] += vx[i] * DT; y[i] += vy[i] * DT; }
@@ -319,7 +498,7 @@
         }
         const s2 = vx[i] * vx[i] + vy[i] * vy[i];
         if (s2 > 0) {
-          const sp = Math.sqrt(s2), ns = sp - FRIC * DT;
+          const sp = Math.sqrt(s2), ns = sp - fr[i] * DT;
           if (ns <= 0) { vx[i] = 0; vy[i] = 0; } else { const k = ns / sp; vx[i] *= k; vy[i] *= k; }
           x[i] += vx[i] * DT; y[i] += vy[i] * DT;
         }
@@ -329,19 +508,26 @@
         for (let j = i + 1; j < n; j++) {
           if (!live[j]) continue;
           const dx = x[j] - x[i], dy = y[j] - y[i], d2 = dx * dx + dy * dy, D = rad[i] + rad[j];
-          if (d2 >= D * D || d2 === 0) continue;
-          const d = Math.sqrt(d2), nx = dx / d, ny = dy / d, ov = D - d, mi = m[i], mj = m[j], wi = mj / (mi + mj), wj = mi / (mi + mj);
+          if (d2 >= D * D) continue;
+          const fi = fx && fx[i], fj = fx && fx[j];
+          if (fi && fj) continue;                          // two anchors never move
+          const d = d2 === 0 ? 0 : Math.sqrt(d2), nx = d2 === 0 ? 0 : dx / d, ny = d2 === 0 ? 1 : dy / d, ov = D - d, mi = m[i], mj = m[j];   // exactly on top of each other: part them along y
+          const wi = fi ? 0 : fj ? 1 : mj / (mi + mj), wj = fj ? 0 : fi ? 1 : mi / (mi + mj);
           x[i] -= nx * (ov * wi); y[i] -= ny * (ov * wi); x[j] += nx * (ov * wj); y[j] += ny * (ov * wj);   // the heavier one gives way less
           const vr = (vx[i] - vx[j]) * nx + (vy[i] - vy[j]) * ny;
           if (vr > 0) {
-            const e = rest[i] < rest[j] ? rest[i] : rest[j], J = (1 + e) / (1 / mi + 1 / mj) * vr, Ji = J / mi, Jj = J / mj;
+            const hi = rest[i] > REST || rest[j] > REST;   // a Spring (or the fish) makes the hit livelier; otherwise the less bouncy one rules
+            const e = hi ? (rest[i] > rest[j] ? rest[i] : rest[j]) : (rest[i] < rest[j] ? rest[i] : rest[j]);
+            let Ji, Jj;
+            if (fi) { Ji = 0; Jj = (1 + e) * vr; } else if (fj) { Ji = (1 + e) * vr; Jj = 0; }
+            else { const J = (1 + e) / (1 / mi + 1 / mj) * vr; Ji = J / mi; Jj = J / mj; }
             vx[i] -= Ji * nx; vy[i] -= Ji * ny; vx[j] += Jj * nx; vy[j] += Jj * ny;
             if (vr > 40) hits.push({ step, i, j, x: (x[i] + x[j]) / 2, y: (y[i] + y[j]) / 2, s: vr });
           }
         }
       }
       if (walls) for (let i = 0; i < n; i++) {             // bumpers: one-sided cushions (the flat) and round posts (the ends)
-        if (!live[i]) continue;
+        if (!live[i] || (fx && fx[i])) continue;           // an anchor doesn't budge
         const ri = rad[i];
         for (let w = 0; w < walls.length; w++) {
           const W = walls[w], ax = W[0], ay = W[1], ex = W[2], ey = W[3], t = ((x[i] - ax) * ex + (y[i] - ay) * ey) / W[4];
@@ -363,11 +549,29 @@
           }
         }
       }
-      if (bd && bd.onStep) bd.onStep(step, x, y, vx, vy, live);   // HOOK: items (U2) / puck (U4) act here
+      if (items) for (let k = 0; k < items.length; k++) {  // a penguin that slides over an item grabs it (the first to touch it wins)
+        if (taken[k]) continue;
+        for (let i = 0; i < ng; i++) {
+          if (!live[i]) continue;
+          const dx = x[i] - items[k][1], dy = y[i] - items[k][2], D = rad[i] + IR;
+          if (dx * dx + dy * dy < D * D) { taken[k] = 1; got.push({ step, i, k }); break; }
+        }
+      }
+      if (bd && bd.onStep) bd.onStep(step, x, y, vx, vy, live);   // HOOK: the fish's rails and goals
       let moving = false;
       for (let i = 0; i < n; i++) {
         if (!live[i]) continue;
-        if (!onIce(x[i], y[i])) { live[i] = false; outs.push({ step, i, x: x[i], y: y[i], vx: vx[i], vy: vy[i] }); continue; }
+        if (!onIce(x[i], y[i])) {
+          if (sh && sh[i]) {                               // a Shield: back to where it was on the ice, bounced once
+            sh[i] = 0; shields.push({ step, i, x: x[i], y: y[i] });
+            x[i] = lx[i]; y[i] = ly[i];
+            let bx = -vx[i] * .7, by = -vy[i] * .7;
+            if (bx === 0 && by === 0) { const d = Math.sqrt(x[i] * x[i] + y[i] * y[i]) || 1; bx = -x[i] / d * 160; by = -y[i] / d * 160; }
+            vx[i] = bx; vy[i] = by; moving = true; continue;
+          }
+          live[i] = false; outs.push({ step, i, x: x[i], y: y[i], vx: vx[i], vy: vy[i] }); continue;
+        }
+        lx[i] = x[i]; ly[i] = y[i];
         if (vx[i] !== 0 || vy[i] !== 0) moving = true;
       }
       if ((step + 1) % SUB === 0) snap();
@@ -376,34 +580,135 @@
     if (step % SUB !== 0) snap();
     const fin = [];
     for (let i = 0; i < n; i++) fin.push([r2(x[i]), r2(y[i]), live[i] ? 1 : 0]);
-    return { fin, frames, hits, outs, bumps, steps: step };
+    return { fin, frames, hits, outs, bumps, got, shields, ev: bd && bd.ev || [], steps: step };
   }
+  const RS_OFF = [[0, 0], [0, 40], [0, 80], [46, 40], [-46, 40], [46, 0], [-46, 0], [0, -40]];
+  // the nearest spot on ice `g` for body i that clears every other standing penguin (rings of 8, every 15 degrees; + and x only)
+  function safeSpot(g, x, y, pens, i, rads) {
+    for (let d = 8; d <= 480; d += 8) for (let k = 0; k < 72; k += 3) {
+      const px = r2(x + UV[k][0] * d), py = r2(y + UV[k][1] * d);
+      if (!roomy(g, px, py, 10)) continue;
+      let ok = true;
+      for (let j = 0; j < 2 * NP && ok; j++) { if (j === i || !pens[j][2]) continue; const dx = pens[j][0] - px, dy = pens[j][1] - py, D = rads[i] + rads[j] + 2; if (dx * dx + dy * dy < D * D) ok = false; }
+      if (ok) return [px, py];
+    }
+    return null;
+  }
+  // King of the Hill / Fish Hockey: a fallen penguin is back on its start line next round (nudged if somebody is standing there)
+  function respawn(pens, g, rads) {
+    rads = rads || Z8().map(() => PR);
+    const sl = slotsFor(g, Math.max.apply(null, rads)), out = pens.map(p => p.slice()), list = [];
+    for (let i = 0; i < 2 * NP; i++) {
+      if (out[i][2]) continue;
+      const sg = i < NP ? 1 : -1, q = sl[i % NP];
+      let pos = [r2(sg * q[0]), r2(sg * q[1])];
+      for (let t = 0; t < RS_OFF.length; t++) {
+        const x = r2(sg * (q[0] + RS_OFF[t][0])), y = r2(sg * (q[1] + RS_OFF[t][1]));
+        let ok = roomy(g, x, y, 16);
+        for (let j = 0; j < 2 * NP && ok; j++) if (out[j][2]) { const dx = out[j][0] - x, dy = out[j][1] - y, D = rads[i] + rads[j] + 8; if (dx * dx + dy * dy < D * D) ok = false; }   // 52 apart for two Classics
+        if (ok) { pos = [x, y]; break; }
+      }
+      out[i] = [pos[0], pos[1], 1]; list.push([i, pos[0], pos[1]]);
+    }
+    return { pens: out, list };
+  }
+  const FISH_OFF = [[0, 0], [40, 0], [-40, 0], [0, 40], [0, -40], [80, 0], [-80, 0], [40, 40], [-40, -40], [40, -40], [-40, 40]];
+  function fishSpot(pens, ty) {
+    for (let t = 0; t < FISH_OFF.length; t++) {
+      const x = FISH_OFF[t][0], y = FISH_OFF[t][1]; let ok = true;
+      for (let j = 0; j < 2 * NP && ok; j++) if (pens[j][2]) { const dx = pens[j][0] - x, dy = pens[j][1] - y, D = TYPES[ty[j]].r + PK_R + 2; if (dx * dx + dy * dy < D * D) ok = false; }
+      if (ok) return [x, y];
+    }
+    return [0, 0];
+  }
+  const inZone = p => p[0] * p[0] + p[1] * p[1] <= ZR * ZR;
   // Both aims in → the whole round, resolved. Returns { next, winner? }.
   function resolveRound(st0, by) {
-    const st = norm(JSON.parse(JSON.stringify(st0)));
-    const g0 = geoOf(st.arena, st, 0), L = launches(st), sim = simulate(st.pens, L, g0), R1 = nextR(st.R);
-    const nid = arenaAfter(st), g1 = geoOf(nid, st, 1), swap = nid !== st.arena;
-    // the part of the ice that breaks off after the slide takes anyone standing on it too (roulette: the whole arena is swapped instead)
-    const fin = swap ? sim.fin : sim.fin.map(p => [p[0], p[1], p[2] && g1.in(p[0], p[1]) ? 1 : 0]);
+    const st = norm(JSON.parse(JSON.stringify(st0))), md = st.mode, hk = md === 'hockey', kh = md === 'koth', stat = md !== 'sumo';
+    const g0 = geoOf(st.arena, st, 0), L = launches(st), items = itemsFor(st, g0), ty = tyOf(st);
+    const init = hk ? st.pens.concat([[st.fish[0], st.fish[1], 1]]) : st.pens;
+    const L9 = hk ? L.concat([[0, 0]]) : L;
+    const sim = simulate(init, L9, g0, makeBd(ty, st.ef, items, md));
+    const R1 = stat ? st.R : nextR(st.R);
+    const nid = arenaAfter(st), g1 = stat ? g0 : geoOf(nid, st, 1), swap = nid !== st.arena;
+    const used = {}; sim.shields.forEach(e => { used[e.i] = 1; });
+    // the part of the ice that breaks off after the slide takes anyone standing on it too (roulette: the whole arena is swapped
+    // instead) - except a penguin with an unused Shield: it hops onto the nearest safe ice and the shield is spent
+    const saved = [];
+    let fin = sim.fin;
+    if (!swap && !stat) {
+      const rads = ty.map(t => TYPES[t].r);
+      fin = sim.fin.map(p => p.slice());
+      for (let i = 0; i < 2 * NP; i++) {
+        const p = fin[i]; if (!p[2] || g1.in(p[0], p[1])) continue;
+        const q = st.ef[i] === 2 && !used[i] ? safeSpot(g1, p[0], p[1], fin, i, rads) : null;
+        if (q) { fin[i] = [q[0], q[1], 1]; used[i] = 1; saved.push([i, q[0], q[1]]); } else fin[i] = [p[0], p[1], 0];
+      }
+    }
+    const pensFin = fin.slice(0, 2 * NP);
     const s = JSON.parse(JSON.stringify(st));
-    s.res = { id: st.mid + ':' + st.round, r: st.round, by: by === 1 ? 1 : 0, init: st.pens, L, fin, R0: st.R, R1, ar: st.arena };
-    s.pens = fin; s.R = R1; s.aims = {}; s.n = st.n + 1;
+    s.res = { id: st.mid + ':' + st.round, r: st.round, by: by === 1 ? 1 : 0, init, L: L9, fin, R0: st.R, R1, ar: st.arena };
+    if (stat) s.res.md = md;                             // the optional extras below are only written when they matter: a classic Sumo round keeps the old shape
+    if (ty.some(t => t)) s.res.ty = ty;
+    if (st.ef.some(v => v)) s.res.ef = st.ef;
+    if (items.length) { s.res.it = items; if (sim.got.length) s.res.gt = sim.got.map(e => [e.i, e.k]); }
+    if (sim.shields.length) s.res.sh = sim.shields.map(e => e.i);
+    if (saved.length) s.res.sv = saved;
+    // power-ups grabbed this round work NEXT round; an unused shield waits for its fall; the fallen carry nothing (Sumo)
+    const ef2 = Z8();
+    sim.got.forEach(e => { ef2[e.i] = items[e.k][0]; });
+    for (let i = 0; i < 2 * NP; i++) { if (!ef2[i] && st.ef[i] === 2 && !used[i]) ef2[i] = 2; if (!stat && !pensFin[i][2]) ef2[i] = 0; }
+    s.ef = ef2;
+    const left = [aliveCount(pensFin, 0), aliveCount(pensFin, 1)];
+    let winner, goal = null;
+    if (!stat) {
+      s.pens = fin;
+      if (!left[0] && !left[1]) winner = 'draw';
+      else if (!left[0]) winner = 1;
+      else if (!left[1]) winner = 0;
+      else if (st.round >= MAX_ROUNDS) winner = left[0] === left[1] ? 'draw' : (left[0] > left[1] ? 0 : 1);
+    } else {
+      s.pts = st.pts.slice();
+      if (kh) {                                          // each penguin of yours standing in the zone when everything has stopped scores 1
+        const pt = [0, 0];
+        for (let i = 0; i < 2 * NP; i++) if (pensFin[i][2] && inZone(pensFin[i])) pt[i < NP ? 0 : 1]++;
+        s.pts[0] += pt[0]; s.pts[1] += pt[1]; s.res.pt = pt;
+      } else {
+        goal = sim.ev.find(e => e.k === 'goal') || null;
+        if (goal) { s.pts[goal.seat]++; s.res.gl = goal.seat; const q = fishSpot(pensFin, ty); fin[2 * NP] = [q[0], q[1], 1]; s.fish = q; }   // the fish is back in the middle (nudged if someone stands there)
+        else s.fish = [fin[2 * NP][0], fin[2 * NP][1]];
+      }
+      const rp = respawn(pensFin, g0, ty.map(t => TYPES[t].r));
+      s.pens = rp.pens; if (rp.list.length) s.res.rs = rp.list;
+      const a = s.pts[0], b = s.pts[1], cmp = a === b ? 'draw' : a > b ? 0 : 1;
+      if (kh) { if (st.round >= MAX_ROUNDS) winner = cmp; }
+      else if (goal && s.pts[goal.seat] >= GOAL_TO) winner = goal.seat;
+      else if (st.round >= HK_ROUNDS) winner = cmp !== 'draw' ? cmp : s.fish[1] < -12 ? 0 : s.fish[1] > 12 ? 1 : 'draw';   // level: the fish nearer the partner's goal wins
+    }
+    s.R = R1; s.aims = {}; s.n = st.n + 1;
     s.turn = st.turn === 1 ? 0 : 1;                    // always changes → the turn clock restarts for the new round
-    const left = [aliveCount(fin, 0), aliveCount(fin, 1)];
-    let winner;
-    if (!left[0] && !left[1]) winner = 'draw';
-    else if (!left[0]) winner = 1;
-    else if (!left[1]) winner = 0;
-    else if (st.round >= MAX_ROUNDS) winner = left[0] === left[1] ? 'draw' : (left[0] > left[1] ? 0 : 1);
     if (winner === undefined) {
       s.round = st.round + 1;
       if (swap) {                                      // survivors regroup on the next arena's start slots (same penguin → same slot)
-        const sl = slotsFor(g1);
+        const sl = slotsFor(g1, Math.max.apply(null, ty.map(t => TYPES[t].r)));
         s.arena = nid; s.pens = fin.map((p, i) => { const k = i % NP, q = sl[k]; return p[2] ? [i < NP ? q[0] : -q[0], i < NP ? q[1] : -q[1], 1] : p; });
         s.res.rg = s.pens; s.res.na = nid;
       }
-    } else s.over = { w: winner, left };
-    return { next: s, winner };
+    } else s.over = stat ? { w: winner, left, sc: s.pts.slice() } : { w: winner, left };
+    return { next: cfgSync(s), winner };
+  }
+  /* ----- squad pick (before round 1): each player locks 4 types in secret; the resolver reveals both together ----- */
+  function beginPlay(st, sq) {
+    st.phase = 'play'; st.pens = startPens(st.arena); st.aims = {}; st.sqs = {}; st.round = 1; st.R = R_START;
+    st.pts = [0, 0]; st.ef = Z8(); st.fish = [0, 0];
+    if (sq) st.sq = [cleanSq(sq[0]), cleanSq(sq[1])];
+    return cfgSync(st);
+  }
+  function resolveSquad(st0, by) {
+    const st = norm(JSON.parse(JSON.stringify(st0))), v = seat => { const a = realSq(st, seat); return a ? cleanSq(a.v) : [0, 0, 0, 0]; };   // a timed-out picker gets 4 Classic
+    const s = beginPlay(JSON.parse(JSON.stringify(st)), [v(0), v(1)]);
+    s.n = st.n + 1; s.turn = st.turn === 1 ? 0 : 1; s.sqby = by === 1 ? 1 : 0;
+    return { next: s };
   }
 
   /* ---------------- my submitted aims: memory + localStorage (self-healing) ---------------- */
@@ -430,9 +735,9 @@
     raf: 0, tmr: 0, last: 0, lastActive: 0, tick: 0, speed: 1, hold: false,
     cam: { x: 0, y: 14, z: 1 }, sx: 0, sy: 0, shake: 0, flash: 0,
     anim: null, done: doneLoad(), myRes: {}, fbKey: null, resCommits: 0,
-    draft: { key: '', v: [null, null, null, null] }, sel: null, drag: null,
+    draft: { key: '', v: [null, null, null, null] }, sel: null, drag: null, sqd: { key: '', v: [0, 0, 0, 0], sel: 0 }, popSlot: -1,
     parts: [], hats: {}, banner: null, pv: [], snow: [], shim: [], cracks: [], rimPh: [0, 0, 0],
-    layers: null, layerKey: '', vig: null, ui: null,
+    layers: null, layerKey: '', vig: null, ui: null, zoneFlash: 0, frameTypes: [], items: { key: '', list: [] }, fishAng: 0,
     sw: null, pre: { id: null }, prePos: null, padHit: {}, starting: '',
     arrows: { own: 0, foePlanning: 0, foeReveal: 0 }, mismatch: 0,
     calm: !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches),
@@ -442,7 +747,7 @@
 function resetScene(st) {
     S.mid = st.mid; S.anim = null; S.parts = []; S.hats = {}; S.banner = null; S.sel = null; S.drag = null; S.myRes = {}; S.fbKey = null;
     S.draft = { key: '', v: [null, null, null, null] }; S.shake = 0; S.flash = 0; S.layerKey = '';
-    S.sw = null; S.pre = { id: null }; S.prePos = null; S.padHit = {}; S.starting = ''; S.lastSay = ''; S.focusSel = '';
+    S.sw = null; S.pre = { id: null }; S.prePos = null; S.padHit = {}; S.starting = ''; S.lastSay = ''; S.focusSel = ''; S.zoneFlash = 0; S.sqd = { key: '', v: [0, 0, 0, 0], sel: 0 }; S.items = { key: '', list: [] };
     const r = seeded(hashStr(st.mid));
     S.rimPh = [r() * 6.28, r() * 6.28, r() * 6.28];
     S.pv = []; for (let i = 0; i < 2 * NP; i++) S.pv.push({ ph: r() * 6.28, blink: 0, nextBlink: 800 + r() * 3000, look: 0, lookT: 0, dizzy: 0, sq: 0, hop: 0 });
@@ -472,7 +777,7 @@ function resetScene(st) {
   }
   // a dropped beanie bobs where its owner went in, nudged out into open water (never floating over ice)
   function addHat(i, x, y, old) {
-    if (S.hats[i] || !S.st || S.st.roulette || S.st.phase === 'setup') return;
+    if (S.hats[i] || !S.st || S.st.roulette || S.st.phase === 'setup' || S.st.mode !== 'sumo') return;   // the fallen respawn in the other modes: no hats
     const g = curGeo(), open = (a, b) => { let m = 60; for (let k = 0; k < 12; k++) { const u = UV[k * 6]; for (let d = 6; d < m; d += 6) if (g.in(a + u[0] * d, b + u[1] * d)) { m = d; break; } } return m; };
     let px = x, py = y;
     for (let n = 0; n < 12 && (g.in(px, py) || open(px, py) < 26); n++) {
@@ -509,7 +814,7 @@ function resetScene(st) {
     S.cv.width = W; S.cv.height = H; S.layerKey = ''; S.vig = null;
     draw();                                               // resizing wipes the bitmap — repaint right away
   }
-  const busy = () => !!(S.anim || S.drag || S.parts.length || S.shake > .2 || S.banner || S.sw || Object.keys(S.padHit).length);
+  const busy = () => !!(S.anim || S.drag || S.parts.length || S.shake > .2 || S.banner || S.sw || S.zoneFlash > .03 || Object.keys(S.padHit).length);
   const cycling = () => !!(S.st && S.st.phase === 'setup' && S.st.arena === 'surprise' && !S.calm);   // Surprise preview rotates slowly
   function kick() { S.lastActive = performance.now(); ensureLoop(); }
   function ensureLoop() {
@@ -532,10 +837,16 @@ function resetScene(st) {
     else S.last = 0;                                      // nothing moves: idle until a touch / a new state
   }
   function canPlan() {
-    const c = S.ctx; if (!c || c.status !== 'active' || S.anim || !S.st || S.st.phase === 'setup') return false;
+    const c = S.ctx; if (!c || c.status !== 'active' || S.anim || !S.st || S.st.phase !== 'play') return false;
     return !submitted(S.st, c.me);
   }
-  function submitted(st, me) { return !!(aimsOf(st, me) || memGet(memKey(st.mid, st.round, me))); }
+  // the squad phase uses the same machinery as a round of aims: a hidden submission per seat, banked in memory + localStorage
+  const rkOf = st => st.phase === 'squad' ? st.mid + ':sq' : st.mid + ':' + st.round;
+  const myKey = (st, me) => st.phase === 'squad' ? memKey(st.mid, 'sq', me) : memKey(st.mid, st.round, me);
+  const subOf = (st, seat) => st.phase === 'squad' ? sqOf(st, seat) : aimsOf(st, seat);
+  const realSub = (st, seat) => st.phase === 'squad' ? realSq(st, seat) : realAims(st, seat);
+  function submitted(st, me) { return !!(subOf(st, me) || memGet(myKey(st, me))); }
+  const capOfPen = (st, i) => TYPES[tyOf(st)[i]].cap;
   function draftFor(st) {
     const key = st.mid + ':' + st.round;
     if (S.draft.key !== key) S.draft = { key, v: [null, null, null, null] };
@@ -554,7 +865,7 @@ function resetScene(st) {
   function pickPen(p) {
     const st = S.st, me = S.ctx.me; let best = -1, bd = 34 * 34;
     for (let k = 0; k < NP; k++) {
-      const i = me * NP + k; if (!st.pens[i][2]) continue;
+      const i = me * NP + k; if (!st.pens[i][2] || st.ef[i] === 4) continue;
       const q = P(st.pens[i][0], st.pens[i][1]), dx = p.x - q.X, dy = p.y - (q.Y - 17 * q.s), d = dx * dx + dy * dy;
       if (d < bd) { bd = d; best = k; }
     }
@@ -578,8 +889,8 @@ function resetScene(st) {
     d.moved = true;
     const z = S.cam.z;
     let ax = S.flip * dx / (SC * z), ay = S.flip * dy / (SC * TILT * z);
-    const len = Math.hypot(ax, ay);
-    if (len > MAXA) { ax *= MAXA / len; ay *= MAXA / len; }
+    const len = Math.hypot(ax, ay), lim = MAXA * capOfPen(S.st, S.ctx.me * NP + d.k);
+    if (len > lim) { ax *= lim / len; ay *= lim / len; }
     draftFor(S.st)[d.k] = len < MINA ? null : [ax, ay];
     S.lastActive = performance.now();
     updateUI(); e.preventDefault();
@@ -591,7 +902,7 @@ function resetScene(st) {
     updateUI(); kick();
   }
   function selectPen(k) {
-    if (!canPlan()) return;
+    if (!canPlan() || S.st.ef[S.ctx.me * NP + k] === 4) return;
     S.sel = S.sel === k ? null : k;
     try { S.ctx.sound.tap(); } catch (x) {}
     updateUI(); kick();
@@ -604,11 +915,41 @@ function resetScene(st) {
     updateUI(); kick();
   }
 
+  /* ---------------- squad pick: my draft (mine only: never anyone else's), lock-in ---------------- */
+  function sqDraft(st) {
+    if (S.sqd.key !== st.mid) S.sqd = { key: st.mid, v: [0, 0, 0, 0], sel: 0 };
+    return S.sqd;
+  }
+  function pickType(t) {                                 // assign a type to the selected slot, then move on to the next slot
+    const c = S.ctx, st = S.st; if (!c || !st || st.phase !== 'squad' || submitted(st, c.me) || c.status !== 'active') return;
+    const d = sqDraft(st); d.v[d.sel] = t; S.popSlot = d.sel; d.sel = (d.sel + 1) % NP;
+    try { c.sound.tap(); } catch (e) {}
+    rerender(); S.popSlot = -1;
+  }
+  function pickSlot(k) {
+    const c = S.ctx, st = S.st; if (!c || !st || st.phase !== 'squad' || submitted(st, c.me)) return;
+    sqDraft(st).sel = k; try { c.sound.tap(); } catch (e) {}
+    rerender();
+  }
+  function randomSquad() {
+    const c = S.ctx, st = S.st; if (!c || !st || st.phase !== 'squad' || submitted(st, c.me)) return;
+    const d = sqDraft(st); d.v = d.v.map(() => Math.floor(Math.random() * TYPES.length)); try { c.sound.tap(); } catch (e) {}
+    S.popSlot = 9; rerender(); S.popSlot = -1;
+  }
+  function lockSquad(v) {
+    const c = S.ctx; if (!c || c.status !== 'active' || !S.st || S.st.phase !== 'squad' || submitted(S.st, c.me)) return;
+    const st = norm(c.clone(c.state)), me = c.me, d = sqDraft(st);
+    if (v) d.v = cleanSq(v);
+    memSet(myKey(st, me), cleanSq(d.v));                 // banked FIRST — a write race can't lose it now
+    try { c.sound.place(); } catch (e) {}
+    if (!sync('ready')) rerender();
+  }
+
   /* ---------------- sync: submit, self-heal, resolve (exactly one phone) ---------------- */
   function ready() {
     const c = S.ctx; if (!canPlan()) return;
     const st = norm(c.clone(c.state)), me = c.me, v = draftFor(st);
-    const aims = v.map((d, k) => st.pens[me * NP + k][2] && d ? [Math.round(d[0] / MAXA * VMAX), Math.round(d[1] / MAXA * VMAX)] : [0, 0]);
+    const aims = v.map((d, k) => st.pens[me * NP + k][2] && st.ef[me * NP + k] !== 4 && d ? [Math.round(d[0] / MAXA * VMAX), Math.round(d[1] / MAXA * VMAX)] : [0, 0]);
     memSet(memKey(st.mid, st.round, me), aims);           // banked FIRST — a write race can't lose it now
     S.sel = null;
     try { c.sound.place(); } catch (e) {}
@@ -617,7 +958,8 @@ function resetScene(st) {
   // Returns true if it committed. Deferred out of render (never nested in a paint).
   function sync(reason) {
     const c = S.ctx; if (!c || c.status !== 'active') return false;
-    const st = norm(c.clone(c.state)), me = c.me, rk = st.mid + ':' + st.round;
+    const st = norm(c.clone(c.state)), me = c.me, rk = rkOf(st), sqp = st.phase === 'squad';
+    if (st.phase === 'setup') return false;
     // I already resolved this round but the shared state is behind it. Usually that's just an older
     // snapshot still arriving, so give my write a moment to land; if it really was overwritten,
     // re-send the SAME outcome (never a second, different resolution).
@@ -627,27 +969,31 @@ function resetScene(st) {
       if (wait > 0) { if (!mine.chk) mine.chk = setTimeout(() => { mine.chk = 0; sync(); }, wait + 30); return false; }
       mine.t = Date.now(); commitRes(c, mine); return true;
     }
-    const m = memGet(memKey(st.mid, st.round, me));
+    const m = memGet(myKey(st, me));
     let changed = false;
-    if (m && !realAims(st, me)) { st.aims['a' + me] = { r: st.round, v: m }; changed = true; }
-    const both = !!(aimsOf(st, 0) && aimsOf(st, 1));
+    if (m && !realSub(st, me)) { if (sqp) st.sqs['a' + me] = { v: m }; else st.aims[AK(st) + me] = { r: st.round, v: m }; changed = true; }
+    if (oldSeat(st) >= 0) {                                // an older app is in this match: bank my move, never resolve
+      if (changed) { c.commit(seal(st)); return true; }
+      return false;
+    }
+    const both = !!(subOf(st, 0) && subOf(st, 1));
     if (both && (me === 0 || reason === 'fallback')) {
-      const out = resolveRound(st, me);
+      const out = sqp ? resolveSquad(st, me) : resolveRound(st, me);
       out.t = Date.now(); S.myRes[rk] = out;
       commitRes(c, out);                                  // commit FIRST — the replay is decoration
       return true;
     }
     if (both) armFallback(rk);
     if (changed) {
-      if (!aimsOf(st, 1 - me)) st.turn = 1 - me;          // the clock follows whoever is still aiming
-      c.commit(st);
+      if (!subOf(st, 1 - me)) st.turn = 1 - me;           // the clock follows whoever is still aiming (or picking)
+      c.commit(seal(st));
       return true;
     }
     return false;
   }
   function commitRes(c, out) {
     S.resCommits++;
-    const next = JSON.parse(JSON.stringify(out.next));
+    const next = seal(JSON.parse(JSON.stringify(out.next)));
     if (out.winner === undefined) c.commit(next); else c.commit(next, out.winner);
   }
   // seat 1 only resolves if seat 0's phone hasn't within the grace (asleep, offline, backgrounded)
@@ -658,44 +1004,62 @@ function resetScene(st) {
       if (S.fbKey === rk) S.fbKey = null;
       const c = S.ctx; if (!c || c.status !== 'active') return;
       const cur = norm(c.clone(c.state));
-      if (cur.mid + ':' + cur.round === rk && aimsOf(cur, 0) && aimsOf(cur, 1)) sync('fallback');
+      if (rkOf(cur) === rk && subOf(cur, 0) && subOf(cur, 1) && oldSeat(cur) < 0) sync('fallback');
     }, FALLBACK_MS);
   }
   function scheduleSync(st, ctx) {
     if (ctx.status !== 'active') return;
-    const me = ctx.me, rk = st.mid + ':' + st.round;
-    const m = memGet(memKey(st.mid, st.round, me));
-    if (S.myRes[rk] || (m && !realAims(st, me)) || (aimsOf(st, 0) && aimsOf(st, 1))) setTimeout(() => sync(), 0);
+    if (st.phase === 'setup') return;
+    const me = ctx.me, rk = rkOf(st);
+    const m = memGet(myKey(st, me));
+    if (S.myRes[rk] || (m && !realSub(st, me)) || (subOf(st, 0) && subOf(st, 1) && oldSeat(st) < 0)) setTimeout(() => sync(), 0);
   }
 
   /* ---------------- replay a committed resolution ---------------- */
   function maybeReplay(st) {
     const res = st.res;
     if (!res || !res.id || S.done.has(res.id) || S.anim) return;
-    if (res.init.length !== 2 * NP || res.L.length !== 2 * NP || res.fin.length !== 2 * NP) { doneAdd(res.id); return; }
+    const md = MODE_IDS.indexOf(res.md) >= 0 ? res.md : 'sumo', hk = md === 'hockey', stat = md !== 'sumo', nb = 2 * NP + (hk ? 1 : 0);
+    if (res.init.length !== nb || res.L.length !== nb || res.fin.length !== nb) { doneAdd(res.id); return; }
     // the arena is a pure function of (id, round, match): replay from the same ice the resolver slid on
-    const ar = BUILD[res.ar] ? res.ar : 'floe', mid = res.id.slice(0, res.id.lastIndexOf(':')), lv = (+res.r || 1) - 1;
-    const geoA = geoFor(ar, lv, mid, res.R0), swap = !!(res.rg && BUILD[res.na] && res.na !== ar);
-    const geoB = geoFor(swap ? res.na : ar, lv + 1, mid, res.R1);
-    const sim = simulate(res.init, res.L, geoA);
+    const ar = BUILD[res.ar] ? res.ar : 'floe', mid = res.id.slice(0, res.id.lastIndexOf(':')), rn = +res.r || 1;
+    const geoA = geoAt(md, ar, rn, mid, res.R0), swap = !stat && !!(res.rg && BUILD[res.na] && res.na !== ar);
+    const geoB = stat ? geoA : geoFor(swap ? res.na : ar, rn, mid, res.R1);
+    // the round's types / power-ups / items travel with the result (absent = Classic, none: old saves replay as before)
+    const ty = Array.isArray(res.ty) && res.ty.length === 2 * NP ? res.ty.map(t => t | 0) : Z8(), ef = Array.isArray(res.ef) && res.ef.length === 2 * NP ? res.ef.map(t => t | 0) : Z8();
+    const items = Array.isArray(res.it) ? res.it : [];
+    const sim = simulate(res.init, res.L, geoA, makeBd(ty, ef, items, md));
     // determinism check (the snap below makes the committed result authoritative either way)
     let mis = 0;
-    sim.fin.forEach((p, i) => { const f = res.fin[i]; if (Math.abs(p[0] - f[0]) > .01 || Math.abs(p[1] - f[1]) > .01 || (p[2] && !f[2] && (swap || geoB.in(p[0], p[1])))) mis++; });
+    const sv = Array.isArray(res.sv) ? res.sv.filter(q => Array.isArray(q) && q[0] >= 0 && q[0] < 2 * NP) : [], svI = new Set(sv.map(q => q[0]));
+    sim.fin.forEach((p, i) => {
+      const f = res.fin[i];
+      if (svI.has(i)) return;                            // a Shield hop after the slide (decided by the resolver, shown in the shrink beat)
+      if (hk && i === 2 * NP) {
+        const gl = sim.ev.find(e => e.k === 'goal');
+        if ((res.gl != null) !== !!gl || (gl && gl.seat !== res.gl) || (!gl && (Math.abs(p[0] - f[0]) > .01 || Math.abs(p[1] - f[1]) > .01))) mis++;
+        return;
+      }
+      if (Math.abs(p[0] - f[0]) > .01 || Math.abs(p[1] - f[1]) > .01 || (p[2] && !f[2] && (swap || geoB.in(p[0], p[1])))) mis++;
+    });
     S.mismatch += mis;
     const outsSim = new Set(sim.outs.map(o => o.i));
     const shrinkOuts = [];
-    res.fin.forEach((f, i) => { if (res.init[i][2] && !f[2] && !outsSim.has(i)) shrinkOuts.push(i); });
+    if (!stat) res.fin.forEach((f, i) => { if (res.init[i][2] && !f[2] && !outsSim.has(i)) shrinkOuts.push(i); });
     const over = !!(st.over || (S.ctx && S.ctx.status === 'finished'));
-    const lost = swap ? null : lostInfo(geoA, geoB);
-    const doShrink = !swap && lost.chunks.length > 0 && (!over || shrinkOuts.length > 0), doSwap = swap && !over;
+    const lost = swap || stat ? null : lostInfo(geoA, geoB);
+    const doShrink = !swap && !stat && lost.chunks.length > 0 && (!over || shrinkOuts.length > 0), doSwap = swap && !over;
+    const rs = Array.isArray(res.rs) ? res.rs : [];
     const simEnd = sim.steps / 240;
     const lastOut = sim.outs.length ? sim.outs[sim.outs.length - 1].step / 240 : -9;
     const tailFall = Math.max(0, lastOut * 1000 + FALL_MS - simEnd * 1000);
     S.anim = {
-      id: res.id, res, sim, geo: geoA, geoA, geoB, lost, phase: 'reveal', t: 0, total: 0, simT: 0, simEnd, hi: 0, oi: 0, bi: 0,
+      id: res.id, res, sim, geo: geoA, geoA, geoB, lost, phase: 'reveal', t: 0, total: 0, simT: 0, simEnd, hi: 0, oi: 0, bi: 0, gi: 0, si: 0, ei: 0,
       slow: 0, slowUsed: 0, focus: null, falls: {}, broken: false, chunks: [], shrinkOuts, doShrink, doSwap, sw: null, from: null,
+      md, ty, ef, rs, pt: md === 'koth' ? (res.pt || [0, 0]) : null, gl: res.gl != null ? res.gl : null, over,
+      sv, svFrom: {}, items: items.map(it => ({ k: it[0], x: it[1], y: it[2], gone: -1 })), scored: false, goalSeen: false, goalT: -1, fishAng: 0, rsT: 0, rsLeft: {},
       pos: res.init.map(p => [p[0], p[1]]), vel: res.init.map(() => [0, 0]), on: res.init.map(p => !!p[2]), hop: res.init.map(() => 0),
-      est: REVEAL + simEnd * 1000 + tailFall + 650 + (doShrink ? SHRINK_MS + (shrinkOuts.length ? FALL_MS : 0) : 0) + (doSwap ? SWAP_MS : 0),
+      est: REVEAL + simEnd * 1000 + tailFall + 650 + (doShrink ? SHRINK_MS + (shrinkOuts.length ? FALL_MS : 0) : 0) + (doSwap ? SWAP_MS : 0) + (rs.length ? RS_MS : 0) + (md === 'koth' ? SCORE_MS : 0) + (res.gl != null ? GOAL_HOLD : 0),
     };
     S.sel = null; S.drag = null;
     if (S.ctx && res.by !== S.ctx.me) { try { S.ctx.sound.tap(); } catch (e) {} }
@@ -704,15 +1068,27 @@ function resetScene(st) {
   function finishAnim() {
     const A = S.anim; if (!A) return;
     S.anim = null; doneAdd(A.id);
-    A.res.fin.forEach((f, i) => { if (A.res.init[i][2] && !f[2]) addHat(i, A.falls[i] ? A.falls[i].ex : f[0], A.falls[i] ? A.falls[i].ey : f[1]); });
+    if (A.md === 'sumo') A.res.fin.forEach((f, i) => { if (A.res.init[i][2] && !f[2]) addHat(i, A.falls[i] ? A.falls[i].ex : f[0], A.falls[i] ? A.falls[i].ey : f[1]); });
     const c = S.ctx;
     if (c) {
       const lost = [0, 1].map(s => aliveCount(A.res.init, s) - aliveCount(A.res.fin, s));
-      const nm = s => c.players[s].name;
-      const txt = !lost[0] && !lost[1] ? 'Nobody fell in… the ice holds'
-        : lost[0] && lost[1] ? `SPLASH! ${nm(0)} −${lost[0]} · ${nm(1)} −${lost[1]}`
-        : `SPLASH! ${nm(lost[0] ? 0 : 1)} −${lost[0] || lost[1]}`;
-      S.banner = { text: txt, t: 0, col: !lost[0] && !lost[1] ? '#bfe9ff' : (lost[c.me] && !lost[1 - c.me] ? '#ff8fa8' : (lost[1 - c.me] && !lost[c.me] ? '#9dffcf' : '#ffe08a')) };
+      const nm = s => c.players[s].name, good = '#9dffcf', bad = '#ff8fa8', mid = '#ffe08a';
+      let txt, col;
+      if (A.md === 'koth') {
+        const pt = A.pt || [0, 0];
+        txt = !pt[0] && !pt[1] ? 'Nobody held the hill' : pt[0] && pt[1] ? `${nm(0)} +${pt[0]} · ${nm(1)} +${pt[1]}` : `${nm(pt[0] ? 0 : 1)} +${pt[0] || pt[1]}`;
+        col = !pt[0] && !pt[1] ? '#bfe9ff' : pt[c.me] && !pt[1 - c.me] ? good : pt[1 - c.me] && !pt[c.me] ? bad : mid;
+        if (lost[0] + lost[1]) txt += ` · ${lost[0] + lost[1]} splashed, back next round`;
+      } else if (A.md === 'hockey') {
+        txt = A.gl != null ? `GOAL! ${nm(A.gl)} scores` : (lost[0] + lost[1] ? `No goal · ${lost[0] + lost[1]} splashed, back next round` : 'No goal. The fish stays in play');
+        col = A.gl == null ? '#bfe9ff' : A.gl === c.me ? good : bad;
+      } else {
+        txt = !lost[0] && !lost[1] ? 'Nobody fell in… the ice holds'
+          : lost[0] && lost[1] ? `SPLASH! ${nm(0)} −${lost[0]} · ${nm(1)} −${lost[1]}`
+          : `SPLASH! ${nm(lost[0] ? 0 : 1)} −${lost[0] || lost[1]}`;
+        col = !lost[0] && !lost[1] ? '#bfe9ff' : (lost[c.me] && !lost[1 - c.me] ? bad : (lost[1 - c.me] && !lost[c.me] ? good : mid));
+      }
+      S.banner = { text: txt, t: 0, col };
     }
     rerender();
   }
@@ -736,7 +1112,8 @@ function resetScene(st) {
     S.parts.push({ k: 'star', x: h.x, y: h.y, z: 22, life: big ? 380 : 240, max: big ? 380 : 240, sz: Math.min(1.7, .6 + s / 420), rot: rnd(0, 1) });
     if (s > 220 && !S.parts.some(p => p.k === 'word' && p.max - p.life < 450)) S.parts.push({ k: 'word', x: h.x, y: h.y, z: 46, text: pick(WORDS), life: 900, max: 900, sz: Math.min(1.35, .8 + s / 900), rot: rnd(-.25, .25), c: s > 420 ? '#ffd23a' : '#ffffff' });
     [h.i, h.j].forEach(i => { const pv = S.pv[i]; if (!pv) return; pv.sq = Math.min(.3, s / 1500); if (s > 360) pv.dizzy = 900; });
-    if (s > 300 && Math.random() < .45) S.parts.push({ k: 'say', i: Math.random() < .5 ? h.i : h.j, text: pick(SAYS_HIT), life: 1100, max: 1100 });
+    const who = h.j >= 2 * NP ? h.i : Math.random() < .5 ? h.i : h.j;   // the fish (Fish Hockey's 9th body) has nothing to say
+    if (s > 300 && Math.random() < .45) S.parts.push({ k: 'say', i: who, text: pick(SAYS_HIT), life: 1100, max: 1100 });
     if (!S.calm) {
       S.shake = Math.max(S.shake, Math.min(9, s / 55));
       if (big && A.slowUsed < 800) { A.slow = 380; A.focus = { x: h.x, y: h.y, t: 700 }; }
@@ -784,6 +1161,7 @@ function resetScene(st) {
     });
     A.geo = A.geoB;                                       // from here on the ice is the smaller one
     A.shrinkOuts.forEach(i => { const p = A.pos[i]; startFall(A, i, p[0], p[1], 0, 0, true); });
+    A.sv.forEach(q => { const p = A.pos[q[0]]; A.svFrom[q[0]] = [p[0], p[1]]; onShield(A, { i: q[0], x: p[0], y: p[1] }); });   // the Shield hops it to safe ice
     S.shake = Math.max(S.shake, S.calm ? 0 : 6);
     try { S.ctx.sound.place(); } catch (e) {}
   }
@@ -794,9 +1172,63 @@ function resetScene(st) {
     S.banner = { text: 'NEXT ARENA: ' + arenaName(A.geoB.id).toUpperCase(), t: 0, col: '#bfe9ff' };
     try { S.ctx.sound.place(); } catch (e) {}
   }
+  // power-ups, shields, goals and the respawn / score beats of King of the Hill + Fish Hockey
+  function onGrab(A, g) {
+    const it = A.items[g.k], K2 = IK[it.k], p = A.pos[g.i];
+    it.gone = S.tick;
+    for (let q = 0; q < 14; q++) { const a = rnd(0, 6.28), v = rnd(40, 110); S.parts.push({ k: 'chip', x: it.x, y: it.y, z: rnd(6, 16), vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: rnd(70, 170), life: rnd(400, 800), max: 800, sz: rnd(1.5, 3), c: K2.col }); }
+    S.parts.push({ k: 'star', x: it.x, y: it.y, z: 16, life: 360, max: 360, sz: .9, rot: rnd(0, 1) });
+    S.parts.push({ k: 'word', x: p[0], y: p[1], z: 50, text: K2.name.toUpperCase() + '!', life: 1100, max: 1100, sz: 1, rot: rnd(-.15, .15), c: K2.col });
+    S.parts.push({ k: 'say', i: g.i, text: 'next round!', life: 1500, max: 1500 });
+    try { S.ctx.sound.place(); } catch (e) {}
+  }
+  function onShield(A, e) {
+    for (let q = 0; q < 16; q++) { const a = rnd(0, 6.28), v = rnd(50, 130); S.parts.push({ k: 'chip', x: e.x, y: e.y, z: rnd(6, 20), vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: rnd(60, 150), life: rnd(400, 800), max: 800, sz: rnd(1.5, 3.2), c: '#9defff' }); }
+    S.parts.push({ k: 'word', x: e.x, y: e.y, z: 44, text: 'BOING!', life: 900, max: 900, sz: 1.1, rot: rnd(-.2, .2), c: '#9defff' });
+    S.parts.push({ k: 'say', i: e.i, text: 'saved!', life: 1200, max: 1200 });
+    S.shake = Math.max(S.shake, S.calm ? 0 : 4);
+    try { S.ctx.sound.good(); } catch (x) {}
+  }
+  function onGoal(A, e) {
+    A.goalSeen = true; A.goalT = 0;
+    const c = S.ctx, col = c.players[e.seat].color;
+    for (let q = 0; q < 30; q++) { const a = rnd(0, 6.28), v = rnd(50, 150); S.parts.push({ k: 'chip', x: e.x, y: e.y, z: rnd(8, 26), vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, vz: rnd(90, 220), life: rnd(500, 1000), max: 1000, sz: rnd(1.6, 3.4), c: q % 2 ? '#ffffff' : col }); }
+    S.parts.push({ k: 'word', x: e.x, y: e.y, z: 60, text: 'GOAL!', life: 1500, max: 1500, sz: 1.35, rot: rnd(-.12, .12), c: '#ffd23a' });
+    S.banner = { text: 'GOAL! ' + c.players[e.seat].name + ' scores', t: 0, col: e.seat === c.me ? '#9dffcf' : '#ff8fa8' };
+    if (!S.calm) S.shake = Math.max(S.shake, 8);
+    try { navigator.vibrate && navigator.vibrate(30); } catch (x) {}
+    try { c.sound[e.seat === c.me ? 'good' : 'bad'](); } catch (x) {}
+  }
+  function startRespawn(A) {
+    A.rsT = 0;
+    A.rs.forEach(r => {
+      const i = r[0]; delete A.falls[i]; A.on[i] = true; A.pos[i] = [r[1], r[2]]; A.vel[i] = [0, 0]; A.rsLeft[i] = 1;
+      for (let q = 0; q < 8; q++) S.parts.push({ k: 'puff', x: r[1] + rnd(-6, 6), y: r[2] + rnd(-6, 6), vx: rnd(-30, 30), vy: rnd(-30, 30), life: rnd(300, 560), max: 560, r: rnd(3, 6) });
+    });
+    try { S.ctx.sound.place(); } catch (e) {}
+  }
+  function startScore(A) {
+    A.scored = true; S.zoneFlash = 1;
+    const c = S.ctx, pt = A.pt || [0, 0];
+    [0, 1].forEach(sd => { if (pt[sd]) S.parts.push({ k: 'word', x: (sd ? -1 : 1) * 38, y: (sd ? -1 : 1) * 62, z: 40, text: '+' + pt[sd], life: 1500, max: 1500, sz: 1.3, rot: 0, c: c.players[sd].color }); });
+    if (pt[0] || pt[1]) { try { c.sound[pt[c.me] >= pt[1 - c.me] ? 'good' : 'bad'](); } catch (e) {} }
+  }
+  // the chain after the slide: shrink (Sumo) -> swap (roulette) -> respawn (hill / hockey) -> score (hill) -> end
+  function enter(A, ph) {
+    A.phase = ph; A.t = 0;
+    if (ph === 'swap') startSwap(A); else if (ph === 'respawn') startRespawn(A); else if (ph === 'score') startScore(A);
+  }
+  function nextAfter(A, from) {
+    const order = ['slide', 'shrink', 'swap', 'respawn', 'score'];
+    for (let k = order.indexOf(from) + 1; k < order.length; k++) {
+      const ph = order[k];
+      if ((ph === 'shrink' && A.doShrink) || (ph === 'swap' && A.doSwap) || (ph === 'respawn' && A.rs.length) || (ph === 'score' && A.pt)) return ph;
+    }
+    return 'end';
+  }
   function framePos(A) {
     const F = A.sim.frames, f = Math.min(F.length - 1, A.simT * 60), i0 = Math.floor(f), i1 = Math.min(F.length - 1, i0 + 1), a = f - i0;
-    for (let i = 0; i < 2 * NP; i++) {
+    for (let i = 0; i < A.pos.length; i++) {
       if (!A.on[i]) continue;
       const x0 = F[i0][i * 2], y0 = F[i0][i * 2 + 1], x1 = F[i1][i * 2], y1 = F[i1][i * 2 + 1];
       A.pos[i][0] = x0 + (x1 - x0) * a; A.pos[i][1] = y0 + (y1 - y0) * a;
@@ -858,20 +1290,33 @@ function resetScene(st) {
         while (A.hi < A.sim.hits.length && A.sim.hits[A.hi].step <= stepNow) onHit(A, A.sim.hits[A.hi++]);
         while (A.oi < A.sim.outs.length && A.sim.outs[A.oi].step <= stepNow) onOut(A, A.sim.outs[A.oi++]);
         while (A.bi < A.sim.bumps.length && A.sim.bumps[A.bi].step <= stepNow) onBump(A, A.sim.bumps[A.bi++]);
+        while (A.gi < A.sim.got.length && A.sim.got[A.gi].step <= stepNow) onGrab(A, A.sim.got[A.gi++]);
+        while (A.si < A.sim.shields.length && A.sim.shields[A.si].step <= stepNow) onShield(A, A.sim.shields[A.si++]);
+        while (A.ei < A.sim.ev.length && A.sim.ev[A.ei].step <= stepNow) { const e = A.sim.ev[A.ei++]; if (e.k === 'goal') onGoal(A, e); }
         framePos(A);
+        if (A.goalT >= 0) A.goalT += adt * rate;
         const falling = stepFalls(A, adt * rate);
-        if (A.simT >= A.simEnd && !falling) { A.phase = A.doShrink ? 'shrink' : (A.doSwap ? 'swap' : 'end'); A.t = 0; if (A.phase === 'swap') startSwap(A); }
+        if (A.simT >= A.simEnd && !falling && !(A.goalT >= 0 && A.goalT < GOAL_HOLD)) enter(A, nextAfter(A, 'slide'));   // a goal gets a beat to land
       } else if (A.phase === 'shrink') {
         A.t += adt;
         if (!A.broken && A.t >= CRACK_MS) breakIce(A);
         A.chunks.forEach(ch => { ch.t += adt; });
+        if (A.broken) A.sv.forEach(q => { const f = A.svFrom[q[0]], u = Math.min(1, (A.t - CRACK_MS) / 420), e = 1 - (1 - u) * (1 - u); if (!f) return; A.pos[q[0]][0] = f[0] + (q[1] - f[0]) * e; A.pos[q[0]][1] = f[1] + (q[2] - f[1]) * e; A.hop[q[0]] = S.calm || u >= 1 ? 0 : Math.sin(Math.PI * u) * 24; });
         const falling = stepFalls(A, adt);
-        if (A.t >= SHRINK_MS && !falling) A.phase = 'end';
+        if (A.t >= SHRINK_MS && !falling) enter(A, nextAfter(A, 'shrink'));
       } else if (A.phase === 'swap') {
         A.t += adt; A.sw.t = A.t;
         const u = Math.min(1, A.t / SWAP_MS), e = u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
         A.res.rg.forEach((q, i) => { if (!A.res.fin[i][2]) return; const f = A.from[i]; A.pos[i][0] = f[0] + (q[0] - f[0]) * e; A.pos[i][1] = f[1] + (q[1] - f[1]) * e; A.hop[i] = S.calm ? 0 : Math.sin(Math.PI * u) * 26; A.vel[i][0] = 0; A.vel[i][1] = 0; });
-        if (A.t >= SWAP_MS) A.phase = 'end';
+        if (A.t >= SWAP_MS) enter(A, nextAfter(A, 'swap'));
+      } else if (A.phase === 'respawn') {
+        A.t += adt;
+        const u = Math.min(1, A.t / RS_MS), e = 1 - (1 - u) * (1 - u);
+        A.rs.forEach(r => { A.hop[r[0]] = S.calm ? 0 : (1 - e) * 64; });
+        if (A.t >= RS_MS) { A.rs.forEach(r => { A.hop[r[0]] = 0; delete A.rsLeft[r[0]]; }); enter(A, nextAfter(A, 'respawn')); }
+      } else if (A.phase === 'score') {
+        A.t += adt;
+        if (A.t >= SCORE_MS) A.phase = 'end';
       }
       if (A.phase === 'end' || A.total > 20000) finishAnim();
     }
@@ -900,6 +1345,7 @@ function resetScene(st) {
     if (S.parts.length > 500) S.parts.splice(0, S.parts.length - 500);
     if (S.banner) { S.banner.t += dt; if (S.banner.t > 2600) S.banner = null; }
     for (const j in S.padHit) { S.padHit[j] *= Math.pow(.9, dt / 16.7); if (S.padHit[j] < .03) delete S.padHit[j]; }
+    S.zoneFlash *= Math.pow(.93, dt / 16.7); if (S.zoneFlash < .03) S.zoneFlash = 0;
     stepPreview(dt);
     // camera: rest while planning; drift with the action; punch in on big hits
     let tg = { x: 0, y: 14, z: 1 };
@@ -982,15 +1428,16 @@ function resetScene(st) {
     drawSea(g, hy);
     const SW = A && A.phase === 'swap' ? A.sw : S.sw, geo = SW ? null : curGeo();
     // what breaks off after this round (same arena only; roulette swaps the whole arena instead)
-    const nxt = SW || setup ? null : !A ? (st.roulette || st.over ? null : geoOf(st.arena, st, 1)) : (A.phase === 'shrink' && !A.broken ? A.geoB : null);
+    const nxt = SW || setup || st.mode !== 'sumo' ? null : !A ? (st.roulette || st.over ? null : geoOf(st.arena, st, 1)) : (A.phase === 'shrink' && !A.broken ? A.geoB : null);
     // things on the water BEHIND the ice first (the ice hides them), the ones in front after it
     const far = (x, y) => S.flip * y < 0;
     drawHats(g, true); drawParts(g, 'sea', true);
     if (A) A.chunks.forEach(ch => { if (far(ch.cx, ch.cy)) drawChunk(g, ch); });
-    if (SW) drawSwap(g, SW); else { drawArena(g, geo, A, nxt); drawBumpers(g, geo, nxt, true); }
+    if (SW) drawSwap(g, SW); else { drawArena(g, geo, A, nxt); drawNets(g, geo); drawBumpers(g, geo, nxt, true); }
     if (A) A.chunks.forEach(ch => { if (!far(ch.cx, ch.cy)) drawChunk(g, ch); });
     drawHats(g, false); drawParts(g, 'sea', false);
     drawParts(g, 'ground');
+    if (!SW) drawItems(g, st, A);
     drawPenguins(g, st, A);
     if (!SW) drawBumpers(g, geo, nxt, false);
     // arrows: mine while planning; EVERYONE's only during the reveal of a committed resolution
@@ -1067,6 +1514,11 @@ function resetScene(st) {
     if (geo.id === 'donut') { circ(0, 0, RO); circ(0, 0, geo.HR, true); }
     else if (geo.id === 'twin') { circ(-IC, 0, geo.ir); circ(IC, 0, geo.ir); if (geo.br) rect(-BX, -BY, BX, BY); }
     else if (geo.id === 'ice') { for (let k = 0; k < TN * TN; k++) if (!geo.dead[k]) { const x0 = (k % TN) * TS - TO + 1.5, y0 = Math.floor(k / TN) * TS - TO + 1.5; rect(x0, y0, x0 + TS - 3, y0 + TS - 3); } }
+    else if (geo.id === 'rink') {                           // a rounded rectangle, wound clockwise like the circles
+      const pts = [], rc = 18;
+      [[HW - rc, -HL + rc, -90], [HW - rc, HL - rc, 0], [-HW + rc, HL - rc, 90], [-HW + rc, -HL + rc, 180]].forEach(([cx, cy, a0]) => { for (let q = 0; q <= 6; q++) { const a = (a0 + q * 15) * Math.PI / 180; pts.push([cx + Math.cos(a) * rc, cy + Math.sin(a) * rc]); } });
+      polys.push({ pts, hole: false });
+    }
     else circ(0, 0, geo.R);
     geo._d = { polys }; geo._dk = S.mid;
     return geo._d;
@@ -1185,6 +1637,8 @@ function resetScene(st) {
         }
       }
     }
+    if (S.st && S.st.mode === 'koth') drawZone(g, z);
+    if (geo.id === 'rink') drawRinkMarks(g, z);
     // what breaks off after THIS round (planning), or the crack racing round it (shrink)
     if (nxt) {
       const info = lostInfo(geo, nxt), prog = A && A.phase === 'shrink' ? Math.min(1, A.t / CRACK_MS) : 1;
@@ -1209,6 +1663,124 @@ function resetScene(st) {
     g.restore();
     multi(g, top); g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 1.4; g.stroke();
     g.save(); multi(g, top); g.clip(); g.strokeStyle = 'rgba(80,150,200,.3)'; g.lineWidth = 6; multi(g, top, 2); g.stroke(); g.restore();
+  }
+  /* ---------------- King of the Hill zone, the rink, the fish, items, badges ---------------- */
+  const ellip = (g, x, y, rx, ry) => { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, 7); };
+  function zoneCount(A) {                                  // who is standing in the zone right now
+    const n = [0, 0], st = S.st;
+    for (let i = 0; i < 2 * NP; i++) {
+      if (A) { if (A.on[i] && !A.falls[i] && inZone(A.pos[i])) n[seatOf(i)]++; }
+      else if (st.pens[i][2] && inZone(st.pens[i])) n[seatOf(i)]++;
+    }
+    return n;
+  }
+  function drawZone(g, z) {
+    const c = S.ctx, A = S.anim, cnt = A && A.phase === 'score' ? (A.pt || [0, 0]) : zoneCount(A);
+    const col = cnt[0] > cnt[1] ? c.players[0].color : cnt[1] > cnt[0] ? c.players[1].color : '#bff0ff';
+    const q = P(0, 0), rx = ZR * SC * z, ry = rx * TILT, fl = S.zoneFlash || 0, pulse = S.calm ? .5 : .5 + .5 * Math.sin(S.tick * .004);
+    const gr = g.createRadialGradient(q.X, q.Y, rx * .15, q.X, q.Y, rx * 1.12);
+    gr.addColorStop(0, hexA(col, .3 + .16 * pulse + fl * .35)); gr.addColorStop(1, hexA(col, 0));
+    g.save(); g.fillStyle = gr; ellipse2(g, q.X, q.Y, rx * 1.12, ry * 1.12); g.fill();
+    g.lineWidth = 2.4 * z; g.strokeStyle = hexA(col, .72 + .28 * pulse); ellipse2(g, q.X, q.Y, rx, ry); g.stroke();
+    g.setLineDash([6, 9]); g.lineDashOffset = S.calm ? 0 : -S.tick * .02; g.lineWidth = 1.4 * z; g.strokeStyle = hexA(col, .55); ellipse2(g, q.X, q.Y, rx * .68, ry * .68); g.stroke(); g.setLineDash([]);
+    g.fillStyle = hexA(col, .55 + fl * .4); g.font = '800 ' + Math.round(11 * z) + 'px Orbitron, "Chakra Petch", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('HILL', q.X, q.Y);
+    g.restore();
+  }
+  const ellipse2 = (g, x, y, rx, ry) => { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, 7); };
+  // centre line + circle, creases and coloured goal mouths (a goal is painted in the colour of whoever DEFENDS it)
+  function drawRinkMarks(g, z) {
+    const c = S.ctx, pl = (x, y) => { const q = P(x, y); return [q.X, q.Y]; }, line = (a, b, col, w) => { const A = pl(a[0], a[1]), B = pl(b[0], b[1]); g.strokeStyle = col; g.lineWidth = w * z; g.beginPath(); g.moveTo(A[0], A[1]); g.lineTo(B[0], B[1]); g.stroke(); };
+    g.save(); g.lineCap = 'round';
+    line([-HW, 0], [HW, 0], 'rgba(200,60,80,.5)', 2.4);
+    g.strokeStyle = 'rgba(60,120,210,.5)'; g.lineWidth = 2 * z; g.beginPath();
+    for (let k = 0; k <= 72; k += 2) { const u = UV[k % 72], q = P(u[0] * 52, u[1] * 52); k ? g.lineTo(q.X, q.Y) : g.moveTo(q.X, q.Y); } g.stroke();
+    [1, -1].forEach(sg => {                                // crease arcs in front of each goal
+      g.strokeStyle = 'rgba(60,120,210,.45)'; g.lineWidth = 1.8 * z; g.beginPath();
+      for (let k = 0; k <= 18; k++) { const a = k / 18 * Math.PI, q = P(Math.cos(a) * (GW + 12), sg * HL - sg * Math.sin(a) * (GW + 12)); k ? g.lineTo(q.X, q.Y) : g.moveTo(q.X, q.Y); } g.stroke();
+    });
+    [0, 1].forEach(sd => { const y = sd === 0 ? HL : -HL; line([-GW, y], [GW, y], hexA(c.players[sd].color, .95), 4.2); });
+    // the rim the fish bounces off (the goal mouths are open)
+    const edge = 'rgba(255,255,255,.85)';
+    line([-HW + 3, -HL + 3], [-HW + 3, HL - 3], edge, 3); line([HW - 3, -HL + 3], [HW - 3, HL - 3], edge, 3);
+    [1, -1].forEach(sg => { line([-HW + 3, sg * (HL - 3)], [-GW, sg * (HL - 3)], edge, 3); line([GW, sg * (HL - 3)], [HW - 3, sg * (HL - 3)], edge, 3); });
+    g.restore();
+  }
+  // goal nets just beyond the ends of the rink, at the waterline
+  function drawNets(g, geo) {
+    if (!geo || geo.id !== 'rink') return;
+    const c = S.ctx, z = S.cam.z, D = 46;
+    [0, 1].forEach(sd => {
+      const y0 = sd === 0 ? HL : -HL, y1 = y0 + (sd === 0 ? D : -D), col = c.players[sd].color;
+      const pt = (x, y, up) => { const q = P(x, y); return [q.X, q.Y + TH * z - (up || 0) * z]; };
+      const a = pt(-GW, y0), b = pt(GW, y0), cc = pt(GW, y1), d = pt(-GW, y1);
+      g.save();
+      g.fillStyle = 'rgba(4,18,42,.6)'; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(cc[0], cc[1]); g.lineTo(d[0], d[1]); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(235,248,255,.38)'; g.lineWidth = 1; g.beginPath();
+      for (let k = 1; k < 6; k++) { const t = k / 6, p0 = pt(-GW + 2 * GW * t, y0), p1 = pt(-GW + 2 * GW * t, y1); g.moveTo(p0[0], p0[1]); g.lineTo(p1[0], p1[1]); }
+      for (let k = 1; k < 4; k++) { const t = k / 4, p0 = pt(-GW, y0 + (y1 - y0) * t), p1 = pt(GW, y0 + (y1 - y0) * t); g.moveTo(p0[0], p0[1]); g.lineTo(p1[0], p1[1]); }
+      g.stroke();
+      g.strokeStyle = col; g.lineWidth = 3 * z; g.lineCap = 'round'; g.beginPath(); g.moveTo(d[0], d[1]); g.lineTo(cc[0], cc[1]); g.moveTo(a[0], a[1]); g.lineTo(d[0], d[1]); g.moveTo(b[0], b[1]); g.lineTo(cc[0], cc[1]); g.stroke();
+      [[-GW, y0], [GW, y0]].forEach(([x, y]) => { const f = pt(x, y), t = pt(x, y, 16); g.strokeStyle = '#ffffff'; g.lineWidth = 3.4 * z; g.beginPath(); g.moveTo(f[0], f[1]); g.lineTo(t[0], t[1]); g.stroke(); g.strokeStyle = col; g.lineWidth = 1.6 * z; g.stroke(); });
+      g.restore();
+    });
+  }
+  // the items on the ice this round (mine to plan around); a replay shows the ones grabbed vanishing
+  function itemList(st, A) {
+    if (A) return A.items;
+    if (st.phase !== 'play' || !st.pw) return [];
+    const key = st.mid + ':' + st.round + ':' + st.arena + ':' + st.pens.map(p => p[2] ? p[0] + ',' + p[1] : 'x').join(';');
+    if (S.items.key !== key) S.items = { key, list: itemsFor(st, geoOf(st.arena, st, 0)).map(it => ({ k: it[0], x: it[1], y: it[2], gone: -1 })) };
+    return S.items.list;
+  }
+  function drawItems(g, st, A) {
+    const list = itemList(st, A), z = S.cam.z;
+    S.frameItems = 0;                                      // instrumented: how many items this frame drew
+    list.forEach((it, n) => {
+      const age = it.gone < 0 ? 0 : S.tick - it.gone; if (it.gone >= 0 && age > 260) return;
+      S.frameItems++;
+      const K2 = IK[it.k], q = P(it.x, it.y), bob = S.calm || it.gone >= 0 ? 0 : Math.sin(S.tick * .004 + n * 2) * 2.4, sc = it.gone >= 0 ? 1 + age / 260 * .6 : 1, al = it.gone >= 0 ? 1 - age / 260 : 1;
+      const r = 13 * q.s * sc, Y = q.Y - 13 * q.s - bob;
+      g.save(); g.globalAlpha = al;
+      g.fillStyle = 'rgba(20,70,110,.28)'; ellipse2(g, q.X, q.Y, 11 * q.s, 4 * q.s); g.fill();
+      const pulse = S.calm ? .5 : .5 + .5 * Math.sin(S.tick * .005 + n);
+      g.strokeStyle = hexA(K2.col, .35 + .4 * pulse); g.lineWidth = 1.6 * z; ellipse2(g, q.X, q.Y, (15 + 3 * pulse) * q.s, (5.6 + 1.2 * pulse) * q.s); g.stroke();
+      g.fillStyle = '#0d2142'; g.strokeStyle = K2.col; g.lineWidth = 2 * q.s; ellipse2(g, q.X, Y, r, r); g.fill(); g.stroke();
+      g.font = Math.round(14 * q.s * sc) + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(K2.ico, q.X, Y + .5);
+      g.restore();
+    });
+  }
+  // a small badge over a penguin: which power-up is active on it this round
+  function drawBadge(g, X, Y, s, kind) {
+    const K2 = IK[kind], r = 8.4 * s;
+    g.save(); g.fillStyle = '#0d2142'; g.strokeStyle = K2.col; g.lineWidth = 1.6 * s; ellipse2(g, X, Y, r, r); g.fill(); g.stroke();
+    g.font = Math.round(10.5 * s) + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(K2.ico, X, Y + .5);
+    g.restore();
+  }
+  function drawFish(g, X, Y, s, ang, al) {
+    const sx = Math.cos(ang) < 0 ? -1 : 1;
+    g.save(); g.globalAlpha = al; g.translate(X, Y - 7 * s); g.scale(s * sx, s); g.rotate(sx < 0 ? Math.PI - ang : ang);
+    const bg = g.createLinearGradient(0, -9, 0, 9); bg.addColorStop(0, '#ffc45a'); bg.addColorStop(1, '#ff6f3c');
+    g.fillStyle = bg; g.beginPath(); g.ellipse(0, 0, 16, 9, 0, 0, 7); g.fill();
+    g.fillStyle = '#ff6f3c'; g.beginPath(); g.moveTo(-13, 0); g.lineTo(-25, -9); g.lineTo(-22, 0); g.lineTo(-25, 9); g.closePath(); g.fill();   // tail
+    g.beginPath(); g.moveTo(-3, -8); g.lineTo(3, -15); g.lineTo(9, -7); g.closePath(); g.fill();                                        // fin
+    g.fillStyle = 'rgba(255,255,255,.7)'; g.beginPath(); g.ellipse(-1, 3.4, 10, 3.2, 0, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(160,50,20,.55)'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(-5, -7); g.quadraticCurveTo(-8, 0, -5, 7); g.moveTo(3, -8); g.quadraticCurveTo(0, 0, 3, 8); g.stroke();
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(9, -2, 3.1, 0, 7); g.fill(); g.fillStyle = '#15102a'; g.beginPath(); g.arc(9.8, -2, 1.5, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(120,30,10,.6)'; g.lineWidth = 1.2; g.beginPath(); g.arc(13, 2.2, 2.6, .2, 1.4); g.stroke();
+    g.restore();
+  }
+  // where the fish is now: a replay's own position, the state's otherwise (setup: the middle)
+  function fishState(st, A) {
+    if (st.mode !== 'hockey') return null;
+    if (A) {
+      const i = 2 * NP, hide = A.goalT > 420;
+      if (hide) return null;
+      const v = A.vel[i]; let sp = Math.hypot(v[0], v[1]);
+      if (sp > 25) S.fishAng = Math.atan2(S.flip * v[1] * TILT, S.flip * v[0]);
+      return { x: A.pos[i][0], y: A.pos[i][1], vx: v[0], vy: v[1] };
+    }
+    const f = st.phase === 'setup' ? [0, 0] : st.fish;
+    return { x: f[0], y: f[1], vx: 0, vy: 0 };
   }
   // rubber bumpers: amber cushions along the rim (far ones sit behind the penguins, near ones in front)
   function drawBumpers(g, geo, nxt, far) {
@@ -1276,25 +1848,35 @@ function resetScene(st) {
         return { x: f.x + f.dx * f.slide * e, y: f.y + f.dy * f.slide * e, z: fallZ(f), vx: f.dx * 200 * (1 - u), vy: f.dy * 200 * (1 - u), fall: f };
       }
       if (!A.res.init[i][2]) return null;
-      return { x: A.pos[i][0], y: A.pos[i][1], z: A.hop[i] || 0, vx: A.vel[i][0], vy: A.vel[i][1] };
+      return { x: A.pos[i][0], y: A.pos[i][1], z: A.hop[i] || 0, vx: A.vel[i][0], vy: A.vel[i][1], a: A.rsLeft[i] ? Math.min(1, A.t / 260) : 1 };
     }
     if (S.sw && S.sw.from) {                               // preview / entry swap: hop from the old slot to the new one
       const u = swapU(S.sw), f = S.sw.from[i], t = S.sw.to[i];
       if (f && t && (st.phase === 'setup' || st.pens[i][2])) { const q = swapPos(S.sw, i); return { x: q[0], y: q[1], z: S.calm ? 0 : Math.sin(Math.PI * u) * 26, vx: 0, vy: 0 }; }
     }
     if (st.phase === 'setup') { const p = S.prePos && S.prePos[i]; return p ? { x: p[0], y: p[1], z: 0, vx: 0, vy: 0 } : null; }
-    const p = st.pens[i]; if (!p[2]) return null;
+    const p = st.pens[i]; if (!p || !p[2]) return null;
     return { x: p[0], y: p[1], z: 0, vx: 0, vy: 0 };
   }
+  // a penguin's type as drawn: in the squad phase only MY picks show (a foe's squad is never read until the reveal)
+  function typeAt(st, i) {
+    if (st.phase === 'squad') return seatOf(i) === S.ctx.me ? sqDraft(st).v[i % NP] | 0 : 0;
+    return tyOf(st)[i] | 0;
+  }
+  const efAt = (st, A, i) => st.phase !== 'play' ? 0 : A ? (A.ef[i] | 0) : (st.ef[i] | 0);
   function drawPenguins(g, st, A) {
     const list = [], c = S.ctx, me = c.me, planning = canPlan(), mineV = !A ? myArrows(st, me) : null;
     for (let i = 0; i < 2 * NP; i++) { const ps = penState(i, st, A); if (ps) { ps.i = i; ps.q = P(ps.x, ps.y); list.push(ps); } }
+    const fp = fishState(st, A); if (fp) list.push({ fish: true, i: -1, x: fp.x, y: fp.y, z: 0, vx: fp.vx, vy: fp.vy, q: P(fp.x, fp.y), a: A && A.goalT > 160 ? 1 - (A.goalT - 160) / 260 : 1 });
+    S.frameTypes = []; S.frameEf = [];
     // the partner's "thinking…/READY" bubble floats over one of their standing penguins
     let anchor = -1;
     if (!A && c.status === 'active' && st.phase !== 'setup') [1, 2, 0, 3].some(k => { const i = (1 - me) * NP + k; if (st.pens[i][2]) { anchor = i; return true; } return false; });
+    const sqPhase = st.phase === 'squad';
     list.sort((a, b) => a.q.Y - b.q.Y);
     // shadows + team rings first (on the ice)
     list.forEach(p => {
+      if (p.fish) { const q = p.q; g.fillStyle = 'rgba(20,70,110,.3)'; ellipse2(g, q.X + 2 * q.s, q.Y + 1 * q.s, 15 * q.s, 4.6 * q.s); g.fill(); return; }
       if (p.fall && p.z < 0) return;
       const q = p.q, s = q.s, seat = p.i < NP ? 0 : 1, col = c.players[seat].color;
       g.fillStyle = 'rgba(20,70,110,.3)'; g.beginPath(); g.ellipse(q.X + 2 * s, q.Y + 1 * s, 13 * s, 4.6 * s, 0, 0, 7); g.fill();
@@ -1305,9 +1887,12 @@ function resetScene(st) {
       g.beginPath(); g.ellipse(q.X, q.Y, (sel ? 17 : 15) * s, (sel ? 6.4 : 5.6) * s, 0, 0, 7); g.stroke(); g.restore();
     });
     list.forEach(p => {
+      if (p.fish) { drawFish(g, p.q.X, p.q.Y - p.z * S.cam.z, p.q.s, S.fishAng, p.a); return; }
       const i = p.i, seat = i < NP ? 0 : 1, col = c.players[seat].color, pv = S.pv[i], q = p.q;
       const sp = Math.hypot(p.vx, p.vy), svx = S.flip * p.vx, svy = S.flip * p.vy * TILT;
-      const o = { lean: 0, look: pv.look, back: false, flap: .12 + .06 * Math.sin(S.tick * .004 + pv.ph), blink: pv.blink > 0, dizzy: pv.dizzy > 0, scared: false, sq: pv.sq, hat: true, lift: 0 };
+      const ty = typeAt(st, i), ef = efAt(st, A, i);
+      S.frameTypes[i] = ty; S.frameEf[i] = ef;             // instrumented: tests check that a squad is never drawn before the reveal
+      const o = { lean: 0, look: pv.look, back: false, flap: .12 + .06 * Math.sin(S.tick * .004 + pv.ph), blink: pv.blink > 0, dizzy: pv.dizzy > 0, scared: false, sq: pv.sq, hat: true, lift: 0, ty, ef };
       // idle waddle: shift weight foot to foot
       const wob = Math.sin(S.tick * .0034 + pv.ph);
       o.lean = wob * .05; o.lift = wob;
@@ -1318,7 +1903,7 @@ function resetScene(st) {
         if (sp > 160 && S.tick % 80 < 20 && S.parts.length < 400 && !p.fall) S.parts.push({ k: 'puff', x: p.x, y: p.y, vx: -p.vx * .05, vy: -p.vy * .05, life: 420, max: 420, r: 3 + Math.random() * 3 });
       }
       if (!A && seat === me && mineV) { const d = mineV[i - seat * NP]; if (d) { o.look = Math.max(-1, Math.min(1, S.flip * d[0] / 60)); o.back = S.flip * d[1] < -30 && Math.abs(d[1]) > Math.abs(d[0]); } }
-      let alpha = 1, clipY = null;
+      let alpha = (p.a != null ? p.a : 1) * (sqPhase && seat !== me ? .5 : 1), clipY = null;   // squad pick: the partner's line is a ghost (their types are unknown)
       if (p.fall) {
         const f = p.fall;
         o.scared = true; o.flap = 1.1 + Math.sin(S.tick * .06 + i) * .9; o.lean = -(S.flip * f.dx) * .35 + Math.sin(S.tick * .03) * .15; o.back = false; o.look = 0;
@@ -1338,7 +1923,12 @@ function resetScene(st) {
           g.clip('evenodd'); drawPenguin(g, X, Y, q.s, col, o, alpha); g.restore();
         }
       } else drawPenguin(g, X, Y, q.s, col, o, alpha);
-      if (i === anchor) drawThought(g, X, Y - 50 * q.s, !!aimsOf(st, seat), col);
+      if (ef && !p.fall) {
+        const rr0 = TYPES[ty].r / PR;
+        if (ef === 2) { g.save(); g.globalAlpha = alpha * (S.calm ? .7 : .55 + .25 * Math.sin(S.tick * .006 + i)); g.strokeStyle = '#8ff0ff'; g.lineWidth = 1.8 * q.s; g.fillStyle = 'rgba(140,240,255,.12)'; ellipse2(g, X, Y - 20 * q.s * rr0, 20 * q.s * rr0, 25 * q.s * rr0); g.fill(); g.stroke(); g.restore(); }
+        drawBadge(g, X + 13 * q.s * rr0, Y - 41 * q.s * rr0, q.s, ef);
+      }
+      if (i === anchor) drawThought(g, X, Y - 50 * q.s, sqPhase ? !!sqOf(st, seat) : !!aimsOf(st, seat), col);
     });
   }
   // the partner's team shows only WHETHER they're ready — never their arrows
@@ -1356,8 +1946,9 @@ function resetScene(st) {
   }
   // A drawn penguin: feet at (0,0), ~44 px tall at s = 1.
   function drawPenguin(g, X, Y, s, col, o, alpha) {
-    const body = darken(col, .62), bodyHi = darken(col, .3), rim = col;
-    s *= 1.08;
+    const ty = o.ty | 0, T = TYPES[ty] || TYPES[0], chick = ty === 3;
+    const body = chick ? '#6f7b8c' : darken(col, .62), bodyHi = chick ? '#b4bfcd' : darken(col, .3), rim = col;
+    s *= 1.08 * (T.r / PR) * (o.ef === 1 ? 1.08 : 1);
     g.save(); g.globalAlpha = alpha; g.translate(X, Y); g.scale(s, s); g.rotate(o.lean);
     g.scale(1 + o.sq * .6, 1 - o.sq);
     const lx = o.look * 2.7;
@@ -1397,6 +1988,8 @@ function resetScene(st) {
         g.fillStyle = '#15102a'; g.beginPath(); g.arc(ex + o.look * .9, ey + .2, o.scared ? 1.1 : 1.6, 0, 7); g.fill();
         g.fillStyle = '#ffffff'; g.beginPath(); g.arc(ex + o.look * .9 - .5, ey - .5, .55, 0, 7); g.fill();
       });
+      if (ty === 1) { const ng = g.createLinearGradient(0, -21, 0, -15); ng.addColorStop(0, '#ffd45a'); ng.addColorStop(1, 'rgba(255,190,60,0)'); g.fillStyle = ng; g.beginPath(); g.ellipse(lx * .95, -17.6, 6.4, 3.8, 0, 0, 7); g.fill(); }   // Emperor: the golden collar
+      if (ty === 2) { g.strokeStyle = '#ffd23a'; g.lineCap = 'round'; g.lineWidth = 1.7; [-1, 1].forEach(sd => { for (let k = 0; k < 3; k++) { g.beginPath(); g.moveTo(lx + sd * 4.6, -27.4); g.quadraticCurveTo(lx + sd * (8 + k * 2.6), -30 - k * 1.3, lx + sd * (11.5 + k * 2.8), -29.4 - k * 3); g.stroke(); } }); }   // Rockhopper: the yellow crest
       // cheeks
       g.fillStyle = 'rgba(255,120,160,.45)';
       g.beginPath(); g.arc(lx - 6.1, -20.6, 1.8, 0, 7); g.fill(); g.beginPath(); g.arc(lx + 6.1, -20.6, 1.8, 0, 7); g.fill();
@@ -1408,6 +2001,7 @@ function resetScene(st) {
       g.fillStyle = hexA(col, .22); g.beginPath(); g.ellipse(0, -16, 6, 12, 0, 0, 7); g.fill();   // tail-feather sheen from behind
     }
     if (o.flap <= .6) { flip(-1); flip(1); }
+    if (chick) { g.fillStyle = 'rgba(230,236,245,.85)'; [-5, -1.2, 3.4].forEach((dx, k) => { g.beginPath(); g.arc(dx + lx * .3, -34 + (k % 2), 2.4, Math.PI, 0); g.fill(); }); }   // Chick: a fluffy tuft
     // beanie in the team colour, with a pompom
     if (o.hat) drawBeanie(g, 0, -29.5, col);
     g.restore();
@@ -1513,10 +2107,17 @@ function resetScene(st) {
   function drawSnow(g) {
     S.snow.forEach(f => { g.fillStyle = `rgba(255,255,255,${.25 + f.z * .45})`; g.beginPath(); g.arc(f.x, f.y, .6 + f.z * 1.3, 0, 7); g.fill(); });
   }
+  // the score as it stood BEFORE the round being replayed, until the goal / the scoring beat shows it
+  function hudPts(st, A) {
+    const p = st.pts.slice();
+    if (A && A.md === 'koth' && !A.scored && A.pt) { p[0] -= A.pt[0]; p[1] -= A.pt[1]; }
+    if (A && A.md === 'hockey' && A.gl != null && !A.goalSeen) p[A.gl]--;
+    return p;
+  }
   function drawHud(g, st, A) {
-    const c = S.ctx, round = A ? A.res.r : st.round, fin = c.status === 'finished' && !A;
-    const setup = st.phase === 'setup', hot = !setup && round >= MAX_ROUNDS && !fin;
-    const label = setup ? 'MATCH SETUP' : fin ? 'FINAL' : (round >= MAX_ROUNDS ? 'LAST ROUND' : `ROUND ${round}/${MAX_ROUNDS}`);
+    const c = S.ctx, round = A ? A.res.r : st.round, fin = c.status === 'finished' && !A, cap = maxRounds(st);
+    const setup = st.phase === 'setup', sqp = st.phase === 'squad', hot = !setup && !sqp && round >= cap && !fin;
+    const label = setup ? 'MATCH SETUP' : sqp ? 'PICK YOUR SQUAD' : fin ? 'FINAL' : (round >= cap ? 'LAST ROUND' : `ROUND ${round}/${cap}`);
     g.font = '800 10.5px Orbitron, "Chakra Petch", sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'left';
     const w = g.measureText(label).width + 20;
     g.fillStyle = 'rgba(4,10,24,.62)'; rr(g, 10, 10, w, 22, 11); g.fill();
@@ -1524,7 +2125,7 @@ function resetScene(st) {
     g.fillStyle = hot ? '#ffd66b' : '#dff4ff'; g.fillText(label, 20, 21.5);
     // which arena (and roulette), as a second, smaller pill
     const aid = A ? A.geoA.id : (setup ? (S.sw ? S.sw.toId : S.pre.id) : st.arena), hg = A ? A.geo : curGeo();
-    const aname = setup && st.arena === 'surprise' ? 'SURPRISE ME' : arenaName(aid || 'floe').toUpperCase(), rl = st.roulette ? ' + ROULETTE' : '';
+    const aname = setup && st.arena === 'surprise' ? 'SURPRISE ME' : st.mode === 'hockey' ? 'FISH HOCKEY' : (st.mode === 'koth' ? 'HILL · ' : '') + arenaName(aid || 'floe').toUpperCase(), rl = st.roulette ? ' + ROULETTE' : '';
     g.font = '800 9px Orbitron, "Chakra Petch", sans-serif';
     const w2 = g.measureText(aname + rl).width + 18;
     g.fillStyle = 'rgba(4,10,24,.62)'; rr(g, 10, 37, w2, 18, 9); g.fill(); g.strokeStyle = 'rgba(127,216,255,.35)'; g.lineWidth = 1; g.stroke();
@@ -1538,11 +2139,16 @@ function resetScene(st) {
       g.restore();
     }
     g.font = '800 10.5px Orbitron, "Chakra Petch", sans-serif';
-    // penguins left, as little dots per side
-    if (!setup) [0, 1].forEach(s => {
-      const pens = A ? A.res.init : st.pens, n = aliveCount(pens, s), col = c.players[s].color, x0 = VW - 14 - (s === 0 ? 62 : 0);
-      for (let k = 0; k < NP; k++) { g.fillStyle = k < n ? col : 'rgba(255,255,255,.14)'; g.beginPath(); g.arc(x0 - k * 11, 21, 3.6, 0, 7); g.fill(); }
-    });
+    // penguins left (Sumo), goals (Fish Hockey: first to 3) or points (King of the Hill), per side
+    if (!setup && !sqp) {
+      const pts = hudPts(st, A);
+      [0, 1].forEach(s => {
+        const pens = A ? A.res.init : st.pens, n = aliveCount(pens, s), col = c.players[s].color, x0 = VW - 14 - (s === 0 ? 62 : 0);
+        if (st.mode === 'sumo') for (let k = 0; k < NP; k++) { g.fillStyle = k < n ? col : 'rgba(255,255,255,.14)'; g.beginPath(); g.arc(x0 - k * 11, 21, 3.6, 0, 7); g.fill(); }
+        else if (st.mode === 'hockey') for (let k = 0; k < GOAL_TO; k++) { g.fillStyle = k < pts[s] ? col : 'rgba(255,255,255,.14)'; g.beginPath(); g.arc(x0 - k * 13, 21, 4.6, 0, 7); g.fill(); if (k < pts[s]) { g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 1; g.stroke(); } }
+        else { g.fillStyle = 'rgba(4,10,24,.62)'; rr(g, x0 - 32, 9, 38, 24, 12); g.fill(); g.strokeStyle = hexA(col, .65); g.lineWidth = 1.2; g.stroke(); g.fillStyle = col; g.font = '900 14px Orbitron, "Chakra Petch", sans-serif'; g.textAlign = 'center'; g.fillText(String(pts[s]), x0 - 13, 21.5); g.textAlign = 'left'; g.font = '800 10.5px Orbitron, "Chakra Petch", sans-serif'; }
+      });
+    }
     if (A && A.phase === 'reveal') {                      // READY… GO!
       const u = A.t / REVEAL, txt = u < .55 ? 'READY…' : 'GO!', pop = u < .55 ? 1 : 1 + (1 - (u - .55) / .45) * .5;
       g.save(); g.translate(VW / 2, 92); g.scale(pop, pop);
@@ -1578,26 +2184,34 @@ function resetScene(st) {
   function darken(hex, f) { const c = rgb(hex).map(v => Math.round(v * (1 - f))); return `rgb(${c})`; }
 
   /* ---------------- DOM controls ---------------- */
-  const penSvg = col => `<svg viewBox="0 0 24 30" aria-hidden="true"><ellipse cx="12" cy="28.6" rx="7" ry="1.4" fill="rgba(0,0,0,.35)"/>
-    <path d="M12 6.5c5.6 0 8.2 6.8 8 12.6C19.8 25 16.3 28 12 28s-7.8-3-8-8.9C3.8 13.3 6.4 6.5 12 6.5z" fill="${darken(col, .6)}" stroke="${col}" stroke-width=".8"/>
-    <ellipse cx="12" cy="20" rx="5.3" ry="6.8" fill="#fff"/><ellipse cx="12" cy="13.8" rx="4.9" ry="3.5" fill="#fff"/>
+  // a penguin portrait; the type changes the silhouette (size, colour, collar, crest)
+  const PSC = [.92, 1.06, .86, .66];
+  const penSvg = (col, ty) => {
+    ty |= 0; const chick = ty === 3, body = chick ? '#6f7b8c' : darken(col, .6), sc = PSC[ty] || .92;
+    return `<svg viewBox="0 0 24 30" aria-hidden="true"><ellipse cx="12" cy="28.6" rx="${7 * sc + 1}" ry="1.4" fill="rgba(0,0,0,.35)"/><g transform="translate(12 28.4) scale(${sc}) translate(-12 -28.4)">
+    <path d="M12 6.5c5.6 0 8.2 6.8 8 12.6C19.8 25 16.3 28 12 28s-7.8-3-8-8.9C3.8 13.3 6.4 6.5 12 6.5z" fill="${body}" stroke="${col}" stroke-width=".8"/>
+    <ellipse cx="12" cy="20" rx="5.3" ry="6.8" fill="#fff"/><ellipse cx="12" cy="13.8" rx="4.9" ry="3.5" fill="#fff"/>${ty === 1 ? '<ellipse cx="12" cy="16.9" rx="4.3" ry="1.9" fill="#ffcf4a"/>' : ''}
     <circle cx="9.8" cy="13.4" r="1.05" fill="#15102a"/><circle cx="14.2" cy="13.4" r="1.05" fill="#15102a"/>
-    <path d="M10.3 15.3h3.4L12 17.6z" fill="#ffae33"/><path d="M5.8 10.6a6.2 6.2 0 0112.4 0z" fill="${col}"/>
-    <rect x="5.2" y="9.6" width="13.6" height="2.6" rx="1.3" fill="#f4fbff"/><circle cx="12" cy="3.9" r="2.1" fill="#fff"/></svg>`;
+    <path d="M10.3 15.3h3.4L12 17.6z" fill="#ffae33"/>${ty === 2 ? '<path d="M6.3 11.4L2.6 10M6.5 12.6L2.2 13M17.7 11.4L21.4 10M17.5 12.6L21.8 13" stroke="#ffd23a" stroke-width="1.3" stroke-linecap="round" fill="none"/>' : ''}<path d="M5.8 10.6a6.2 6.2 0 0112.4 0z" fill="${col}"/>
+    <rect x="5.2" y="9.6" width="13.6" height="2.6" rx="1.3" fill="#f4fbff"/><circle cx="12" cy="3.9" r="2.1" fill="#fff"/></g></svg>`;
+  };
+  const TSHORT = ['', 'EMP', 'ROC', 'CHK'];
+  const statPips = (lab, n) => `<div class="ko-st">${lab}<span>${[1, 2, 3, 4, 5].map(k => `<i class="${k <= n ? 'on' : ''}"></i>`).join('')}</span></div>`;
   function updateUI() {
     const u = S.ui, c = S.ctx; if (!u || !c || !S.st) return;
     const st = S.st, me = c.me, live = canPlan(), v = S.anim ? [null, null, null, null] : myArrows(st, me);
     const shown = S.anim ? S.anim.res.init : st.pens;      // mid-replay: no spoilers
     let n = 0;
     u.pens.forEach((b, k) => {
-      const i = me * NP + k, alive = !!shown[i][2], d = v[k];
+      const i = me * NP + k, alive = !!shown[i][2], ef = efAt(st, S.anim, i), anch = ef === 4, d = anch ? null : v[k];
       if (d && alive) n++;
-      b.className = 'ko-pen' + (!alive ? ' dead' : '') + (S.sel === k && live ? ' sel' : '');
-      b.disabled = !live || !alive;
+      b.className = 'ko-pen' + (!alive ? ' dead' : '') + (anch ? ' anch' : '') + (S.sel === k && live ? ' sel' : '');
+      b.disabled = !live || !alive || anch;
       b.querySelector('.tag').textContent = alive && d ? '➚' : '';
-      b.querySelector('.pw i').style.width = alive && d ? Math.round(Math.hypot(d[0], d[1]) / MAXA * 100) + '%' : '0';
+      b.querySelector('.ef').textContent = alive && ef ? IK[ef].ico : '';
+      b.querySelector('.pw i').style.width = alive && d ? Math.round(Math.hypot(d[0], d[1]) / (MAXA * capOfPen(st, i)) * 100) + '%' : '0';
     });
-    const alive = aliveCount(shown, me);
+    const alive = aliveCount(shown, me) - [0, 1, 2, 3].filter(k => shown[me * NP + k][2] && efAt(st, S.anim, me * NP + k) === 4).length;   // anchored penguins have nothing to aim
     u.clear.disabled = !live || !n;
     u.clear.textContent = live && S.sel != null && v[S.sel] ? '↺ Clear this' : '↺ Clear all';
     u.ready.disabled = !live;
@@ -1606,21 +2220,32 @@ function resetScene(st) {
     kick();
   }
   function arenaHint(st) {
-    if (st.round >= MAX_ROUNDS) return 'last round — make it count';
     if (st.roulette) return 'everyone regroups on a new arena after this round';
     if (st.arena === 'twin' && st.round > 3) return ARENAS[0].hint;
     if (st.arena === 'twin' && st.round === 3) return 'the bridge cracks after this round';
     return (ARENAS.find(a => a.id === st.arena) || ARENAS[0]).hint;
   }
+  const modeHint = st => st.mode === 'koth' ? 'be inside the <b>glowing zone</b> when everything stops: each penguin of yours in it scores <b>1</b>' + (st.arena === 'current' ? '. The current drags everything the way the badge points' : '')
+    : st.mode === 'hockey' ? `knock the fish through the <b>far goal</b> (first to ${GOAL_TO}). It bounces off the rim, penguins don\u2019t`
+    : arenaHint(st);
   function hintHtml(ctx, st) {
-    const me = ctx.me, foe = 1 - me, fn = ctx.players[foe].name;
-    if (ctx.status === 'finished') { const l = [aliveCount(st.pens, 0), aliveCount(st.pens, 1)]; return `Final: <b>${l[0]} – ${l[1]}</b> penguins left`; }
+    const me = ctx.me, foe = 1 - me, fn = ctx.players[foe].name, cap = maxRounds(st);
+    if (ctx.status === 'finished') {
+      if (st.mode === 'sumo') { const l = [aliveCount(st.pens, 0), aliveCount(st.pens, 1)]; return `Final: <b>${l[0]} – ${l[1]}</b> penguins left`; }
+      return `Final: <b>${st.pts[0]} – ${st.pts[1]}</b> ${st.mode === 'hockey' ? 'goals' : 'points'}`;
+    }
     if (S.anim) return 'Here they go… 🐧💨';
     const a = aimsOf(st, me);
-    if (a && a.skip) return `⏱ Time ran out — your penguins sit this round out`;
-    if (submitted(st, me)) return aimsOf(st, foe) ? 'Both locked in — launching…' : `Locked in ✓ — waiting for <b>${fn}</b>…`;
-    const last = st.round >= MAX_ROUNDS ? '<b>Last round!</b> · ' : `Round <b>${st.round}</b>/${MAX_ROUNDS} · `;
-    return `${last}Drag from a penguin to aim · drag back onto it to cancel · ${arenaHint(st)}`;
+    if (a && a.skip) return `⏱ Time ran out. Your penguins sit this round out`;
+    if (submitted(st, me)) return aimsOf(st, foe) ? 'Both locked in. Launching…' : `Locked in ✓ Waiting for <b>${fn}</b>…`;
+    const last = st.round >= cap ? '<b>Last round!</b> · ' : `Round <b>${st.round}</b>/${cap} · `;
+    const notes = [];
+    const anch = [0, 1, 2, 3].filter(k => st.pens[me * NP + k][2] && st.ef[me * NP + k] === 4);
+    if (anch.length) notes.push(`⚓ Penguin ${anch[0] + 1} is anchored this round: it can\u2019t move or launch`);
+    const mine = [0, 1, 2, 3].filter(k => st.pens[me * NP + k][2] && st.ef[me * NP + k] && st.ef[me * NP + k] !== 4);
+    if (mine.length) notes.push(`${IK[st.ef[me * NP + mine[0]]].ico} ${IK[st.ef[me * NP + mine[0]]].name} is on penguin ${mine[0] + 1}: ${IK[st.ef[me * NP + mine[0]]].txt}`);
+    if (!notes.length && st.pw && itemList(st, null).length) notes.push('Slide over a power-up to grab it. It works <b>next</b> round');
+    return `${last}Drag from a penguin to aim · drag back onto it to cancel · ${modeHint(st)}${notes.length ? '<br>' + notes.join('<br>') : ''}`;
   }
 
   /* ---------------- match setup: the host picks mode + arena, the partner watches it happen ---------------- */
@@ -1645,6 +2270,8 @@ function resetScene(st) {
     } else if (id === 'current') {
       let ar = ''; [[-9, 17], [-3, 0], [-9, -17]].forEach(([dx, dy]) => { ar += `<path d="M${36 + dx} ${32 + dy}h22m-6 -5l6 5l-6 5" fill="none" stroke="#3a86b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="translate(3 0)"/>`; });
       b = `<circle cx="50" cy="32" r="25" fill="${ice}" stroke="${edge}" stroke-width="1.2"/>${ar}`;
+    } else if (id === 'rink') {
+      b = `<rect x="29" y="6" width="42" height="52" rx="6" fill="${ice}" stroke="${edge}" stroke-width="1.2"/><path d="M29 32h42" stroke="#d04a64" stroke-width="1.3"/><circle cx="50" cy="32" r="8" fill="none" stroke="#3a7ab0" stroke-width="1.2"/><path d="M40 6h20M40 58h20" stroke="#ff9d2e" stroke-width="3.4" stroke-linecap="round"/><ellipse cx="50" cy="32" rx="5" ry="2.8" fill="#ff8a3d"/><path d="M45.5 32l-3.2-2.4v4.8z" fill="#ff8a3d"/>`;
     } else b = `<circle cx="50" cy="32" r="22" fill="none" stroke="#7fd8ff" stroke-width="1.4" stroke-dasharray="4 4"/><text x="50" y="43" text-anchor="middle" font-family="Orbitron,sans-serif" font-weight="800" font-size="30" fill="#7fd8ff">?</text>`;
     return `<svg viewBox="0 0 100 64" aria-hidden="true"><rect width="100" height="64" fill="#0a2240"/><rect y="40" width="100" height="24" fill="#071a33"/>${b}</svg>`;
   }
@@ -1652,79 +2279,160 @@ function resetScene(st) {
   function setupPick(ctx, patch) {
     const st = S.st; if (!st || st.phase !== 'setup' || ctx.status !== 'active' || ctx.me !== st.host || S.starting) return;
     const n = norm(ctx.clone(ctx.state)); Object.assign(n, patch); n.n = (n.n || 0) + 1;
+    if (n.oldc === ctx.me) delete n.oldc;
     try { ctx.sound.tap(); } catch (e) {}
-    ctx.commit(n);
+    ctx.commit(seal(n));
   }
   // the pick becomes the rules. "Surprise me" is drawn here (seeded by the match id) so both phones agree.
+  // setup → SQUAD PICK (both players choose 4 penguins in secret) → round 1
   function beginMatch(st, turnTo) {
-    st.arena = st.arena === 'surprise' ? surpriseArena(st.mid) : st.arena;
-    st.phase = 'play'; st.pens = startPens(st.arena); st.aims = {}; st.round = 1; st.R = R_START; st.turn = turnTo; st.n = (st.n || 0) + 1;
-    return st;
+    st.arena = st.arena === 'surprise' ? surpriseArena(st.mid, st.mode) : st.arena;
+    if (!V3(st)) {                                       // 'knockout' (legacy): straight into round 1, exactly as v78
+      st.phase = 'play'; st.pens = startPens(st.arena); st.aims = {}; st.round = 1; st.R = R_START; st.turn = turnTo; st.n = (st.n || 0) + 1;
+      return st;
+    }
+    st.phase = 'squad'; st.pens = startPens(st.arena); st.aims = {}; st.sqs = {}; st.round = 1; st.R = R_START; st.turn = turnTo; st.n = (st.n || 0) + 1;
+    return cfgSync(st);
   }
   function startMatch(ctx) {
     const st = S.st; if (!st || st.phase !== 'setup' || ctx.status !== 'active' || ctx.me !== st.host || S.starting) return;
     S.starting = st.mid;
     const n = beginMatch(norm(ctx.clone(ctx.state)), st.turn === 1 ? 0 : 1);   // turn changes → a fresh clock for round 1
     try { ctx.sound.place(); } catch (e) {}
-    ctx.commit(n);
+    ctx.commit(seal(n));
   }
+  // switching mode keeps the arena when the new mode offers it, otherwise falls back to that mode's first one
+  function modePatch(st, m) {
+    const sup = ARENA_SETS[m], keep = sup.indexOf(st.arena) >= 0 || (st.arena === 'surprise' && m !== 'hockey');
+    return { mode: m, arena: keep ? st.arena : sup[0], roulette: m === 'sumo' ? st.roulette : 0 };
+  }
+  const MODES = [['sumo', 'Sumo', 'Last side standing', 'Both sides push. The last side with penguins wins.'],
+    ['koth', 'King of the Hill', 'Hold the middle', 'A glowing zone in the centre. After each round, every penguin of yours inside it scores 1. The ice does not shrink and the fallen come back. Most points after 8 rounds wins.'],
+    ['hockey', 'Fish Hockey', 'Fish in the goal', 'Knock the fish into your partner\u2019s goal. First to 3 wins. After 10 rounds, most goals wins; if level, whoever has the fish in the partner\u2019s half. The fallen come back.']];
   function renderSetup(ctx, st, wrap) {
     const me = ctx.me, hs = st.host === 1 ? 1 : 0, isHost = me === hs, hn = ctx.players[hs].name, live = ctx.status === 'active';
     S.ui = null; S.sel = null; S.drag = null; stepPreview(0);
     const edit = isHost && live && !S.starting, ro = edit ? '' : ' ko-ro';
     const btn = (cls, attrs, inner, fn) => ctx.h('button', Object.assign({ class: cls, type: 'button', onclick: fn }, edit || /ko-go|ko-ready/.test(cls) ? {} : { tabindex: '-1', 'aria-disabled': 'true' }, attrs), inner);
-    const cur = st.arena, rc = st.roulette;
-    const modes = [['sumo', 'Sumo', 'Last side standing'], ['koth', 'King of the Hill', 'Soon'], ['hockey', 'Fish Hockey', 'Soon']].map(([id, nm, sub]) =>
-      btn('ko-mode' + (id === 'sumo' ? ro : ''), { 'aria-pressed': String(id === 'sumo'), disabled: id !== 'sumo' ? '' : null, 'aria-label': id === 'sumo' ? nm : nm + ', coming soon' },
-        [nm, ctx.h('small', {}, sub)], () => {}));
-    const cards = ARENAS.map(a => btn('ko-ar' + ro, { 'aria-pressed': String(cur === a.id), 'aria-label': a.name + '. ' + a.blurb, 'data-id': a.id },
-      [ctx.h('span', { html: thumb(a.id) }), a.name], () => { if (cur !== a.id) setupPick(ctx, { arena: a.id }); }));
-    cards.push(btn('ko-ar wide' + ro, { 'aria-pressed': String(cur === 'surprise'), 'aria-label': 'Surprise me. A random arena, revealed at the start.', 'data-id': 'surprise' },
+    const cur = st.arena, rc = st.roulette, md = st.mode, mdef = MODES.find(m => m[0] === md) || MODES[0], leg = !V3(st);
+    const modes = MODES.map(([id, nm, sub, long]) =>
+      btn('ko-mode' + ro, { 'aria-pressed': String(id === md), 'aria-label': nm + '. ' + long, 'data-id': 'mode-' + id }, [nm, ctx.h('small', {}, sub)], () => { if (id !== md) setupPick(ctx, modePatch(st, id)); }));
+    const sup = ARENA_SETS[md], one = sup.length === 1;
+    const cards = sup.map(id => { const a = arenaInfo(id); return btn('ko-ar' + (one ? ' wide' : '') + ro, { 'aria-pressed': String(cur === a.id), 'aria-label': a.name + '. ' + (md === 'koth' && KOTH_BLURB[id] ? KOTH_BLURB[id] : a.blurb), 'data-id': a.id },
+      [ctx.h('span', { html: thumb(a.id) }), one ? ctx.h('span', {}, [a.name, ctx.h('small', {}, a.hint.charAt(0).toUpperCase() + a.hint.slice(1))]) : a.name], () => { if (cur !== a.id) setupPick(ctx, { arena: a.id }); }); });
+    if (!one) cards.push(btn('ko-ar wide' + ro, { 'aria-pressed': String(cur === 'surprise'), 'aria-label': 'Surprise me. A random arena, revealed at the start.', 'data-id': 'surprise' },
       [ctx.h('span', { html: thumb('surprise') }), ctx.h('span', {}, ['Surprise me', ctx.h('small', {}, 'A random arena, revealed at the start')])], () => { if (cur !== 'surprise') setupPick(ctx, { arena: 'surprise' }); }));
-    const info = cur === 'surprise' ? '<b>Surprise me</b>. Any of the six arenas, drawn when the match starts.' : `<b>${esc2(arenaName(cur))}</b>. ${esc2((ARENAS.find(a => a.id === cur) || ARENAS[0]).blurb)}`;
-    const desc = ctx.h('div', { class: 'ko-desc', html: info + (rc ? ' Then a new arena every round.' : '') });
-    const roul = btn('ko-roul' + ro, { role: 'switch', 'aria-checked': String(!!rc) }, [ctx.h('span', {}, ['Arena roulette', ctx.h('small', {}, 'A different arena every round')]), ctx.h('i', { class: 'ko-sw' })], () => setupPick(ctx, { roulette: rc ? 0 : 1 }));
+    const count = ({ sumo: 'six', koth: 'four' })[md] || 'the';
+    const info = cur === 'surprise' ? `<b>Surprise me</b>. Any of the ${count} arenas, drawn when the match starts.` : `<b>${esc2(arenaInfo(cur).name)}</b>. ${esc2(md === 'koth' && KOTH_BLURB[cur] ? KOTH_BLURB[cur] : arenaInfo(cur).blurb)}`;
+    const desc = ctx.h('div', { class: 'ko-desc', html: (leg ? '' : `<b>${esc2(mdef[1])}</b>. ${esc2(mdef[3])}<br>`) + info + (rc ? ' Then a new arena every round.' : '') });
+    const roul = md === 'sumo' ? btn('ko-roul' + ro, { role: 'switch', 'aria-checked': String(!!rc), 'data-id': 'roul' }, [ctx.h('span', {}, ['Arena roulette', ctx.h('small', {}, 'A different arena every round')]), ctx.h('i', { class: 'ko-sw' })], () => setupPick(ctx, { roulette: rc ? 0 : 1 })) : null;
+    const pwr = btn('ko-roul' + ro, { role: 'switch', 'aria-checked': String(!!st.pw), 'data-id': 'pw' }, [ctx.h('span', {}, ['Power-ups', ctx.h('small', {}, 'Grab items on the ice. They work next round')]), ctx.h('i', { class: 'ko-sw' })], () => setupPick(ctx, { pw: st.pw ? 0 : 1 }));
     const go = isHost
       ? ctx.h('div', { class: 'ko-go' }, btn('ko-ready go' + (me === 1 ? ' p1' : ''), { disabled: !live || S.starting ? '' : null }, S.starting ? 'STARTING…' : 'START MATCH', () => startMatch(ctx)))
       : ctx.h('div', { class: 'ko-go' }, ctx.h('div', { class: 'ko-wait', role: 'status' }, [ctx.h('span', { class: 'ko-dots' }, [ctx.h('i'), ctx.h('i'), ctx.h('i')]), `Waiting for ${hn} to start`]));
     wrap.append(ctx.h('div', { class: 'ko-setup' },
       ctx.h('div', { class: 'ko-who', html: isHost ? `You set the rules. <b>${esc2(ctx.players[1 - me].name)}</b> sees every change live.` : `<b>${esc2(hn)}</b> is setting up the match. Their choices show here live.` }),
-      ctx.h('div', { class: 'ko-lab' }, 'Mode'), ctx.h('div', { class: 'ko-seg', role: 'group', 'aria-label': 'Game mode' }, modes),
-      ctx.h('div', { class: 'ko-lab' }, 'Arena'), ctx.h('div', { class: 'ko-arenas', role: 'group', 'aria-label': 'Arena' }, cards), desc, roul, go));
-    if (live) ctx.msg(isHost ? 'Pick an arena, then start 🐧' : `${hn} is choosing the arena… 🧊`, 'var(--ink-dim)');
-    const say = `${hn} chose ${cur === 'surprise' ? 'Surprise me' : arenaName(cur)}${rc ? ', roulette on' : ''}`;   // the partner's screen reader hears the host's picks
+      ...(leg ? [] : [ctx.h('div', { class: 'ko-lab' }, 'Mode'), ctx.h('div', { class: 'ko-seg', role: 'group', 'aria-label': 'Game mode' }, modes)]),   // a 'knockout' (legacy) match: classic Sumo only
+      ctx.h('div', { class: 'ko-lab' }, 'Arena'), ctx.h('div', { class: 'ko-arenas', role: 'group', 'aria-label': 'Arena' }, cards), ...[desc, roul, leg ? null : pwr, go].filter(Boolean)));   // h() would print a null child as text
+    if (live) ctx.msg(isHost ? (leg ? 'Pick an arena, then start 🐧' : 'Pick a mode and an arena, then start 🐧') : `${hn} is setting up the match… 🧊`, 'var(--ink-dim)');
+    const say = `${hn} chose ${leg ? '' : mdef[1] + ', '}${cur === 'surprise' ? 'Surprise me' : arenaName(cur)}${rc ? ', roulette on' : ''}${leg ? '' : ', power-ups ' + (st.pw ? 'on' : 'off')}`;   // the partner's screen reader hears the host's picks
     if (!isHost && S.lastSay !== say) { S.lastSay = say; S.live.textContent = say; }
     if (S.focusSel) { const el = wrap.querySelector(S.focusSel); if (el) { try { el.focus({ preventScroll: true }); } catch (e) {} } }   // every sync rebuilds this DOM: keep the keyboard user where they were
     kick();
   }
+  /* ---------------- squad pick: 4 penguins each, in secret; revealed together once both are locked ---------------- */
+  function renderSquad(ctx, st, wrap) {
+    const me = ctx.me, foe = 1 - me, fn = ctx.players[foe].name, live = ctx.status === 'active', col = ctx.players[me].color, fcol = ctx.players[foe].color;
+    S.ui = null; S.sel = null; S.drag = null;
+    const lv = memGet(myKey(st, me)) || (sqOf(st, me) && sqOf(st, me).v) || null, locked = !!lv, d = sqDraft(st);
+    if (locked) d.v = cleanSq(lv);
+    const edit = live && !locked, theirs = !!sqOf(st, foe);   // ONLY whether they are locked, never what they picked
+    const pop = S.popSlot;
+    const slots = d.v.map((t, k) => ctx.h('button', { class: 'ko-slot' + (pop === k ? ' pop' : ''), type: 'button', style: `--kc:${col}`, 'data-id': 'slot' + k, 'aria-pressed': String(edit && d.sel === k),
+      'aria-label': `Penguin ${k + 1} of 4: ${TYPES[t].name}.` + (edit ? ' Select, then choose its type.' : ''), disabled: edit ? null : '', onclick: () => pickSlot(k) },
+      [ctx.h('span', { html: penSvg(col, t) }), ctx.h('span', {}, TYPES[t].name)]));
+    const rows = TYPES.map((T, t) => ctx.h('button', { class: 'ko-type', type: 'button', style: `--kc:${col}`, 'data-id': 'type' + t, 'aria-pressed': String(edit && d.v[d.sel] === t), disabled: edit ? null : '', 'aria-label': `${T.name}. ${T.blurb} Weight ${T.wt}, reach ${T.rc}, size ${T.sz}, out of 5.`, onclick: () => pickType(t) },
+      [ctx.h('span', { class: 'ico', html: penSvg(col, t) }), ctx.h('span', { class: 'tx' }, [ctx.h('b', {}, T.name), ctx.h('small', {}, T.blurb)]),
+        ctx.h('span', { class: 'st', html: statPips('Weight', T.wt) + statPips('Reach', T.rc) + statPips('Size', T.sz) })]));
+    const go = locked || !live
+      ? ctx.h('div', { class: 'ko-go' }, ctx.h('div', { class: 'ko-wait', role: 'status' }, locked ? [ctx.h('span', { class: 'ko-dots' }, [ctx.h('i'), ctx.h('i'), ctx.h('i')]), theirs ? 'Revealing both squads…' : `Locked in. Waiting for ${fn}`] : 'Squad pick is over'))
+      : ctx.h('div', { class: 'ko-go' }, ctx.h('button', { class: 'ko-ready go' + (me === 1 ? ' p1' : ''), type: 'button', onclick: () => lockSquad() }, 'LOCK IN SQUAD'));
+    const cls = 'ko-setup ko-sq';
+    wrap.append(ctx.h('div', { class: cls, style: `--kf:${fcol}` },
+      ctx.h('div', { class: 'ko-who', html: locked ? `Your squad is locked. <b>${esc2(fn)}</b> picks in secret too. You both see the squads at the same moment.` : `Pick 4 penguins in secret. <b>${esc2(fn)}</b> can\u2019t see them until you both lock in.` }),
+      ctx.h('div', { class: 'ko-lab' }, 'Your squad'), ctx.h('div', { class: 'ko-slots', role: 'group', 'aria-label': 'Your four penguins' }, slots),
+      ctx.h('div', { class: 'ko-lab' }, edit ? 'Pick a type for the highlighted penguin' : 'Penguin types'), ctx.h('div', { class: 'ko-types', role: 'group', 'aria-label': 'Penguin types' }, rows),
+      ...(edit ? [ctx.h('button', { class: 'ko-ghost', type: 'button', 'data-id': 'rand', onclick: randomSquad }, 'Random squad')] : []),
+      ctx.h('div', { class: 'ko-fs' + (theirs ? ' rdy' : ''), role: 'status' }, [ctx.h('b', {}, fn), theirs ? 'is locked in' : 'is still choosing']), go));
+    if (live) ctx.msg(locked ? (theirs ? 'Both locked in. Reveal incoming 🐧' : `Waiting for ${fn} to lock in… 🧊`) : theirs ? `${fn} is locked in. Your turn to pick 🔥` : 'Pick your squad. It stays secret until you both lock in 🐧', locked ? 'var(--ink-faint)' : 'var(--gold)');
+    const say = theirs ? `${fn} is locked in` : '';
+    if (S.lastSay !== say) { S.lastSay = say; if (say) S.live.textContent = say; }
+    if (S.focusSel) { const el = wrap.querySelector(S.focusSel); if (el) { try { el.focus({ preventScroll: true }); } catch (e) {} } }
+    kick();
+  }
   const esc2 = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+  /* ---------------- an older app in the match: undo its overwrite once, then wait for them to update ---------------- */
+  function healOld(ctx, st) {
+    let old = oldSeat(st); if (old === 2) old = 1 - ctx.me;
+    if (old < 0 || old === ctx.me) return -1;              // (my own old flag clears with my first new-format move)
+    const key = st.mid + ':' + st.n + ':' + old;
+    if (ctx.status === 'active' && (st.hx || st.oldc !== old || st.turn !== old) && S.healKey !== key) {
+      S.healKey = key;                                     // one write: the older app only writes on its player's own taps / timeouts, so this never ping-pongs
+      setTimeout(() => {
+        const c = S.ctx; if (!c || c.status !== 'active') return;
+        const n = norm(c.clone(c.state)); let o = oldSeat(n); if (o === 2) o = 1 - c.me;
+        if (o < 0 || o === c.me) return;
+        n.oldc = o; n.turn = o; c.commit(seal(n));
+      }, 0);
+    }
+    return old;
+  }
+  function warnOld(ctx, old) {
+    if (old < 0) return;
+    ctx.msg(`<b>${esc2(ctx.players[old].name)}</b> is on an older version — ask them to close and reopen the app`, '#ffd66b');
+    if (S.oldWarn !== S.mid + ':' + old) { S.oldWarn = S.mid + ':' + old; try { ctx.sound.bad(); } catch (e) {} }
+  }
+
   /* ---------------- registration ---------------- */
+  /* Two registrations, one module. 'knockout2' (hidden) holds every match the new app creates: an app older than this
+     version doesn't know that id, so it shows no invite and can never write to those matches. 'knockout' (visible, launches
+     as 'knockout2') keeps running what already exists under the old id: old saves, matches made by an older app, and
+     tournaments (their pools use the visible id) - classic Sumo, bit-identical to v78. Rules are state-driven (v >= 3). */
   const DEF = {
-    id: 'knockout', name: 'Knockout', emoji: '🐧', category: 'Arcade', accent: '#7fd8ff',
-    tagline: 'Penguin sumo on six shrinking arenas.',
+    id: 'knockout2', hidden: true, statsId: 'knockout', name: 'Knockout', emoji: '🐧', category: 'Arcade', accent: '#7fd8ff',
+    tagline: 'Penguin sumo: six arenas, King of the Hill, Fish Hockey.',
     test: { simulate, resolveRound, norm, launches, aimsOf, realAims, nextR, startPens, cleanVec, memKey, memGet, memSet, mem, sync, ready,
       canPlan, submitted, draftFor, P, S, NP, PR, VMAX, MAXA, R_START, MAX_ROUNDS, REVEAL, FALLBACK_MS, VW, VH, TH,
       beginMatch, lostInfo, arenaD, curGeo, stepPreview, thumb, geoFor, geoOf, arenaAfter, slotsFor, surpriseArena, curSeq, icePicks, bumpOrder, ARENAS, ARENA_IDS, MAX_STEPS, UV, RT, RCT, HRT, ITW,
+      beginPlay, resolveSquad, sqOf, realSq, oldSeat, seal, AK, safeSpot, fishSpot, makeBd, spawnItems, itemsFor, respawn, inZone, geoAt, maxRounds, rkOf, myKey, lockSquad, TYPES, IK, MODE_IDS, KOTH_ARENAS, ARENA_SETS, ZR, HW, HL, GW, HK_ROUNDS, GOAL_TO, IR, SPR_E,
       step: ms => { step(ms); draw(); }, draw: () => draw(), finish: () => { let n = 0; while (S.anim && n++ < 3000) step(16); draw(); } },
     // the result card waits until the last slide (and splash) has played out
-    // a timeout during match setup must never forfeit (the host is only picking an arena)
-    skipOnly: st => !!st && st.phase === 'setup',
+    // a timeout before round 1 (match setup, squad pick) must never forfeit: nobody has played yet
+    // ...and while the partner's phone runs an older app, the clock only ever skips (they can't move until they update)
+    skipOnly: st => { if (!st) return false; const n = norm(JSON.parse(JSON.stringify(st))); return n.phase === 'setup' || n.phase === 'squad' || oldSeat(n) >= 0; },
     clockGrace: 5000,                                    // ~4 s replay before the next round can be planned
     resultDelay: () => S.anim ? Math.max(0, Math.round((S.anim.est - S.anim.total) / (S.speed || 1))) + 250 : 0,
-    init: host => ({
-      v: 2, mid: 'k' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36),
+    init: host => seal({
+      v: 3, mid: 'k' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36),
       host: host === 1 ? 1 : 0, turn: host === 1 ? 1 : 0, round: 1, R: R_START, pens: startPens(), aims: {}, n: 0,
-      phase: 'setup', mode: 'sumo', arena: 'floe', roulette: 0,          // the host picks these before round 1 (`turn` = the host meanwhile)
+      phase: 'setup', mode: 'sumo', arena: 'floe', roulette: 0, pw: 1,   // the host picks these before round 1 (`turn` = the host meanwhile)
     }),
     // timer ran out on the player still aiming: they submit "no moves" (everyone stays put);
-    // in setup the host is on the clock, so the match simply starts with what is picked
+    // in setup the host is on the clock, so the match simply starts (into the squad pick) with what is picked;
+    // in the squad pick the slow player gets 4 Classic
     skipTurn: (st0, opp) => {
-      const st = norm(JSON.parse(JSON.stringify(st0))), me = 1 - opp;
-      if (st.phase === 'setup') return beginMatch(st, opp);
-      if (!aimsOf(st, me)) st.aims['a' + me] = { r: st.round, v: [[0, 0], [0, 0], [0, 0], [0, 0]], skip: 1 };
+      const st = norm(JSON.parse(JSON.stringify(st0))), me = 1 - opp, old = oldSeat(st);
+      if (st.phase === 'setup') return seal(beginMatch(st, opp));
+      if (old >= 0) { if (old < 2) st.turn = old; return seal(st); }   // nobody is marked as timed out while an older app blocks the match
+      if (st.phase === 'squad') {
+        if (!sqOf(st, me)) st.sqs['a' + me] = { v: [0, 0, 0, 0], skip: 1 };
+        if (!sqOf(st, opp)) st.turn = opp;
+        return seal(st);
+      }
+      if (!aimsOf(st, me)) st.aims[AK(st) + me] = { r: st.round, v: [[0, 0], [0, 0], [0, 0], [0, 0]], skip: 1 };
       if (!aimsOf(st, opp)) st.turn = opp;
-      return st;
+      return seal(st);
     },
     render(ctx) {
       S.ctx = ctx;
@@ -1733,12 +2441,13 @@ function resetScene(st) {
       ensureCanvas();
       if (st.mid !== S.mid) { S.st = st; resetScene(st); }
       S.st = st;
-      S.cv.setAttribute('aria-label', st.phase === 'setup' ? 'Preview of the match arena' : `Knockout arena: ${arenaName(st.arena)}, round ${st.round} of ${MAX_ROUNDS}`);
+      const oldP = healOld(ctx, st);
+      S.cv.setAttribute('aria-label', st.phase === 'setup' ? 'Preview of the match arena' : st.phase === 'squad' ? 'Your penguins on the start line' : `Knockout ${st.mode === 'koth' ? 'King of the Hill' : st.mode === 'hockey' ? 'Fish Hockey' : 'arena'}: ${arenaName(st.arena)}, round ${st.round} of ${maxRounds(st)}`);
       const wrap = ctx.h('div', { class: 'ko-wrap' });
       if (st.phase === 'setup') {                          // before round 1: mode + arena, picked by the host, watched live by the partner
         ctx.root.append(ctx.turnBar({ scores: [NP, NP] }), wrap);
         wrap.append(S.cv);
-        renderSetup(ctx, st, wrap);
+        renderSetup(ctx, st, wrap); warnOld(ctx, oldP);
         fit(); kick();
         return;
       }
@@ -1746,23 +2455,41 @@ function resetScene(st) {
         if (S.pre.id && S.pre.id !== st.arena && !S.sw) S.sw = { ga: geoFor(S.pre.id, 0, st.mid, R_START), gb: geoFor(st.arena, 0, st.mid, R_START), t: S.calm ? ENTRY_MS * .7 : 0, dur: ENTRY_MS, from: S.prePos || slotPos(S.pre.id, st.mid), to: st.pens.map(q => [q[0], q[1]]), toId: st.arena, entry: true };
         S.pre.id = null; S.prePos = null;
       }
-      S.starting = ''; S.focusSel = '';
+      S.starting = '';
+      if (st.phase === 'squad') {                          // both pick in secret; the resolver reveals both at once
+        scheduleSync(st, ctx);
+        ctx.root.append(ctx.turnBar({ scores: st.mode === 'sumo' ? [NP, NP] : [0, 0] }), wrap);
+        wrap.append(S.cv);
+        renderSquad(ctx, st, wrap); warnOld(ctx, oldP);
+        fit(); kick();
+        return;
+      }
+      S.focusSel = '';
+      const reveal = st.phase === 'play' && st.sqby != null && st.round === 1 && !st.res && !S.done.has(st.mid + ':sq');   // only the squad-pick -> round 1 hand-over
+      if (reveal) {                                        // the squads just became visible to both phones: one pop for every penguin
+        doneAdd(st.mid + ':sq');
+        S.pv.forEach(pv => { pv.sq = S.calm ? 0 : .3; });
+        S.banner = { text: 'SQUADS REVEALED', t: 0, col: '#bfe9ff' };
+      }
       maybeReplay(st);
       scheduleSync(st, ctx);
       const shown = S.anim ? S.anim.res.init : st.pens;
-      ctx.root.append(ctx.turnBar({ scores: [aliveCount(shown, 0), aliveCount(shown, 1)] }), wrap);
+      ctx.root.append(ctx.turnBar({ scores: st.mode === 'sumo' ? [aliveCount(shown, 0), aliveCount(shown, 1)] : hudPts(st, S.anim) }), wrap);
       wrap.append(S.cv);                                  // the SAME canvas every repaint
       const col = ctx.players[me].color, fcol = ctx.players[foe].color;
       const pens = [];
-      for (let k = 0; k < NP; k++) pens.push(ctx.h('button', { class: 'ko-pen', style: `--kc:${col}`, onclick: () => selectPen(k), 'aria-label': 'Penguin ' + (k + 1) },
-        ctx.h('span', { html: penSvg(col) }), ctx.h('span', { class: 'tag' }), ctx.h('span', { class: 'pw' }, ctx.h('i'))));
+      const tys = tyOf(st);
+      for (let k = 0; k < NP; k++) { const t = tys[me * NP + k], efk = st.ef[me * NP + k]; pens.push(ctx.h('button', { class: 'ko-pen', style: `--kc:${col}`, onclick: () => selectPen(k), 'aria-label': 'Penguin ' + (k + 1) + (t ? ', ' + TYPES[t].name : '') + (efk ? ', ' + IK[efk].name : '') },
+        ctx.h('span', { html: penSvg(col, t) }), ctx.h('span', { class: 'tn' }, TSHORT[t]), ctx.h('span', { class: 'tag' }), ctx.h('span', { class: 'ef', 'aria-hidden': 'true' }), ctx.h('span', { class: 'pw' }, ctx.h('i')))); }
+      const showSq = st.round === 1 && st.sqby != null && tys.some(t => t) && !S.anim;
+      const sqRow = showSq ? ctx.h('div', { class: 'ko-rev', role: 'note' }, [0, 1].map(sd => ctx.h('div', { style: `--kc:${ctx.players[sd].color}` }, [ctx.h('b', {}, ctx.players[sd].name), ctx.h('span', { class: 'ic', html: tys.slice(sd * NP, sd * NP + NP).map(t => penSvg(ctx.players[sd].color, t)).join('') }), ctx.h('span', { class: 'ko-sr' }, tys.slice(sd * NP, sd * NP + NP).map(t => TYPES[t].name).join(', '))]))) : null;
       const foeRdy = !!aimsOf(st, foe) && ctx.status === 'active' && !S.anim;
       const foeBox = ctx.h('div', { class: 'ko-foe' + (foeRdy ? ' rdy' : ''), style: `--kf:${fcol}` },
         ctx.h('b', {}, ctx.players[foe].name), ctx.status !== 'active' ? '—' : S.anim ? 'sliding…' : foeRdy ? 'READY ✓' : 'aiming…');
       const clear = ctx.h('button', { class: 'ko-clear', onclick: clearAims }, '↺ Clear all');
       const readyB = ctx.h('button', { class: 'ko-ready' + (me === 1 ? ' p1' : ''), onclick: ready }, 'READY ✓');
       const hint = ctx.h('div', { class: 'ko-hint', html: hintHtml(ctx, st) });
-      wrap.append(ctx.h('div', { class: 'ko-row' }, ctx.h('div', { class: 'ko-pens' }, pens), foeBox), ctx.h('div', { class: 'ko-btns' }, clear, readyB), hint);
+      wrap.append(...(sqRow ? [sqRow] : []), ctx.h('div', { class: 'ko-row' }, ctx.h('div', { class: 'ko-pens' }, pens), foeBox), ctx.h('div', { class: 'ko-btns' }, clear, readyB), hint);
       S.ui = { pens, clear, ready: readyB };
       updateUI();
       if (ctx.status === 'active' && !S.anim) {
@@ -1770,8 +2497,16 @@ function resetScene(st) {
         ctx.msg(mine ? (theirs ? 'Both ready — here we go! 🐧' : `Waiting for ${ctx.players[foe].name} to lock in… 🧊`)
           : theirs ? `${ctx.players[foe].name} is READY — your move! 🔥` : 'Aim your penguins, then tap READY 🐧', mine ? 'var(--ink-faint)' : 'var(--gold)');
       } else if (S.anim) ctx.msg('💨 Launch!', 'var(--ink-dim)');
+      warnOld(ctx, oldP);
       fit(); kick();
     },
   };
   Games.register(DEF);
+  // the visible 'knockout': a new match launches as 'knockout2'; this def's own init (tournaments) is v78's classic Sumo,
+  // straight into round 1, so an older app in the same tournament plays it identically
+  Games.register(Object.assign({}, DEF, {
+    id: 'knockout', hidden: false, statsId: undefined, launchAs: 'knockout2', tagline: 'Penguin sumo on six shrinking arenas.',
+    init: host => ({ v: 2, mid: 'k' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36),
+      host: host === 1 ? 1 : 0, turn: host === 1 ? 1 : 0, round: 1, R: R_START, pens: startPens(), aims: {}, n: 0, phase: 'play', mode: 'sumo', arena: 'floe', roulette: 0 }),
+  }));
 })();

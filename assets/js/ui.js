@@ -69,11 +69,18 @@ const Games = (() => {
   const list = [];
   return {
     register: def => list.push(def),
-    all: () => list.slice(),
+    // `hidden` variants (e.g. 'knockout2') never appear in menus, stats lists, random picks or tournament pools
+    all: () => list.filter(g => !g.hidden),
     byId: id => list.find(g => g.id === id),
     categories: () => [...new Set(list.map(g => g.category))],
   };
 })();
+
+// A game can store its matches under a NEW id that older app versions do not know (def.launchAs on the visible
+// game, def.statsId on the hidden variant). An old app then shows no invite and cannot touch those matches, so
+// a phone left open across a deploy can never corrupt them. Scores, icon, rules and timer use the base id.
+const baseId = id => { const d = Games.byId(id); return (d && d.statsId) || id; };
+const launchId = id => { const d = Games.byId(id); return (d && d.launchAs && Games.byId(d.launchAs)) ? d.launchAs : id; };
 
 /* ---------- short how-to-play rules per game ---------- */
 const GAME_RULES = {
@@ -110,7 +117,7 @@ const GAME_RULES = {
   'hoops': ['<b>5 rounds</b>, and the spot moves round the arc (corner, wing, top, wing, corner). Each round <b>you both shoot 3 balls</b> from it: the starter takes all 3, then the other; the starter swaps every round.', '<b>Swipe up</b> — the direction aims, the length sets the power. A shot only counts if the ball drops <b>down through the ring</b>; swishes, bank shots and rattle-ins all count.', 'The <b>3rd ball of each round is the money ball — worth 2</b>. The others are worth 1.', 'From <b>round 3 the hoop slides</b> — where it is when you let go is part of your shot.', '<b>3 makes in a row = ON FIRE</b>: a flaming ball and a slightly more forgiving rim until you miss.', 'Level after 5 rounds? <b>Sudden death</b>: one shot each — the first round where one makes it and the other misses wins. Still level after 5 sudden-death rounds is a draw.'],
   'curling': ['<b>4 ends.</b> Each end you both throw <b>4 stones</b>, taking turns. The player who did <b>not</b> score last end throws last (the <b>hammer</b>); a blank end keeps the hammer.', '<b>Drag back</b> to aim and set the power — the bar marks hog line, button and takeout weight. Pick the curl: <b>↺</b> bends left, <b>↻</b> bends right, and it bends more as it slows. No sweeping.', 'Stones knock each other out. A stone that goes <b>past the back line</b>, hits the <b>side boards</b> or <b>stops short of the far hog line</b> is removed.', '<b>Scoring:</b> after all 8 stones only the player closest to the button scores — <b>1 point per stone in the house</b> closer than the opponent’s nearest. Stones outside the house never count; equal distance is a blank end.', 'Most points after 4 ends wins. Tied: <b>one extra end</b>; still tied is a draw. Run out of time and that stone is lost. Tap the ice to speed a replay up; <b>House view</b> looks down on the rings.'],
   'cup-pong': ['You each have <b>10 cups</b> in a triangle at your end. <b>Swipe up</b> to throw — the angle aims, a longer swipe throws harder.', '<b>2 throws a turn.</b> Sink both and you get <b>balls back</b> — one extra turn.', '<b>One ball in = one cup out</b> — the cup the ball ends up in, nothing else. Hits a rim and pops out = a miss; rattles in (even off another cup’s rim) = that cup out.', '<b>One re-rack per game</b>, on your turn before your first throw — the cups you’re aiming at snap into a tight shape.', 'Sink <b>3 in a row</b> and you’re <b>ON FIRE</b>: your ball glows until you miss (just for show — the cups stay the same).', 'Clear all your partner’s cups and they get a <b>rebuttal</b> — they throw until they miss. If they clear all of yours, it’s a <b>draw</b>.', 'Run out of time and the rest of your turn is lost (and your streak). In a rebuttal, a timeout counts as the miss.'],
-  'knockout': ['Penguin sumo on shifting ice! You each have <b>4 penguins</b> and you both plan <b>at the same time</b>: drag from a penguin to aim (longer arrow = harder shove), drag back onto it to cancel, then tap <b>READY</b>.', 'Before round 1 the host picks the arena — or <b>Surprise me</b>, or <b>Arena roulette</b> for a new arena every round — and taps Start. (King of the Hill and Fish Hockey are coming soon.)', 'Neither of you sees the other’s arrows until you’re <b>both</b> ready — then all 8 launch at once, slide and bounce off each other. A penguin with no arrow stays put (but can still get shoved!).', 'A penguin whose middle slides off the ice falls in. <i>Splash.</i>', 'The ice <b>tightens every round</b>: <b>Classic Floe</b> — the dashed ring breaks off. <b>Donut</b> — the hole widens. <b>Twin Floes</b> — the bridge cracks after round 3, then the islands shrink. <b>Bumper Rink</b> — bumpers bounce you back; the pulsing pair pops and the rim shrinks. <b>Crumbling Ice</b> — cracked tiles fall. <b>Current</b> — the sea drags everything along the arrow, turning each round, and the floe shrinks a little.', 'Last side with penguins wins; lose your last ones in the same round = draw. After <b>8 rounds</b>, more penguins left wins (equal = draw).', 'Timer: run out of time and your penguins sit that round out (in setup, the match starts with what’s picked).'],
+  'knockout': ['Penguin sumo on the ice! You each have <b>4 penguins</b> and plan <b>at the same time</b>: drag from a penguin to aim (longer arrow = harder shove), drag back onto it to cancel, then tap <b>READY</b>.', 'Before round 1 the host picks a <b>mode</b>, an <b>arena</b> (or <b>Surprise me</b>; in Sumo also <b>Arena roulette</b>) and whether <b>power-ups</b> are on.', 'Then you each pick a <b>squad of 4</b> in secret: <b>Classic</b> (balanced), <b>Emperor</b> (big, a bit heavier, short push), <b>Rockhopper</b> (slim, launches much further) or <b>Chick</b> (tiny, hard to hit). Both squads show once you’ve both locked in.', 'Nobody sees the other’s arrows until you’re <b>both</b> ready; then all 8 launch at once. A penguin whose middle slides off the ice falls in. <i>Splash.</i>', '<b>Power-ups</b>: slide over one to grab it; it works <b>next round</b>. 🏋️ Heavy: double weight · 🛡️ Shield: saves your next fall once (it bounces back, or hops off ice that breaks away) · 🌀 Spring: bouncier hits · ⚓ Anchor: can’t move or launch.', '<b>Sumo</b>: the ice tightens every round (ring breaks off, hole widens, bridge cracks, bumpers pop, tiles fall, current turns). Last side standing wins; after <b>8 rounds</b> more penguins left wins (equal = draw).', '<b>King of the Hill</b>: after each round every penguin of yours in the <b>glowing zone</b> scores 1. The ice never shrinks; the fallen come back next round. Most points after 8 rounds wins.', '<b>Fish Hockey</b>: knock the fish into your partner’s goal. <b>First to 3</b>. After 10 rounds, most goals wins; if level, whoever has the fish in the partner’s half.', 'Timer: run out and your penguins sit the round out. Setup and squad pick can never lose on time (4 Classics if you run out).'],
   'mini-golf': ['Pick a course first: <b>Neon Garden</b>, <b>Candy Land</b>, <b>Space Station</b> or <b>Surprise me</b>. The host picks; the partner sees it live.', 'Nine holes, one ball each. <b>Drag back</b> from anywhere like a slingshot and let go to putt. The dotted line shows direction and strength, never the bounces.', '<b>Take turns</b>: one putt each. Lower score on the last hole tees off first. Once your ball drops, your partner keeps putting until theirs does. Balls pass through each other.', 'Water, lava, the chocolate river or a black hole = <b>+1 stroke</b> and the ball goes back where you hit it from. Sand and caramel are slow, ice is slippery, low gravity barely slows you, arrows and conveyor belts push. Time the <b>windmills</b> and <b>sweepers</b>; ride the ramps, tunnels and airlocks.', 'A fast ball lips out, so roll it in gently. Not holed after <b>6 strokes</b>? It’s picked up and scores 7.', '<b>Fewest total strokes after 9 holes wins.</b> Equal totals are a draw.'],
   'pocket-tanks': ['Every match <b>drafts 10 weapons</b> from a pool of 16 and you both get the same ten. Fire each once and score the damage you deal — <b>most points after 20 shots wins</b>.', '<b>Drag on the battlefield</b> to aim, fine-tune <b>angle</b> and <b>power</b> with −/+ (hold to repeat), then hit <b>FIRE</b>. You can aim up to 20° below the horizon.', 'The ground is <b>destructible</b>: craters collapse and tanks drop into them. The <b>wind</b> changes every turn — except for Sniper and Railgun, which ignore it.', 'Look out for the <b>Tactical Nuke</b>, <b>Napalm</b> (burns the ground), <b>Roller</b> (rolls downhill), <b>Bouncer</b>, <b>MIRV</b> (splits mid-air), <b>Homing</b>, <b>Railgun</b> (a straight beam through the ground), <b>Air Strike</b>, <b>Chain Blast</b> and <b>Earthquake</b>. Hit yourself and the points go to your partner.', 'You get <b>3 tank moves</b> per match (◀ ▶) — moving doesn’t cost your turn. Tap ⤢ for landscape. Four maps: Dusk Ridge, Sunset Dunes, Arctic Night, Toxic Marsh.'],
   'scrabble': ['Each of you holds <b>7 tiles</b>. Make a word on the board — the first one must cross the <b>\u2605 centre</b>, and every word after that has to touch a tile already down.', 'Tap a tile, then tap a square. Tiles you\u2019ve placed glow green \u2014 tap one again to take it back. The running score shows under the board before you commit.', 'Coloured squares multiply: <b>DL/TL</b> double or triple that letter, <b>DW/TW</b> double or triple the whole word (only on the turn you cover them). Use all 7 tiles in one go for a <b>50-point BINGO</b>.', 'Blank tiles (?) can be any letter but score 0. Stuck? <b>Swap</b> tiles back into the bag or <b>Pass</b>. When the bag is empty and someone plays their last tile the game ends \u2014 they gain the value of what\u2019s left in the other rack, and their partner loses it.', 'Every word is checked against the full 168,000-word tournament list. Want one that isn\u2019t in it (a name, some slang)? <b>Ask your partner</b> \u2014 if they allow it, it scores; if they say no, you lose your turn.'],
@@ -127,9 +134,9 @@ const GAME_RULES = {
 function showRules(game) {
   const back = h('div', { class: 'rules-overlay', onclick: e => { if (e.target === back) close(); } });
   const card = h('div', { class: 'rules-card' },
-    h('div', { class: 'rules-emoji', style: `color:${game.accent}`, html: Icons.game(game.id) }),
+    h('div', { class: 'rules-emoji', style: `color:${game.accent}`, html: Icons.game(baseId(game.id)) }),
     h('h3', {}, 'How to play — ' + game.name),
-    h('ul', { class: 'rules-list' }, (GAME_RULES[game.id] || ['Have fun!']).map(r => h('li', { html: r }))),
+    h('ul', { class: 'rules-list' }, (GAME_RULES[game.id] || GAME_RULES[baseId(game.id)] || ['Have fun!']).map(r => h('li', { html: r }))),
     h('button', { class: 'btn btn-primary btn-block mt', onclick: () => close() }, 'Got it! ✓'));
   back.append(card); document.body.append(back); Store.Sound.tap();
   function close() { back.remove(); }
@@ -531,7 +538,7 @@ const TIMER_GAMES = {
 // A game still animating its final move (e.g. the knockout shot in flight) can ask the
 // result card to wait for it via def.resultDelay() → ms. Capped so nothing can stall it.
 const resultHold = def => { try { return Math.max(0, Math.min(8000, (def && def.resultDelay && def.resultDelay()) | 0)); } catch (e) { return 0; } };
-const timerCap = gameId => TIMER_GAMES[gameId] || (Games.byId(gameId) && Games.byId(gameId).isTournament ? { skip: true, tour: true } : null);
+const timerCap = gameId => TIMER_GAMES[gameId] || TIMER_GAMES[baseId(gameId)] || (Games.byId(gameId) && Games.byId(gameId).isTournament ? { skip: true, tour: true } : null);
 // next turn's deadline (synced server ms) when the current match has a live timer
 const freshDeadline = extra => (currentMatch && currentMatch.timer && currentMatch.timer.on) ? (Store.Net.serverNow() + currentMatch.timer.secs * 1000 + (extra | 0)) : null;
 // replay time a game adds to the next player's clock (their controls unlock only after the replay)
@@ -850,7 +857,7 @@ function matchBanner(me) {
   const s = Store.get();
   if (m.status === 'waiting' && m.host !== me) {
     return h('div', { class: 'banner invite' },
-      h('span', { class: 'banner-ic', html: Icons.game(g.id) }),
+      h('span', { class: 'banner-ic', html: Icons.game(baseId(g.id)) }),
       h('span', {}, `${esc(s.players[m.host].name)} invited you to `, h('b', {}, g.name)),
       h('button', { class: 'btn btn-primary btn-sm', onclick: () => joinMatch() }, 'Join'),
       h('button', { class: 'btn btn-ghost btn-sm', onclick: () => Store.Net.clearMatch() }, 'Decline'),
@@ -859,7 +866,7 @@ function matchBanner(me) {
   // your own waiting match, or an active game → resume
   const label = m.status === 'waiting' ? 'Waiting for your partner…' : 'Game in progress';
   return h('div', { class: 'banner resume' },
-    h('span', { class: 'banner-ic', html: Icons.game(g.id) }),
+    h('span', { class: 'banner-ic', html: Icons.game(baseId(g.id)) }),
     h('span', {}, `${esc(label)}: `, h('b', {}, g.name)),
     h('button', { class: 'btn btn-primary btn-sm', onclick: () => { location.hash = '#/play/' + m.gameId; } }, 'Resume'),
     h('button', { class: 'btn btn-ghost btn-sm', onclick: () => Store.Net.clearMatch() }, 'End'),
@@ -896,6 +903,7 @@ function gameCard(g, s, i) {
    MATCH LIFECYCLE
    ============================================================ */
 function startMatch(gameId) {
+  gameId = launchId(gameId);   // e.g. 'knockout' → 'knockout2', so the clash check, route and clock picker all agree
   const me = Store.getIdentity();
   if (!Store.Net.ready()) { alert('Not connected to the cloud yet — online play needs your internet + Firebase. Try again in a moment.'); return; }
   if (currentMatch && currentMatch.status !== 'finished' && currentMatch.gameId !== gameId) {
@@ -926,6 +934,7 @@ function applyTimer(timer) {
   Store.Net.updateMatch(patch);
 }
 function createMatch(gameId, me, timer) {
+  gameId = launchId(gameId);
   // state is JSON-stringified: Firebase RTDB strips nulls/empties & mangles arrays, so we store a plain string
   const state = JSON.stringify(Games.byId(gameId).init(me));
   const match = { gameId, host: me, status: 'waiting', state, starter: me, roundWinner: null, timer: timer || { on: false }, by: me, t: Date.now() };
@@ -996,7 +1005,7 @@ function advanceRound(gameId) {
   optimistic(patch);
   Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
 }
-function nextGameId(cur) { const others = Games.all().filter(g => g.id !== cur && !g.isTournament); return others[Math.floor(Math.random() * others.length)].id; }
+function nextGameId(cur) { const others = Games.all().filter(g => g.id !== baseId(cur) && !g.isTournament); return others[Math.floor(Math.random() * others.length)].id; }
 function exitMatch() { Store.Net.clearMatch(); location.hash = '#/'; }
 // leaving an in-progress game needs BOTH players' consent (works for every game incl. tournaments)
 function requestEndGame() {
@@ -1024,7 +1033,7 @@ function forceEndGame() {
   Store.Sound.tap();
   const me = Store.getIdentity(), gid = forfeitTarget();
   if (gid && (me === 0 || me === 1)) {
-    Store.recordResult(gid, me === 0 ? 'p2' : 'p1');
+    Store.recordResult(baseId(gid), me === 0 ? 'p2' : 'p1');
     Store.Net.updateMatch({ forfeitBy: me, t: Date.now() });   // lets the partner's phone say why it ended
     setTimeout(exitMatch, 700);
     location.hash = '#/';
@@ -1044,7 +1053,7 @@ function renderStage(gameId) {
   const s = Store.get();
 
   const head = h('div', { class: 'stage-head' },
-    h('h2', { style: `color:${game.accent}` }, h('span', { class: 'h2-icon', html: Icons.game(game.id) }), game.name),
+    h('h2', { style: `color:${game.accent}` }, h('span', { class: 'h2-icon', html: Icons.game(baseId(game.id)) }), game.name),
     h('p', {}, game.tagline),
     h('button', { class: 'rules-btn', onclick: () => showRules(game) }, 'How to play'));
   const seriesBar = h('div', { class: 'series-bar', id: 'seriesBar' });
@@ -1082,7 +1091,8 @@ function renderStage(gameId) {
       mount.innerHTML = '';
       if (m.host === me) {
         mount.append(waitCard(`Waiting for ${s.players[partner].name} to join…`,
-          isOnline(partner) ? `${s.players[partner].name} is online — they’ll see the invite now.` : `${s.players[partner].name} is offline — they’ll get it when they open the app.`,
+          (isOnline(partner) ? `${s.players[partner].name} is online — they’ll see the invite now.` : `${s.players[partner].name} is offline — they’ll get it when they open the app.`) +
+            (game.hidden ? ` No invite on their phone? They need to close and reopen the app to update.` : ''),
           null, true));
         msg.textContent = '';
       } else {
@@ -1278,7 +1288,7 @@ function renderStage(gameId) {
     } else t.phase = 'intermission';
     pushTour(t, done ? 'finished' : 'active', done ? t.champion : undefined, stillPlaying).then(won => {
       if (!won) return;
-      Store.recordResult(subId, winner === 0 ? 'p1' : winner === 1 ? 'p2' : 'draw');
+      Store.recordResult(baseId(subId), winner === 0 ? 'p1' : winner === 1 ? 'p2' : 'draw');
       if (done && (t.champion === 0 || t.champion === 1)) Store.recordTournament(t.champion);
     });
   }
@@ -1348,8 +1358,8 @@ function renderStage(gameId) {
       // record the result only if THIS phone is the one that actually finished the match
       Store.Net.finishMatch(cur => cur.status === 'active', Object.assign({ by: me, t: Date.now() }, patch)).then(won => {
         if (!won || gid === 'tournament') return;
-        if (winner === 0 || winner === 1) Store.recordResult(gid, winner === 0 ? 'p1' : 'p2');
-        else if (winner === 'draw') Store.recordResult(gid, 'draw');
+        if (winner === 0 || winner === 1) Store.recordResult(baseId(gid), winner === 0 ? 'p1' : 'p2');
+        else if (winner === 'draw') Store.recordResult(baseId(gid), 'draw');
       });
     }
     paint();

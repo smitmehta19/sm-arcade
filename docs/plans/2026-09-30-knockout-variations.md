@@ -52,9 +52,9 @@ Squads are revealed together (same hidden-until-both-ready rule as aims).
 | Unit | Contents | Est. tokens* |
 |---|---|---|
 | **U1 Engine + Arenas + Setup** ✅ shipped v78 | generalise physics (per-penguin mass/size, arena shapes, bumper walls, current, tiles), setup screen, 6 arenas | ~400k |
-| **U2 Power-ups** | item spawn/pickup/effects + badges | ~200k |
-| **U3 Penguin types** | squad-pick phase (hidden), 4 types | ~200k |
-| **U4 Modes** | King of the Hill + Fish Hockey (puck body, goals, respawn, scoring) | ~350k |
+| **U2 Power-ups** ✅ shipped v83 | item spawn/pickup/effects + badges | ~200k |
+| **U3 Penguin types** ✅ shipped v83 | squad-pick phase (hidden), 4 types | ~200k |
+| **U4 Modes** ✅ shipped v83 | King of the Hill + Fish Hockey (puck body, goals, respawn, scoring) | ~350k |
 *Roughly what each previous game build cost. **Cheaper option:** U1 + U2 only (~600k) already gives new levels + power-ups.
 
 ## Definition of done (every unit)
@@ -72,6 +72,7 @@ Real-time play, landscape mode, online matchmaking, more than 2 players, new sou
 
 ## Unit log
 - **U1 (v78):** engine generalised (identical results to the old engine on 4,000 slides / 400 games), 6 arenas, setup screen. Deviations: Crumbling Ice drops 2 tiles/round (odd counts can't be mirrored); Current is fair across each opposite pair of rounds, not within one round. Review fixes: setup timeout never forfeits (`skipOnly`), replay grace on the turn clock (`clockGrace`), compositor-only READY pulse, slow tick for the Surprise preview.
+- **U2–U4 (v83):** power-ups (Heavy, Shield, Spring, Anchor; work next round), secret squad pick (Classic, Emperor, Rockhopper, Chick), King of the Hill, Fish Hockey. Deviation: mass decides Sumo, so types were rebalanced to differ mostly in size and reach (every pairing 36–63% over 400 AI games). Review fixes: an OLD app open across the deploy could silently corrupt new matches (wrong winner, forfeits, lost squads), so new matches now live under gameId `knockout2` (hidden, statsId `knockout`), which old apps can't see; the visible `knockout` def (launchAs) still runs legacy saves, old-app matches and tournament subs as classic Sumo, bit-identical to v78. Shield now also saves a penguin on ice that breaks away. Also fixed: start/respawn spacing by size, fish reset, anchor vs bumpers, and the squad banner showing again on reload.
 
 ## Parking lot
 (new ideas that come up mid-build go here, not into the current unit)
