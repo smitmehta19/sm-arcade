@@ -4,8 +4,20 @@
 const Store = (() => {
   const LS_KEY = 'sm_arcade_v1';
 
-  // 'YYYY-MM' for the current (or given) moment — the season key
-  function curYM(t) { const d = t ? new Date(t) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+  // 'YYYY-MM' for the current (or given) moment — the season key. ONE calendar for both phones:
+  // Irish time. Using each phone's own calendar let Meera's (India, 4.5 h ahead) start October
+  // while Smit's was still in September — they flipped the race back and forth, zeroing every
+  // result and flooding the room with writes (the 30-Sept-2026 "scores stuck at 0-0" bug).
+  const SEASON_TZ = 'Europe/Dublin';
+  function curYM(t) {
+    const d = t ? new Date(t) : new Date();
+    try {
+      const pt = new Intl.DateTimeFormat('en-GB', { timeZone: SEASON_TZ, year: 'numeric', month: '2-digit' }).formatToParts(d);
+      const y = pt.find(x => x.type === 'year'), m = pt.find(x => x.type === 'month');
+      if (y && m && /^\d{4}$/.test(y.value) && /^\d{2}$/.test(m.value)) return y.value + '-' + m.value;
+    } catch (e) {}
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
 
   const blankState = () => ({
     players: JSON.parse(JSON.stringify(window.PLAYERS_DEFAULT)),
@@ -287,12 +299,41 @@ const Store = (() => {
      new month, the finished month is archived to `past` with its champion,
      and the current race resets. RTDB strips empty arrays, so `past` is
      re-defaulted on read. `ymNow` is injectable for the test harness. */
+  // Repair for the timezone flip-flop: each flip archived the race so far as a junk `past` entry
+  // (a duplicate month, or a month that has not finished yet). Every result landed in exactly one
+  // of those entries or in `cur`, so folding them back together is exact: months that are over
+  // become ONE trophy entry each, anything from this month on goes back into the current race.
+  // Idempotent — a clean `seasons` is left untouched. Keeps repairing while a phone on an old
+  // version is still flipping, without ever losing or double-counting a result.
+  function repairSeasons(ymNow) {
+    const se = state.seasons, cur = se.cur, seen = {};
+    se.past.forEach(e => { if (e && e.ym) seen[e.ym] = (seen[e.ym] || 0) + 1; });
+    const bad = e => e && e.ym && (e.ym >= ymNow || e.ym >= cur.ym || seen[e.ym] > 1);
+    if (!se.past.some(bad) && cur.ym <= ymNow) return false;
+    const n = e => ({ p1: +e.p1 || 0, p2: +e.p2 || 0, draws: +e.draws || 0 });
+    const keep = [], fold = {}, now = { ym: ymNow, p1: 0, p2: 0, draws: 0 };
+    const add = (to, e) => { const v = n(e); to.p1 += v.p1; to.p2 += v.p2; to.draws += v.draws; };
+    se.past.forEach(e => {
+      if (!bad(e)) { keep.push(e); return; }
+      if (e.ym >= ymNow) { add(now, e); return; }
+      if (!fold[e.ym]) fold[e.ym] = { ym: e.ym, p1: 0, p2: 0, draws: 0 };
+      add(fold[e.ym], e);
+    });
+    if (cur.ym >= ymNow) add(now, cur);
+    else { if (!fold[cur.ym]) fold[cur.ym] = { ym: cur.ym, p1: 0, p2: 0, draws: 0 }; add(fold[cur.ym], cur); }
+    Object.keys(fold).forEach(k => { const f = fold[k]; if (f.p1 + f.p2 + f.draws > 0) keep.push(f); });
+    keep.sort((a, b) => (a.ym < b.ym ? -1 : a.ym > b.ym ? 1 : 0));
+    se.past = keep.slice(-36);
+    se.cur = now;
+    return true;
+  }
   function rollSeasons(ymNow) {
     ymNow = ymNow || curYM();
     if (!state.seasons || !state.seasons.cur || !state.seasons.cur.ym) state.seasons = { cur: { ym: ymNow, p1: 0, p2: 0, draws: 0 }, past: [] };
     if (!Array.isArray(state.seasons.past)) state.seasons.past = [];
+    if (repairSeasons(ymNow)) return true;
     const cur = state.seasons.cur;
-    if (cur.ym === ymNow) return false;
+    if (cur.ym >= ymNow) return false;   // never roll BACKWARDS (and never ahead of Irish time)
     if (cur.p1 + cur.p2 + cur.draws > 0) state.seasons.past.push({ ym: cur.ym, p1: cur.p1, p2: cur.p2, draws: cur.draws });
     state.seasons.past = state.seasons.past.slice(-36); // three years of trophies is plenty
     state.seasons.cur = { ym: ymNow, p1: 0, p2: 0, draws: 0 };
@@ -534,7 +575,7 @@ const Store = (() => {
   return {
     initCloud, subscribe, get, player,
     recordResult, recordTournament, adjustScore, toggleFav, dateToggle, setMeet, setPlayer, setSetting, resetScores,
-    seasonsTick, _rollSeasons: rollSeasons, curYM,
+    seasonsTick, _rollSeasons: rollSeasons, _repairSeasons: repairSeasons, curYM,
     planAdd, planRemove, planConfirm, stampTz, _mergeRemote: mergeRemote,
     storySave, storyRemove,
     Sound, isCloud: () => cloud, isSynced: () => synced, _scoreKey: s => scoreKey(s || state),
