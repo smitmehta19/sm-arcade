@@ -1061,8 +1061,12 @@ function forceEndGame() {
   Store.Sound.tap();
   const me = Store.getIdentity(), gid = forfeitTarget();
   if (gid && (me === 0 || me === 1)) {
-    Store.recordResult(baseId(gid), me === 0 ? 'p2' : 'p1');
-    holdUpdate(Store.Net.updateMatch({ forfeitBy: me, t: Date.now() }));   // lets the partner's phone say why it ended
+    // the forfeit is a FINISH like any other: only the first of (forfeit, a finishing move / timeout) counts
+    const tour = currentMatch.gameId === 'tournament', slot = tour ? JSON.parse(currentMatch.state).slot : null;
+    const stillOn = cur => { if (cur.status !== 'active') return false; if (!tour) return true;
+      try { const c = JSON.parse(cur.state); return c.phase === 'play' && c.slot === slot; } catch (e) { return false; } };
+    holdUpdate(Store.Net.finishMatch(stillOn, { forfeitBy: me, t: Date.now() })   // forfeitBy: the partner's phone says why it ended
+      .then(won => { if (won) Store.recordResult(baseId(gid), me === 0 ? 'p2' : 'p1'); }));
     setTimeout(exitMatch, 700);
     location.hash = '#/';
     return;
@@ -1364,7 +1368,7 @@ function renderStage(gameId) {
   }
 
   function commitMove(gid, nextState, winner) {
-    if (!currentMatch || currentMatch.status !== 'active') return;
+    if (!currentMatch || currentMatch.status !== 'active' || Store.Net.finishing(currentMatch)) return;   // no moves on a round we are finishing
     const finishing = winner !== undefined;
     const stateStr = JSON.stringify(nextState);
     let patch;

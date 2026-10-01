@@ -561,7 +561,7 @@ fine) and the room got thousands of writes (lag). Fix: `curYM()` uses Europe/Dub
 fallback); `rollSeasons` never rolls backwards (`cur.ym >= ymNow` → no roll); `repairSeasons()` folds duplicate /
 not-yet-finished `past` entries back (finished months → one entry each, this month → `cur`). Exact and idempotent.
 Harness: scratchpad/scores/tz-pingpong.js + tz-repair.js (real store.js in two vm contexts, one on a shifted calendar).
-Parked: `finishMatch` transaction can reject on a socket drop → that one result is not recorded (retry with a token).
+(v85: the finishMatch result loss is fixed. See "finishMatch exactly-once" below.)
 
 ## Mini Golf v82 — simple turns + course picker (Neon Garden / Candy Land / Space Station / Surprise me)
 State `v:2`, `phase` setup|play, `course`, `rule` alt|away, `host`, `last.g` (hole index across all 27). Saves without
@@ -597,3 +597,24 @@ guard also stays inside knockout2. Tests: scratchpad/ko3 (logic3 45,812, mixed2 
 - **No loops:** one reload per version, via a sessionStorage mark of the newest `sm-arcade-vNN` cache. A change to
   sw.js that doesn't bump CACHE never reloads, so ALWAYS bump CACHE when you ship.
 - **Messages:** "Update ready — it installs after this game" while deferred; "Updated to vNN ✨" after the reload.
+
+## finishMatch exactly-once (v85): store.js Net.finishMatch, ui.js forceEndGame/commitMove
+**The bug:** with the real SDK, a transaction REJECTS on a socket drop ('disconnect'), even when the server already
+applied it. Other ways it failed: Error('set') from a listener write during RUN, 'maxretry', and a cold cache returning
+null locally. The result was then never recorded.
+**How it works now:**
+- **Finish token:** each finish writes a random `fin` plus `fins`, the last 8 tokens, carried through Play again and
+  later finishes. Transactions run with applyLocally=false.
+- **No local verdicts:** the update fn never aborts on cached data. When it isn't ours to finish, it writes the current
+  value back (a hash-checked no-op), so the SERVER decides.
+- **Verdict:** our token in `fin`/`fins` means won. A foreign finish means lost.
+- **Retries:** 'disconnect' costs no try; it waits for `.info/connected`. When tries run out it still checks the node,
+  then `lastFin`.
+- **Tombstone:** before a match is cleared or replaced, its tokens go to `matches/<room>/lastFin`.
+- **Write ordering:** while a finish is pending, this phone's set/update/clearMatch queue behind it, `Net.finishing()`
+  makes commitMove ignore moves, and watchMatch overlays the pending finish on stale snapshots.
+- **Forfeit:** forceEndGame goes through finishMatch and records only on true (it used to double-count when it raced a
+  finish). finishMatch refuses a match that carries `forfeitBy`.
+**Limits, accepted:** a result is lost only if 9+ rounds finish while one phone is away, or if an offline forfeit is
+followed by the partner leaving.
+**Tests:** scratchpad/scores2 (finish-sdk2 26/26, fuzz 200/200, tz-oct), scratchpad/finish-review (mine, mine2).

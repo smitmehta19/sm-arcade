@@ -99,6 +99,8 @@ const Store = (() => {
     setPill('cloud');
     // keep a synced clock so both phones count timers down to the same instant
     try { db.ref('.info/serverTimeOffset').on('value', s => { serverOffset = s.val() || 0; }); } catch (e) {}
+    // socket state, so a finish whose socket dropped retries only once it is back (see finishMatch)
+    try { db.ref('.info/connected').on('value', s => { netUp = s.val() !== false; if (netUp) upWaiters.splice(0).forEach(f => f()); }); } catch (e) {}
     cloudCbs.forEach(fn => { try { fn(); } catch (e) {} });
     // one-time move off the old committed-in-the-repo room, then live-listen
     migrateLegacy().then(listenRoom, listenRoom);
@@ -514,6 +516,46 @@ const Store = (() => {
 
   /* ---- realtime networking: presence + active match ---- */
   const ROOM = () => (window.CLOUD && window.CLOUD.ROOM) || 'default';
+  const mref = () => db.ref('matches/' + ROOM() + '/active');
+  const finRef = () => db.ref('matches/' + ROOM() + '/lastFin');   // tokens of the last cleared/replaced match
+  // ---- finishing a match EXACTLY once (v85) ----
+  // Each finish writes a random token: `fin` (this round) and `fins` (the last 8 finishes, newest first — 'Play
+  // again' and later finishes keep the list). A phone records only when the SERVER's match lists its token,
+  // so a socket drop can't lose a result (the server may have applied it although the SDK said 'disconnect')
+  // and the partner can never also record it.
+  //   - applyLocally=false (no local event → no listener 'set' abort, no cold-cache null → exitMatch); the
+  //     update never aborts on the cache — it writes the value back, so every verdict is the server's;
+  //   - a drop costs no try: it waits for `.info/connected`, then asks again; out of tries it still checks;
+  //   - while a finish is unresolved, this phone's other match writes wait for it (afterFinish), watchMatch
+  //     shows the finish on top of stale snapshots, and clearing/replacing a match stores its tokens in
+  //     `lastFin` first, so a finish that landed unseen can be proven after the partner left for the lobby.
+  let finPending = 0, finQ = Promise.resolve(), lastSeen = null, lastKept = null, netUp = true;
+  const upWaiters = [], pendingFin = [];        // pendingFin: {ok, patch, fin} still waiting for a verdict
+  let matchCb = null, lastShown;
+  const afterFinish = fn => (finPending ? finQ.then(fn) : fn());
+  const whenUp = () => (netUp ? Promise.resolve() : new Promise(r => upWaiters.push(r)));
+  const finList = v => (v && typeof v.fins === 'string' ? v.fins : (v && v.fin) || '').split(' ').filter(Boolean);
+  const hasFin = (v, fin) => !!v && (v.fin === fin || finList(v).includes(fin));
+  // is match `m` still the round pending finish `f` set out to end? (f.base = the match it first saw)
+  const forRound = (f, m) => !f.base || (m.starter === f.base.starter && (m.fin || null) === (f.base.fin || null));
+  function keepFin() {
+    const f = finList(lastSeen).join(' ');
+    if (f && f !== lastKept) { lastKept = f; finRef().set(f).catch(() => {}); }
+  }
+  // what this phone shows: the server's match, with our unresolved finish on top while it still applies
+  function showMatch() {
+    let v = lastSeen;
+    pendingFin.forEach(f => { if (v && !hasFin(v, f.fin) && v.forfeitBy == null && forRound(f, v) && f.ok(v)) v = Object.assign({}, v, f.patch); });
+    const k = JSON.stringify(v);
+    if (matchCb && k !== lastShown) { lastShown = k; matchCb(v); }
+  }
+  // the server's current value at `r`: a compare-and-set that writes it straight back (queued while offline)
+  function confirmed(r, tries) {
+    return r.transaction(cur => cur, undefined, false)
+      .then(res => (res && res.committed && res.snapshot ? res.snapshot.val() : null),
+        e => (e && e.message === 'disconnect' ? whenUp().then(() => confirmed(r, tries))
+          : tries > 0 ? confirmed(r, tries - 1) : null));
+  }
   const Net = {
     ready: () => cloud,
     // presence: announce this seat online; flips offline automatically on disconnect
@@ -538,29 +580,49 @@ const Store = (() => {
     },
     watchMatch(cb) {
       if (!cloud) return () => {};
-      const mref = db.ref('matches/' + ROOM() + '/active');
-      const h = mref.on('value', s => cb(s.val() || null),
+      const r = mref();
+      matchCb = cb; lastShown = undefined;
+      const h = r.on('value', s => { lastSeen = s.val() || null; lastShown = undefined; showMatch(); },
         err => console.warn('match read denied — republish Security Rules to allow "matches".', err));
-      return () => mref.off('value', h);
+      return () => { r.off('value', h); if (matchCb === cb) matchCb = null; };
     },
-    setMatch(obj) { if (cloud) return db.ref('matches/' + ROOM() + '/active').set(obj); return Promise.resolve(); },
-    updateMatch(patch) { if (cloud) return db.ref('matches/' + ROOM() + '/active').update(patch); return Promise.resolve(); },
+    setMatch(obj) { if (cloud) return afterFinish(() => { keepFin(); return mref().set(obj); }); return Promise.resolve(); },
+    updateMatch(patch) { if (cloud) return afterFinish(() => mref().update(patch)); return Promise.resolve(); },
+    // a finish of ours for match `m`'s round is still waiting for the server's verdict (moves must wait)
+    finishing: m => pendingFin.some(f => !m || forRound(f, m)),
     // FINISH a match exactly once. Both phones can try to end the same match (a timeout fires on the
     // player on the clock AND, 2 s later, on the partner) — a plain update let both record the result.
-    // The transaction only applies while `ok(current)` still holds; resolves true only for the winner
-    // of that race, and ONLY that phone records the score.
+    // Applies only while `ok(current)` holds and nobody forfeited; resolves true only for the phone whose
+    // token the server's match lists, and ONLY that phone records the score (see the v85 notes above).
     finishMatch(ok, patch) {
       if (!cloud) return Promise.resolve(true);
-      const r = db.ref('matches/' + ROOM() + '/active');
-      let mine = false;
-      return r.transaction(cur => {
-        mine = false;
-        if (cur === null) return null;                       // cache not warm yet — the server will retry with real data
-        if (!ok(cur)) return;                                // someone already finished it: abort
-        mine = true; return Object.assign({}, cur, patch);
-      }).then(res => !!(res && res.committed && mine && res.snapshot && res.snapshot.val()), () => false);
+      const r = mref(), fin = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      const pf = { ok, patch, fin };
+      let base = null, landed = false;           // base = the round we are finishing; landed = a put of ours may have applied unseen
+      // never finish a LATER round (someone else finished this one, then 'Play again' flipped the starter)
+      const sameRound = cur => (cur.fin || null) === (base.fin || null) && cur.starter === base.starter;
+      const decide = v => (hasFin(v, fin) ? true : !landed ? false
+        : confirmed(finRef(), 2).then(f => hasFin({ fins: f || '' }, fin)));   // cleared/replaced since: its tombstone decides
+      const attempt = left => r.transaction(cur => {
+        if (cur === null) return null;            // cold cache, or the match is gone: let the server confirm
+        if (hasFin(cur, fin)) return cur;         // an earlier try of ours already landed: confirm it
+        if (!base) base = pf.base = cur;
+        if (!ok(cur) || cur.forfeitBy != null || !sameRound(cur)) return cur;    // not ours to finish: just confirm
+        return Object.assign({}, cur, patch, { fin, fins: [fin].concat(finList(cur)).slice(0, 8).join(' ') });
+      }, undefined, false).then(res => decide(res && res.committed && res.snapshot ? res.snapshot.val() : null), err => {
+        const why = err && err.message;
+        if (why !== 'set' && why !== 'maxretry') landed = true;               // 'disconnect': it may have applied
+        if (why === 'disconnect') return whenUp().then(() => attempt(left));  // a drop costs no try
+        return left > 0 ? attempt(left - 1) : confirmed(r, 2).then(decide);   // out of tries: still ask the server
+      });
+      pendingFin.push(pf);
+      const p = (finPending ? finQ.then(() => attempt(4)) : attempt(4)).catch(() => false)
+        .then(won => { pendingFin.splice(pendingFin.indexOf(pf), 1); lastShown = undefined; showMatch(); return won; });   // repaint even if the server value didn't change
+      finPending++;
+      finQ = finQ.then(() => p).then(() => { finPending--; });
+      return p;
     },
-    clearMatch() { if (cloud) return db.ref('matches/' + ROOM() + '/active').remove(); return Promise.resolve(); },
+    clearMatch() { if (cloud) return afterFinish(() => { keepFin(); return mref().remove(); }); return Promise.resolve(); },
     serverTime: () => (typeof firebase !== 'undefined' && firebase.database) ? firebase.database.ServerValue.TIMESTAMP : Date.now(),
     serverNow: () => Date.now() + serverOffset,   // synced wall-clock for countdown timers
     // "come online & play" nudge — stored under matches/<room>/nudges/<seat> (already rule-permitted)
