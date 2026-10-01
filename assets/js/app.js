@@ -104,8 +104,77 @@ Gate.ready(function boot() {
 
   Router.go();
 
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    if (document.readyState === 'complete') navigator.serviceWorker.register('sw.js').catch(() => {});
-    else window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) autoUpdate();
+
+  // AUTO-UPDATE — a phone left open across a deploy kept running the old JS (only a full reload loads new
+  // code). Check for a new sw.js whenever the app comes to the front and every 10 min while visible; the new
+  // worker skipWaiting + clients.claim → 'controllerchange' → "update ready". The reload itself only happens
+  // at a moment that can't cost anything on screen:
+  //   - right as the app comes to the front (≤10 s after hidden→visible / boot, before any tap, key or scroll), or
+  //   - on a route change to Home (after the leave/finish writes have landed, see holdUpdate in ui.js);
+  // and never while updateBlocker() (ui.js) objects: live match, unsaved edits, an open editor/dialog, or a
+  // match-end write still in flight. Otherwise it waits for the next return to the front.
+  // At most ONE auto-reload per version (sessionStorage mark), so it can never loop. Writes nothing to the cloud.
+  function autoUpdate() {
+    const sw = navigator.serviceWorker, MARK = 'sm_autoupd';  // MARK = {v, t, toast} of our last auto-reload
+    const FRONT_MS = 10000, HOME_SETTLE_MS = 4000;
+    let reg = null, checking = false, ready = false, ver = '', noted = false, reloading = false, settle = null;
+    let frontAt = Date.now(), touched = false;                 // opening the app counts as coming to the front
+    // no controller at boot = first install (or a Force update): that first claim is not an update. A page
+    // that booted uncontrolled while a worker was already active (e.g. shift-reload) is NOT a first install.
+    let hadController = !!sw.controller;
+    if (!hadController && sw.getRegistration) sw.getRegistration().then(r => { if (r && r.active) hadController = true; }).catch(() => {});
+    const readMark = () => { try { return JSON.parse(sessionStorage.getItem(MARK) || 'null') || {}; } catch (e) { return {}; } };
+    const writeMark = m => { try { sessionStorage.setItem(MARK, JSON.stringify(m)); } catch (e) {} };
+    // the version this phone now runs = the newest sm-arcade-vNN cache (the new worker deletes the old ones)
+    const cacheVer = () => Promise.resolve(window.caches && caches.keys ? caches.keys() : [])
+      .then(ks => { const n = ks.map(k => +((/^sm-arcade-v(\d+)$/.exec(k) || [])[1] || 0)); const top = Math.max(0, ...n); return top ? 'v' + top : ''; })
+      .catch(() => '');
+    const atHome = () => (location.hash === '' || location.hash === '#/');
+
+    const m0 = readMark();                                     // we just reloaded into a new version → say so once
+    if (m0.toast) { writeMark(Object.assign({}, m0, { toast: 0 })); setTimeout(() => showToast(`Updated to <b>${esc(m0.v || 'the latest version')}</b> ✨`), 700); }
+
+    function check() {
+      if (!reg || checking || document.visibilityState !== 'visible' || navigator.onLine === false) return; // offline: stay quiet
+      checking = true;
+      reg.update().catch(() => {}).then(() => { checking = false; });
+    }
+    function apply(home) {
+      if (!ready || reloading) return;
+      const why = updateBlocker();
+      if (why) {
+        if (why === 'game' && !noted) { noted = true; showToast('🔄 Update ready — it installs after this game.'); }
+        return;
+      }
+      const front = document.visibilityState === 'visible' && !touched && Date.now() - frontAt < FRONT_MS;
+      if (!front && !(home && atHome())) return;              // mid-use: keep it ready for the next return to front
+      if (navigator.onLine === false) return;                  // a reload would drop the cloud's queued writes
+      const m = readMark();
+      // one reload per version, never a loop (unknown version → at most one per minute). NB a sw.js change
+      // WITHOUT a CACHE bump keeps the same version name → it matches the mark and never auto-reloads; that's
+      // fine, because every real deploy bumps CACHE.
+      if (ver ? m.v === ver : (m.t && Date.now() - m.t < 60000)) return;
+      reloading = true;
+      writeMark({ v: ver, t: Date.now(), toast: 1 });
+      location.reload();
+    }
+    sw.addEventListener('controllerchange', () => {
+      if (!hadController) { hadController = true; return; }
+      cacheVer().then(v => { ver = v || ver; ready = true; apply(false); });
+    });
+    // any real use ends the "just came to the front" window
+    ['pointerdown', 'keydown', 'wheel'].forEach(t => window.addEventListener(t, () => { touched = true; }, { capture: true, passive: true }));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      frontAt = Date.now(); touched = false;
+      apply(false); check();
+    });
+    // back on Home (e.g. after a game): reload once the exit's cloud writes have had time to land
+    window.addEventListener('hashchange', () => { clearTimeout(settle); if (ready && atHome()) settle = setTimeout(() => apply(true), HOME_SETTLE_MS); });
+    setInterval(check, 10 * 60 * 1000);
+
+    const register = () => sw.register('sw.js').then(r => { reg = r; }).catch(() => {});
+    if (document.readyState === 'complete') register(); else window.addEventListener('load', register);
   }
 });

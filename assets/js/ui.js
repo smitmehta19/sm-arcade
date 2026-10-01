@@ -571,6 +571,34 @@ function initNet() {
 const isLobby = () => (location.hash === '' || location.hash === '#/' );
 const partnerSeat = me => (me === 0 ? 1 : 0);
 const isOnline = seat => !!(presence && presence[seat] && presence[seat].online);
+// AUTO-UPDATE safe moment (app.js autoUpdate): why reloading NOW would hurt, or null when it's safe.
+// 'saving' = a match-end / leave write is still in flight, or settled < 3 s ago (finishMatch → recordResult)
+// 'game' = on a play screen with a waiting/active match · 'typing' = a field being typed in or edited and
+// not yet saved (text, date/time, checkbox, select) · 'dialog' = a modal, Story sheet, Plans composer or the
+// Date Night meet editor is open.
+let updHolds = 0, updHoldUntil = 0;
+function holdUpdate(p) {                     // keep the auto-update away until this cloud write has landed
+  updHolds++;
+  const done = () => { updHolds--; updHoldUntil = Date.now() + 3000; };
+  Promise.resolve(p).then(done, done);
+  return p;
+}
+function updateBlocker() {
+  if (updHolds > 0 || Date.now() < updHoldUntil) return 'saving';
+  const m = currentMatch;
+  if (/^#\/play\//.test(location.hash || '') && m && (m.status === 'waiting' || m.status === 'active')) return 'game';
+  const fieldy = el => el && !el.readOnly && !el.disabled && (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || (el.tagName === 'INPUT'
+    && /^(text|search|email|url|tel|number|password|date|time|datetime-local|month|week|checkbox|radio)$/.test(el.type)));
+  const tick = el => el.type === 'checkbox' || el.type === 'radio';
+  const edited = el => el.tagName === 'SELECT' ? el.selectedIndex !== Math.max(0, [...el.options].findIndex(o => o.defaultSelected))
+    : tick(el) ? el.checked !== el.defaultChecked : el.value !== el.defaultValue;
+  const a = document.activeElement;
+  if (fieldy(a) && a.tagName !== 'SELECT' && !tick(a) && String(a.value || '').trim()) return 'typing';
+  if (a && a.isContentEditable && (a.textContent || '').trim()) return 'typing';
+  if ([...document.querySelectorAll('input, textarea, select')].some(el => fieldy(el) && edited(el))) return 'typing';
+  if (document.querySelector('.rules-overlay, .sy-ov, .pl-compose, .mc-editor')) return 'dialog';
+  return null;
+}
 
 /* ============================================================
    NUDGES + NOTIFICATIONS — free, in-app "come online & play" pings
@@ -1006,7 +1034,7 @@ function advanceRound(gameId) {
   Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
 }
 function nextGameId(cur) { const others = Games.all().filter(g => g.id !== baseId(cur) && !g.isTournament); return others[Math.floor(Math.random() * others.length)].id; }
-function exitMatch() { Store.Net.clearMatch(); location.hash = '#/'; }
+function exitMatch() { holdUpdate(Store.Net.clearMatch()); location.hash = '#/'; }
 // leaving an in-progress game needs BOTH players' consent (works for every game incl. tournaments)
 function requestEndGame() {
   const me = Store.getIdentity(), partner = partnerSeat(me);
@@ -1034,7 +1062,7 @@ function forceEndGame() {
   const me = Store.getIdentity(), gid = forfeitTarget();
   if (gid && (me === 0 || me === 1)) {
     Store.recordResult(baseId(gid), me === 0 ? 'p2' : 'p1');
-    Store.Net.updateMatch({ forfeitBy: me, t: Date.now() });   // lets the partner's phone say why it ended
+    holdUpdate(Store.Net.updateMatch({ forfeitBy: me, t: Date.now() }));   // lets the partner's phone say why it ended
     setTimeout(exitMatch, 700);
     location.hash = '#/';
     return;
@@ -1264,7 +1292,7 @@ function renderStage(gameId) {
     }
     currentMatch = Object.assign({}, currentMatch, patch);
     const full = Object.assign({ by: me, t: Date.now() }, patch);
-    const sent = guard ? Store.Net.finishMatch(guard, full) : (Store.Net.updateMatch(full), Promise.resolve(true));
+    const sent = guard ? holdUpdate(Store.Net.finishMatch(guard, full)) : (Store.Net.updateMatch(full), Promise.resolve(true));
     paint();                                            // after the write, so a render error can't lose it
     return sent;
   }
@@ -1356,11 +1384,11 @@ function renderStage(gameId) {
     if (!finishing) Store.Net.updateMatch(Object.assign({ by: me, t: Date.now() }, patch));
     else {
       // record the result only if THIS phone is the one that actually finished the match
-      Store.Net.finishMatch(cur => cur.status === 'active', Object.assign({ by: me, t: Date.now() }, patch)).then(won => {
+      holdUpdate(Store.Net.finishMatch(cur => cur.status === 'active', Object.assign({ by: me, t: Date.now() }, patch)).then(won => {
         if (!won || gid === 'tournament') return;
         if (winner === 0 || winner === 1) Store.recordResult(baseId(gid), winner === 0 ? 'p1' : 'p2');
         else if (winner === 'draw') Store.recordResult(baseId(gid), 'draw');
-      });
+      }));
     }
     paint();
   }
@@ -1773,7 +1801,7 @@ function renderUs() {
     h('div', { class: 'diag-row' }, h('span', {}, '📅 Plans'), h('b', {}, String(plansN))),
     h('div', { class: 'diag-row' }, h('span', {}, '💞 Memories'), h('b', {}, String(storyN))));
   diag.append(dv,
-    h('p', { class: 'hint' }, 'Compare phones: App version and Room must match (if not, Force update the older one). The phone with the most Results recorded has the fullest scoreboard — and it wins automatically when it syncs.'),
+    h('p', { class: 'hint' }, 'The app updates itself when it comes back to the front (after the game, if one is on). Compare phones: App version and Room must match — if a phone still shows an older version, Force update it. The phone with the most Results recorded has the fullest scoreboard — and it wins automatically when it syncs.'),
     h('button', { class: 'btn btn-ghost btn-sm', onclick: forceUpdate }, '🔄 Force update this phone'));
   // read the ACTUAL served version from the service-worker cache (what this phone runs)
   (function fillVer() {

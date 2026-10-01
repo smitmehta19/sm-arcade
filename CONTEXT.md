@@ -582,3 +582,18 @@ An old app shows no invite and "Game not found" for an unknown id, so it makes 0
 Knockout: 'knockout' (visible, launchAs 'knockout2') = legacy classic Sumo for old saves, old-app matches and
 tournament subs; 'knockout2' (hidden, statsId 'knockout') = setup, squads, power-ups, Hill, Hockey. The b-key/cfg
 guard also stays inside knockout2. Tests: scratchpad/ko3 (logic3 45,812, mixed2 671, legacy 1,171), ko-review.
+
+## Auto-update (v84): app.js autoUpdate() + ui.js updateBlocker()/holdUpdate()
+- **Checking:** `registration.update()` runs when the app comes to the front and every 10 min while visible (skipped offline).
+- **Trigger:** a deploy changes `sw.js`, the new worker skipWaits and claims, and the page gets `controllerchange`. That
+  only marks the update ready. A first install is ignored, using the `registration.active` / controller check at boot.
+- **When it reloads:** only within 10 s of coming to the front with no tap, key or scroll, or 4 s after a route change
+  to Home.
+- **What blocks it (`updateBlocker`):** 'game' (a waiting or active match on #/play/, which covers score-duel runs and
+  tournaments); 'typing' (an edited input, including date, time, checkbox or select); 'dialog' (rules sheet, Story
+  sheet, .pl-compose, .mc-editor).
+- **`holdUpdate(promise)`:** wraps the finish, forfeit and leave writes. It blocks until the write lands, plus 3 s. It
+  returns the SAME promise, so the scoring chain is unchanged.
+- **No loops:** one reload per version, via a sessionStorage mark of the newest `sm-arcade-vNN` cache. A change to
+  sw.js that doesn't bump CACHE never reloads, so ALWAYS bump CACHE when you ship.
+- **Messages:** "Update ready — it installs after this game" while deferred; "Updated to vNN ✨" after the reload.
